@@ -1,4 +1,4 @@
-"""Exercise GTK Record/Stop/save/history with real ASR and a fake microphone.
+"""Exercise GTK hold/release/save/history with real ASR and a fake microphone.
 
 Run from the repo: .venv/bin/python tests/gui_smoke.py local/jfk.wav
 No real microphone access. All test recordings live in a temporary directory.
@@ -31,7 +31,7 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
         return original_popen(command, **kwargs)
 
     gui.subprocess.Popen = fake_microphone
-    app = gui.Keety(hands_free_default=False)
+    app = gui.Keety()
     if not ptt:
         app.set_application_id("io.github.gregorycoppola.Keety.Test")
     started = time.monotonic()
@@ -40,14 +40,14 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
     def step():
         try:
             assert time.monotonic() - started < 45, f"GUI test timed out in {state['phase']}"
-            if state["phase"] == "load" and app.model and app.record.get_sensitive():
+            if state["phase"] == "load" and app.model and not app.busy:
                 if ptt:
                     release = ["-P", "Super_L", "-p", "Super_L", "-m", "logo", "-s", "2500", "-p", "r"] if super_first else ["-p", "r", "-s", "2500", "-m", "logo"]
                     state["keyboard"] = original_popen(["wtype", "-M", "logo", "-P", "r", "-s", "1500", *release])
                     state["phase"] = "press"
                     return True
-                app.record.emit("clicked")
-                assert app.busy and app.stop.get_sensitive()
+                app.ptt.event("123-456:1:down")
+                assert app.busy and app.ptt_owned
                 state.update(phase="record", since=time.monotonic())
             elif state["phase"] == "press" and app.recorder:
                 assert app.ptt_owned and app.busy
@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
                     return True
                 assert app.recorder.poll() is None, "Meter must respond during recording"
                 if not automatic and not ptt:
-                    app.stop.emit("clicked")
+                    app.ptt.event("123-456:2:up")
                 state["phase"] = "save"
             elif state["phase"] == "save" and not app.busy:
                 wav = app.selected
@@ -68,8 +68,8 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
                 assert "country" in wav.with_suffix(".txt").read_text()
                 assert wav.with_suffix(".json").is_file()
                 buffer = app.text.get_buffer()
-                assert "country" in buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False), "Stop must display transcript without retry"
-                assert app.record.get_sensitive() and not app.stop.get_sensitive()
+                assert "country" in buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False), "Release must display transcript without retry"
+                assert app.recorder is None and not app.ptt_owned
                 app.refresh_history()  # reload from disk, not transient widget state
                 assert app.selected == wav
                 assert app.copy.get_sensitive() and app.play.get_sensitive()
@@ -77,7 +77,7 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
                     assert not app.ptt_held and not app.ptt_owned
                     assert state["keyboard"].poll() is None, "Transcription must finish before the second key is released"
                     assert state["keyboard"].wait(timeout=4) == 0
-                print("PASS:", ("global Super+R, Super released first" if super_first else "global Super+R, R released first") if ptt else ("automatic recording end" if automatic else "Stop exit-code-1 regression"),
+                print("PASS:", ("global Super+R, Super released first" if super_first else "global Super+R, R released first") if ptt else ("automatic recording end" if automatic else "key-release exit-code-1 regression"),
                       "— actual amplitude meter, no live text, automatic visible transcript, saved WAV/text/metrics, disk history")
                 state["passed"] = True
                 app.quit()

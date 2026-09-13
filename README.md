@@ -4,7 +4,7 @@ Current release: **0.1.0**. This checkout includes **0.2.0-dev** voice-command
 work. See [the changelog](CHANGELOG.md).
 
 A local speech-to-text app in development for an M2 MacBook Pro running ARM
-Linux / Omarchy. It has a native GTK4 window with Record/Stop, a live microphone
+Linux / Omarchy. It has a native GTK4 window with hold-to-talk recording, a live microphone
 amplitude display, saved recordings,
 transcript history, playback and Copy text, plus a command-line interface.
 
@@ -18,7 +18,6 @@ PyTorch, system package updates, or macOS frameworks are required.
 python -m venv --system-site-packages .venv
 .venv/bin/pip install -r requirements.lock
 .venv/bin/python keety.py download
-.venv/bin/python speech_activity.py download
 python install_desktop.py
 ```
 
@@ -54,22 +53,11 @@ conflicting shortcuts, then run `hyprctl reload` and `hyprctl configerrors`.
 The shortcut is a separate Hyprland configuration; the desktop installer does
 not install it. It sends typed D-Bus actions through `gapplication`.
 
-**Hands-free listening is off by default.** Enable it optionally, then speak
-an allowed command and pause
-for about 0.7 seconds. Keety detects speech, saves the take, transcribes it and
-runs an exact grammar match, then continues listening. No Record/Stop clicks
-are needed. The level display shows microphone amplitude and speech probability.
-
-Press **Pause listening** to close the microphone stream. The app remains open.
-Re-enable **Hands-free listening** to resume. Closing Keety stops listening;
-this version does not install login autostart or an always-running system service.
-
-For a manual take, pause hands-free mode, then press **Record**. The scrolling
-bars show the actual microphone amplitude.
-There is no live text preview. Press **Stop** and Keety automatically transcribes,
-shows the final text, and saves it. A spinner indicates the brief transcription
-step. The model is already loaded, so no new model load is needed after Stop.
-Recordings stop automatically at 30 seconds. The model stays loaded until the
+The microphone records only while you hold Super + R, up to 30 seconds.
+Release either key to stop, save the audio, transcribe it, and run an exact
+command match. Pauses in your speech do not end the recording.
+The scrolling bars show microphone amplitude. There is no live text preview.
+A spinner indicates transcription; the model stays loaded until the
 window closes. Audio (`.wav`),
 transcripts (`.txt`), and timing metadata (`.json`) are saved in
 `~/.local/share/keety/recordings/` (or under `XDG_DATA_HOME` when set).
@@ -97,16 +85,15 @@ the program has no audio upload code. Transcripts print to stdout, and timing
 and Linux peak process RAM measurements print to stderr. Nothing is pasted into
 another application automatically.
 
-The CLI reloads the model on each invocation; the GUI keeps it loaded. Longer
-manual recordings still need segmentation.
+The CLI reloads the model on each invocation; the GUI keeps it loaded.
 INT8 can affect accuracy; test your own voice and technical terms.
-This prototype limits clips to 30 seconds because longer inputs need segmentation
-and can consume substantially more memory.
+This prototype limits clips to 30 seconds because longer inputs can consume
+substantially more memory.
 
 ## Deterministic voice commands (0.2.0-dev)
 
-**Command mode is permanent**; **Hands-free listening** starts disabled.
-Hold Super + R, speak one allowed phrase, and release. Manual Record/Stop also works.
+**Command mode is permanent.**
+Hold Super + R throughout one allowed phrase, then release.
 The transcript and audio save first; a matching phrase then runs its fixed action.
 Only the accepted phrases below trigger actions. Other speech shows “Unrecognized
 command” and does nothing. Audio and transcripts remain saved for review.
@@ -129,7 +116,12 @@ Expand **Accepted commands** in Keety to see every accepted phrase.
 | bring up google chrome | Launch/focus Chromium and enter fullscreen |
 | open gmail / bring up gmail | Bring up Gmail |
 | open github / bring up github | Bring up GitHub |
-| show all windows / show all open windows | Show a searchable window list across all screens and workspaces; select a window to focus it, or press Escape to dismiss |
+| open discord / bring up discord | Launch Discord if closed, otherwise focus its existing app window |
+| show all windows / show all open windows / show all open window | Show a searchable window list across all screens and workspaces; select a window to focus it, or press Escape to dismiss |
+
+Discord uses its installed desktop launcher (the Omarchy Discord web app on this
+machine). Its window is moved to DP-1 and made fullscreen. Matching uses the exact
+app class, so an ordinary browser tab titled Discord is not mistaken for the app.
 
 The explicit spellings “g mail” and “git hub” are accepted too.
 
@@ -171,31 +163,6 @@ shell execution, or chaining. ASR can still mishear speech; matching itself is
 deterministic. Website destinations are fixed in the registry; recognized speech
 cannot supply a URL or a browser argument.
 
-### Speech detection and noise
-
-Hands-free mode uses the [Silero VAD model](https://github.com/snakers4/silero-vad)
-locally through ONNX Runtime, rather than an amplitude-only trigger. Its pinned
-2.3 MB model and MIT license download separately using `vad-manifest.json`.
-This is speech detection, not speaker identification or a wake-word system.
-
-The current deterministic segmentation settings are in `speech_activity.py`:
-96 ms of confident speech starts capture, with 320 ms of pre-roll to preserve
-the beginning; 704 ms of low speech probability ends it. Takes with less than
-256 ms of confident speech are discarded. Long utterances split at 28 seconds.
-The speech-start probability threshold is 0.6; the end threshold is 0.35.
-Thresholds may need tuning for a particular room, microphone or speaking style.
-
-Background audio stays in a bounded memory buffer. Only completed detected-speech
-segments are saved as recordings. A bounded queue permits continued listening
-during transcription. Pause cancels not-yet-started command actions, while queued
-audio can finish saving its transcript. An already-dispatched OS action is not
-undone. Playback and manual recording are available after pausing hands-free mode.
-
-Tests with generated hum/hiss produced no take before speech; the JFK fixture
-triggered speech segments. The GTK hands-free test covers real VAD/ASR, automatic
-endpoints, persistent text and audio, continued listening, and closing the capture
-stream on Pause. These tests do not establish accuracy in every noise environment.
-
 The OS adapter reads Hyprland's window list, focuses an exact browser class, or
 launches the installed browser desktop entry. It excludes Chromium-hosted web
 apps such as Discord. On this installation, “Chrome” maps to Chromium.
@@ -234,7 +201,6 @@ node --test tests/test_browser_tabs.cjs
 # With the public sample downloaded as described in docs/first-run.md:
 .venv/bin/python tests/gui_smoke.py local/jfk.wav
 .venv/bin/python tests/gui_smoke.py local/jfk.wav --auto
-.venv/bin/python tests/handsfree_smoke.py local/jfk.wav
 ```
 
 With the real Keety app closed and the shortcut installed, `tests/gui_smoke.py`
@@ -246,12 +212,12 @@ value afterward. Physical keyboard usage does not require this setting.
 
 The GUI smoke test opens a temporary test window and substitutes a prerecorded
 sample for the microphone. It verifies amplitude activity during recording and
-no live text, then exercises Stop with the installed recorder's exit-code-1
+no live text, then exercises key release with the installed recorder's exit-code-1
 behavior, automatic on-screen transcription, actual model inference,
 WAV/transcript/metrics persistence, history reloading and returning to ready.
 It never records the real microphone. The owner confirmed microphone recording
 works. A real recording previously skipped transcription because this installed
-`pw-record` returned 1 after a requested Stop despite saving a valid WAV. The
+`pw-record` returned 1 after a requested stop despite saving a valid WAV. The
 app now accepts that requested-stop result and validates/transcribes the WAV;
 the regression test covers this exact case. The owner subsequently confirmed
 that the meter and automatic transcription work in the updated app.

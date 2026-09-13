@@ -6,8 +6,11 @@ SITES = {
 }
 
 GRAMMAR = {
+    "bring up discord": "discord",
+    "open discord": "discord",
     "show all windows": "windows",
     "show all open windows": "windows",
+    "show all open window": "windows",
     "open chrome": "browser",
     "bring up chrome": "browser_fullscreen",
     "launch chrome": "browser",

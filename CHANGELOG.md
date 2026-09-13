@@ -2,6 +2,9 @@
 
 ## Unreleased — 0.2.0-dev
 
+- “Bring up Discord” / “open Discord” reuse the existing app window or launch
+  the installed Discord desktop entry, then show it fullscreen on DP-1.
+
 - Gmail and GitHub website commands: “open” / “bring up,” with explicit
   “g mail” and “git hub” transcription variants.
 - Reuse matching Gmail/GitHub tabs; otherwise open a tab in the existing normal
@@ -13,14 +16,11 @@
 
 - Global Super/Command + R hold-to-talk: press records, release either key
   transcribes and runs an exact command match without focusing the app.
-- Hands-free listening now defaults off; command mode is permanent.
-- Unlisted phrases show “Unrecognized command” and trigger no action.
-- Optional hands-free mode: local Silero VAD detects speech onset/end.
-- Continuous amplitude/speech-probability display and explicit Pause listening.
-- Background audio stays in a bounded buffer; detected utterances save and
-  transcribe automatically, then pass through the exact grammar.
-- About 0.7s silence endpoint, pre-roll, short-noise rejection and a 28s take limit.
-- Pause prevents queued utterances from starting OS actions.
+- Recording uses only hold-to-talk: hold Super + R throughout the phrase,
+  release to save and transcribe. The existing 30-second limit remains.
+- Removed the speech detector, its model/download manifest, continuous capture,
+  utterance queue, and related UI and tests. Removed manual Record/Stop buttons.
+- Command mode is permanent. Unlisted phrases trigger no action.
 
 - Voice commands use an explicit phrase-to-action table.
 - “Open Chrome” / “bring up Chrome” and listed aliases launch or focus Chromium.

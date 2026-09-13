@@ -10,8 +10,39 @@ MONITORS = '[{"name":"eDP-1","id":0,"activeWorkspace":{"id":1}},{"name":"DP-1","
 
 
 class CommandTests(unittest.TestCase):
+    def test_discord_phrases_are_exact(self):
+        self.assertEqual(parse_command("Bring up Discord!"), "discord")
+        self.assertEqual(parse_command("open discord"), "discord")
+        self.assertIsNone(parse_command("do not bring up discord"))
+        self.assertIsNone(parse_command("open discord and send a message"))
+
+    def test_discord_reuses_app_window_without_launch(self):
+        window = {"class": "chrome-discord.com__channels_@me-Default", "address": "0x123"}
+        with patch("os_actions.run", side_effect=[MONITORS, json.dumps([window])]) as run, \
+             patch("os_actions.present_browser") as present:
+            self.assertEqual(execute_command("discord"), "Brought Discord forward")
+            present.assert_called_once_with(window, fullscreen=True)
+            self.assertEqual(run.call_count, 2)
+
+    def test_discord_launches_installed_desktop_then_focuses(self):
+        window = {"class": "discord", "address": "0x123"}
+        with patch("os_actions.run", side_effect=[MONITORS, "[]", "ok", json.dumps([window])]) as run, \
+             patch("os_actions.Path.is_file", return_value=True), \
+             patch("os_actions.present_browser") as present:
+            self.assertEqual(execute_command("discord"), "Opened Discord")
+            self.assertEqual(run.call_args_list[2].args[0][:2], ["gio", "launch"])
+            present.assert_called_once_with(window, fullscreen=True)
+
+    def test_discord_ignores_browser_title_and_requires_main_monitor(self):
+        from os_actions import discord_window
+        self.assertIsNone(discord_window([{"class":"chromium", "title":"Discord", "address":"0x123"}]))
+        with patch("os_actions.run", return_value="[]") as run:
+            with self.assertRaisesRegex(RuntimeError, "not connected"):
+                execute_command("discord")
+            self.assertEqual(run.call_count, 1)
+
     def test_window_phrases_are_exact_commands(self):
-        for phrase in ["Show all windows.", " SHOW  ALL OPEN WINDOWS! "]:
+        for phrase in ["Show all windows.", " SHOW  ALL OPEN WINDOWS! ", "Show all open window."]:
             self.assertEqual(parse_command(phrase), "windows")
         self.assertIsNone(parse_command("do not show all windows"))
 

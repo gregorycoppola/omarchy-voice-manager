@@ -77,6 +77,8 @@ def move_to_main_screen(window):
 
 
 def execute_command(command):
+    if command == "discord":
+        return present_discord()
     if command == "windows":
         return show_windows()
     if command.startswith("site:"):
@@ -105,6 +107,36 @@ def execute_command(command):
             return "Opened the browser fullscreen" if fullscreen else "Opened the browser"
         time.sleep(0.15)
     raise RuntimeError("Launch requested, but no browser window appeared within 10 seconds")
+
+
+def discord_window(clients):
+    classes = {"discord", "Discord", "chrome-discord.com__channels_@me-Default"}
+    matches = [c for c in clients if c.get("class") in classes
+               and re.fullmatch(r"0x[0-9a-fA-F]+", c.get("address", ""))]
+    return min(matches, key=lambda c: c.get("focusHistoryID", 99999), default=None)
+
+
+def present_discord():
+    main_monitor(json.loads(run(["hyprctl", "monitors", "-j"])))
+    window = discord_window(json.loads(run(["hyprctl", "clients", "-j"])))
+    if window:
+        present_browser(window, fullscreen=True)
+        return "Brought Discord forward"
+    candidates = [Path.home() / ".local/share/applications/Discord.desktop",
+                  Path.home() / ".local/share/applications/discord.desktop",
+                  Path("/usr/share/applications/discord.desktop")]
+    desktop = next((p for p in candidates if p.is_file()), None)
+    if desktop is None:
+        raise RuntimeError("No installed Discord application launcher found")
+    run(["gio", "launch", str(desktop)])
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        window = discord_window(json.loads(run(["hyprctl", "clients", "-j"])))
+        if window:
+            present_browser(window, fullscreen=True)
+            return "Opened Discord"
+        time.sleep(0.15)
+    raise RuntimeError("Launch requested, but no Discord window appeared within 15 seconds")
 
 
 def show_windows():
