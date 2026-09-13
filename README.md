@@ -43,13 +43,20 @@ this installation, or run `./launch.sh` from the checkout.
 must be open and ready, but another app can have keyboard focus. The amplitude
 bars show recording activity; the completed transcript stays visible and an
 exact command match runs automatically. Takes are limited to 30 seconds.
-Wait for transcription to finish before holding the shortcut for another take.
+Pressing the chord starts recording immediately, with no hold threshold.
+A quick tap makes only a short take; it never toggles recording on. Releasing R or Super stops the
+recording immediately through a raw keyboard event, even if focus changes.
+While held, the shortcut renews a short recording lease every 200 ms. If the
+release message is lost or Hyprland reloads, recording stops within about 700 ms
+of the last renewal. A late renewal cannot restart it. Wait for transcription to
+finish before holding the shortcut for another take.
 
 The shortcut is installed on this machine in `~/.config/hypr/keety-ptt.lua`,
 loaded by `~/.config/hypr/bindings.lua`. Source:
 [config/hyprland-keety-ptt.lua](config/hyprland-keety-ptt.lua).
-To choose another letter, change `keety_key` in that file after checking for
-conflicting shortcuts, then run `hyprctl reload` and `hyprctl configerrors`.
+The binding uses physical XKB codes for R (27) and left/right Super (133/134).
+Changing the chord requires updating both the binding and its tracked keycodes
+after checking for conflicts, then running `hyprctl reload` and `hyprctl configerrors`.
 The shortcut is a separate Hyprland configuration; the desktop installer does
 not install it. It sends typed D-Bus actions through `gapplication`.
 
@@ -117,14 +124,14 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 | Allowed phrase | Action |
 | --- | --- |
 | open chrome | Launch Chromium or focus an existing browser window |
-| bring up chrome | Launch/focus Chromium and enter fullscreen |
+| bring up chrome | Launch/focus Chromium and maximize with tabs visible |
 | launch chrome | Same |
 | focus chrome | Same |
 | switch to chrome | Same |
 | open chromium | Same |
-| bring up chromium | Launch/focus Chromium and enter fullscreen |
+| bring up chromium | Launch/focus Chromium and maximize with tabs visible |
 | open google chrome | Same |
-| bring up google chrome | Launch/focus Chromium and enter fullscreen |
+| bring up google chrome | Launch/focus Chromium and maximize with tabs visible |
 | open gmail / bring up gmail | Bring up Gmail |
 | open github / bring up github | Bring up GitHub |
 | open x / open twitter / bring up x / bring up twitter | Launch X’s installed app or focus its existing window |
@@ -164,7 +171,7 @@ Website commands now operate on **normal browser tabs**:
    browser window, then the most recently accessed matching tab.
 3. If no matching tab exists, create one in the focused normal browser window,
    or the most recently used normal window. Open a normal browser window if needed.
-4. Activate the tab and bring its browser fullscreen on DP-1.
+4. Activate the tab and maximize its browser on DP-1 with tabs and address bar visible.
 
 Private windows, standalone app windows from the earlier implementation, and
 extension-only control windows are excluded. Existing app windows are left intact.
@@ -242,11 +249,15 @@ node --test tests/test_browser_tabs.cjs
 ```
 
 With the real Keety app closed and the shortcut installed, `tests/gui_smoke.py`
-also supports `--ptt` and `--ptt --super-first`. These use `wtype` to exercise
-the compositor binding and D-Bus action, checking transcription before the
-second key is released. For this virtual keyboard test only, temporarily set
-`input.resolve_binds_by_sym` to true with `hyprctl eval`, then restore its prior
-value afterward. Physical keyboard usage does not require this setting.
+also supports `--ptt` and `--ptt --super-first`. These use a test-only virtual
+keyboard with a standard evdev keymap to exercise the compositor binding and
+D-Bus action, checking transcription before the second key is released.
+`tests/shortcut_smoke.py` verifies taps never latch recording, both Super keys, both release orders,
+and a deliberately dropped release message without recording audio.
+The helper is built in a temporary directory using `cc`, `wayland-scanner`,
+`wayland-client`, and `xkbcommon`; these are test tools, not app dependencies.
+Its vendored protocol is from wlroots' `virtual-keyboard-unstable-v1.xml`, with
+its license retained. No input setting changes are needed.
 
 The GUI smoke test opens a temporary test window and substitutes a prerecorded
 sample for the microphone. It verifies amplitude activity during recording and

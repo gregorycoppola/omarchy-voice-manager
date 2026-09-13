@@ -19,7 +19,7 @@ INTENTS = {
         ]
     },
     "browser_fullscreen": {
-        "label": "Bring up Chrome fullscreen",
+        "label": "Bring up Chrome with tabs visible",
         "phrases": [
             "bring up chrome",
             "bring up chromium",

@@ -191,14 +191,30 @@ class CommandTests(unittest.TestCase):
                        "bring up example.com", "open gmail please"]:
             self.assertIsNone(parse_command(phrase))
 
-    def test_fullscreen_is_set_not_toggled(self):
-        for current_state in (0, 2):
+    def test_browser_maximizes_with_tabs_instead_of_fullscreen(self):
+        for current_state in (0, 1, 2):
             responses = [MONITORS, json.dumps([{"class": "chromium", "address": "0x123", "fullscreen": current_state}]),
-                         'ok', '{"address":"0x123"}', 'ok', '{"address":"0x123","fullscreen":2}']
+                         'ok', '{"address":"0x123"}', 'ok', '{"address":"0x123","fullscreen":1,"fullscreenClient":1}']
             with patch("os_actions.run", side_effect=responses) as run, patch("os_actions.move_to_main_screen") as move:
-                self.assertEqual(execute_command("browser_fullscreen"), "Brought the browser fullscreen")
+                self.assertEqual(execute_command("browser_fullscreen"), "Brought the browser maximized")
                 move.assert_called_once()
-                self.assertIn("internal = 2, client = 2", run.call_args_list[4].args[0][2])
+                self.assertIn("internal = 1, client = 1", run.call_args_list[4].args[0][2])
+
+    def test_open_browser_restores_tabs_from_fullscreen(self):
+        from os_actions import present_browser
+        window = {"class": "chromium", "address": "0x123", "fullscreen": 2}
+        with patch("os_actions.move_to_main_screen"), patch("os_actions.focus"), \
+             patch("os_actions.run", side_effect=["ok", '{"address":"0x123","fullscreen":1,"fullscreenClient":1}']) as run:
+            present_browser(window, fullscreen=False)
+            self.assertIn("internal = 1, client = 1", run.call_args_list[0].args[0][2])
+
+    def test_standalone_apps_still_use_fullscreen(self):
+        from os_actions import present_browser
+        window = {"class": "discord", "address": "0x123"}
+        with patch("os_actions.move_to_main_screen"), patch("os_actions.focus"), \
+             patch("os_actions.run", side_effect=["ok", '{"address":"0x123","fullscreen":2,"fullscreenClient":2}']) as run:
+            present_browser(window, fullscreen=True)
+            self.assertIn("internal = 2, client = 2", run.call_args_list[0].args[0][2])
 
     def test_dictation_is_not_executed(self):
         for text in ["Don't open Chrome", "I said open Chrome", "open chrome; rm -rf /",

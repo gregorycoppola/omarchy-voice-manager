@@ -44,6 +44,7 @@ class Keety(Gtk.Application):
         action = Gio.SimpleAction.new("ptt-event", GLib.VariantType.new("s"))
         action.connect("activate", lambda _, value: self.ptt.event(value.get_string()))
         self.add_action(action)
+        GLib.timeout_add(50, self.ptt.check_held)
 
     def do_activate(self):
         if self.window:
@@ -82,7 +83,7 @@ class Keety(Gtk.Application):
         learned.set_child(self.learned_list)
         box.append(learned)
         self.refresh_aliases()
-        box.append(Gtk.Label(label="Up to 30 seconds per recording", xalign=0))
+        box.append(Gtk.Label(label="Records only while Super + R is held · up to 30 seconds", xalign=0))
         self.status = Gtk.Label(label="Loading local speech model…", xalign=0, wrap=True)
         self.status.set_selectable(True)
         progress = Gtk.Box(spacing=10)

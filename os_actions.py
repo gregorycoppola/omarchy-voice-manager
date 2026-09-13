@@ -44,12 +44,16 @@ def focus(window):
 def present_browser(window, fullscreen):
     move_to_main_screen(window)
     focus(window)
-    if fullscreen:
-        # Set an explicit state: repeating the command must never toggle it off.
-        run(["hyprctl", "dispatch", "hl.dsp.window.fullscreen_state({ internal = 2, client = 2 })"])
+    normal_browser = browser_window([window]) is not None
+    if fullscreen or (normal_browser and (window.get("fullscreen", 0) >= 2 or window.get("fullscreenClient", 0) >= 2)):
+        # Normal browsers keep their tabs/address bar; standalone apps can fill the screen.
+        state = 1 if normal_browser else 2
+        address = window["address"]
+        run(["hyprctl", "dispatch", f'hl.dsp.window.fullscreen_state({{ internal = {state}, client = {state}, '
+             f'action = "set", window = "address:{address}" }})'])
         active = json.loads(run(["hyprctl", "activewindow", "-j"]))
-        if active.get("address") != window["address"] or active.get("fullscreen") != 2:
-            raise RuntimeError("Browser focused, but fullscreen was not confirmed")
+        if active.get("address") != address or active.get("fullscreen") != state or active.get("fullscreenClient") != state:
+            raise RuntimeError("Window focused, but its display mode was not confirmed")
 
 
 def main_monitor(monitors):
@@ -95,7 +99,7 @@ def execute_command(command):
     window = browser_window(json.loads(run(["hyprctl", "clients", "-j"])))
     if window:
         present_browser(window, fullscreen)
-        return "Brought the browser fullscreen" if fullscreen else "Brought the browser forward"
+        return "Brought the browser maximized" if fullscreen else "Brought the browser forward"
     candidates = [Path.home() / ".local/share/applications/chromium.desktop",
                   Path("/usr/share/applications/chromium.desktop"),
                   Path("/usr/share/applications/google-chrome.desktop")]
@@ -108,7 +112,7 @@ def execute_command(command):
         window = browser_window(json.loads(run(["hyprctl", "clients", "-j"])))
         if window:
             present_browser(window, fullscreen)
-            return "Opened the browser fullscreen" if fullscreen else "Opened the browser"
+            return "Opened the browser maximized" if fullscreen else "Opened the browser"
         time.sleep(0.15)
     raise RuntimeError("Launch requested, but no browser window appeared within 10 seconds")
 

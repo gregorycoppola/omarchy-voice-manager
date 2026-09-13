@@ -22,6 +22,9 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
     automatic = "--auto" in sys.argv
     ptt = "--ptt" in sys.argv
     super_first = "--super-first" in sys.argv
+    if ptt:
+        from keyboard import build_keyboard
+        keyboard_bin = build_keyboard()
 
     def fake_microphone(command, **kwargs):
         if command[0] == "pw-record":
@@ -35,15 +38,26 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
     if not ptt:
         app.set_application_id("io.github.gregorycoppola.Keety.Test")
     started = time.monotonic()
+    sequence = 1
+
+    def renew_test_hold():
+        global sequence
+        if not ptt and app.ptt.held_session:
+            sequence += 1
+            app.ptt.event(f"123-456:{sequence}:hold")
+        return True
+
+    GLib.timeout_add(200, renew_test_hold)
     state = {"phase": "load", "error": None, "passed": False}
 
     def step():
+        global sequence
         try:
             assert time.monotonic() - started < 45, f"GUI test timed out in {state['phase']}"
             if state["phase"] == "load" and app.model and not app.busy:
                 if ptt:
-                    release = ["-P", "Super_L", "-p", "Super_L", "-m", "logo", "-s", "2500", "-p", "r"] if super_first else ["-p", "r", "-s", "2500", "-m", "logo"]
-                    state["keyboard"] = original_popen(["wtype", "-M", "logo", "-P", "r", "-s", "1500", *release])
+                    release = ["u125", "s2500", "u19"] if super_first else ["u19", "s2500", "u125"]
+                    state["keyboard"] = original_popen([str(keyboard_bin), "d125", "d19", "s1500", *release])
                     state["phase"] = "press"
                     return True
                 app.ptt.event("123-456:1:down")
@@ -60,7 +74,8 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
                     return True
                 assert app.recorder.poll() is None, "Meter must respond during recording"
                 if not automatic and not ptt:
-                    app.ptt.event("123-456:2:up")
+                    sequence += 1
+                    app.ptt.event(f"123-456:{sequence}:up")
                 state["phase"] = "save"
             elif state["phase"] == "save" and not app.busy:
                 wav = app.selected

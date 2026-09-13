@@ -2,6 +2,15 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Browser and website commands preserve Chromium’s tabs/address bar by using
+  maximized mode. Bringing up an already-fullscreen browser restores its controls.
+
+- Super + R starts recording immediately and stops on release. No delay or
+  tap-to-toggle mode; quick taps end without needing a second press.
+- Raw R/Super release events stop capture regardless of focus/modifier changes.
+- Held-key renewals and a 700 ms timeout stop capture if a release message is
+  dropped or the shortcut configuration reloads. Late renewals cannot restart it.
+
 - “Maximize Chrome/Chromium,” “maximize Discord,” and “maximize X/Twitter”
   select an existing window on DP-1 and set maximized mode, keeping normal
   app controls visible. Repeated commands keep the window maximized.

@@ -1,36 +1,45 @@
--- Global hold-to-talk. Super+R was unused on this installation.
-local keety_key = "R"
-local keety_held = false
-local keety_sequence = 0
-local keety_session = tostring(os.time()) .. "-" .. tostring(math.random(100000, 999999))
+-- Super+R is hold-to-talk, never a toggle. Keycodes are XKB: R, left/right Super.
+local r_code, left_super, right_super = 27, 133, 134
+local pressed = {}
+local recording = false
+local sequence = 0
+local session = tostring(os.time()) .. "-" .. tostring(math.random(100000, 999999))
 
-local function keety_send(state)
-  keety_sequence = keety_sequence + 1
-  local event = keety_session .. ":" .. tostring(keety_sequence) .. ":" .. state
-  -- A typed D-Bus action on the existing GTK app; it does not steal focus.
+local function send(state)
+  sequence = sequence + 1
+  local event = session .. ":" .. tostring(sequence) .. ":" .. state
   hl.dispatch(hl.dsp.exec_cmd("gapplication action io.github.gregorycoppola.Keety ptt-event \"'" .. event .. "'\""))
 end
 
-local function keety_release()
-  if keety_held then
-    keety_held = false
-    keety_send("up")
+local function chord_down()
+  return pressed[r_code] and (pressed[left_super] or pressed[right_super])
+end
+
+local function release()
+  if recording then
+    recording = false
+    send("up")
   end
 end
 
-hl.bind("SUPER + " .. keety_key, function()
-  if not keety_held then
-    keety_held = true
-    keety_send("down")
-  end
+-- Observe physical releases directly, even if focus, modifiers, or submaps change.
+-- Ignore every other key and retain no typing history.
+hl.on("input.keyboard.key", function(code, timestamp, state)
+  if code ~= r_code and code ~= left_super and code ~= right_super then return end
+  pressed[code] = state ~= 0
+  if state == 0 and not chord_down() then release() end
+end)
+
+hl.unbind("SUPER + R") -- replaces Keety's previous press binding
+hl.bind("SUPER + R", function()
+  if recording then return end
+  recording = true
+  send("down")
 end, { description = "Keety: hold to talk" })
 
--- Releasing either part of the chord ends the take. Ordinary typing passes through.
-for _, key in ipairs({ keety_key, "SUPER_L", "SUPER_R" }) do
-  hl.bind(key, keety_release, {
-    release = true,
-    ignore_mods = true,
-    non_consuming = true,
-    description = "Keety: release to transcribe",
-  })
-end
+-- A dropped release message or config reload must not leave the microphone open.
+hl.timer(function()
+  if recording then
+    if chord_down() then send("hold") else release() end
+  end
+end, { timeout = 200, type = "repeat" })
