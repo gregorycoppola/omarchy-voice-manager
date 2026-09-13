@@ -81,7 +81,7 @@ and can consume substantially more memory.
 
 Enable **Voice commands**, press Record, speak one allowed phrase, then Stop.
 The transcript and audio save first; a matching phrase then runs its fixed action.
-The toggle defaults off each time the app starts. With it off, all recordings
+The toggle defaults on each time the app starts. With it off, all recordings
 are dictation. Retrying a saved transcript never executes a voice command.
 
 The entire grammar is the explicit `GRAMMAR` table in [os_actions.py](os_actions.py):

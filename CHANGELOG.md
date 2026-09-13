@@ -2,7 +2,7 @@
 
 ## Unreleased — 0.2.0-dev
 
-- Opt-in voice commands using an explicit phrase-to-action table.
+- Voice commands enabled by default, using an explicit phrase-to-action table.
 - “Open Chrome” / “bring up Chrome” and listed aliases launch or focus Chromium.
 - “Bring up” phrases also set fullscreen; repeating them keeps fullscreen enabled.
 - Keety stays pinned on eDP-1; controlled browser windows move to external DP-1.

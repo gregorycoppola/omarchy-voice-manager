@@ -60,6 +60,7 @@ class Keety(Gtk.Application):
         subtitle.add_css_class("dim-label")
         box.append(subtitle)
         self.voice_commands = Gtk.CheckButton(label="Voice commands — say “open Chrome” or “bring up Chrome”")
+        self.voice_commands.set_active(True)
         self.voice_commands.set_tooltip_text("When enabled, recognized commands launch or focus your Chromium browser after Stop. Other speech is saved as text.")
         box.append(self.voice_commands)
         controls = Gtk.Box(spacing=12)
