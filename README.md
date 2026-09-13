@@ -105,11 +105,12 @@ and can consume substantially more memory.
 
 ## Deterministic voice commands (0.2.0-dev)
 
-**Voice commands** starts enabled; **Hands-free listening** starts disabled.
+**Command mode is permanent**; **Hands-free listening** starts disabled.
 Hold Super + R, speak one allowed phrase, and release. Manual Record/Stop also works.
 The transcript and audio save first; a matching phrase then runs its fixed action.
-The toggle defaults on each time the app starts. With it off, all recordings
-are dictation. Retrying a saved transcript never executes a voice command.
+Only the accepted phrases below trigger actions. Other speech shows “Unrecognized
+command” and does nothing. Audio and transcripts remain saved for review.
+Retrying a saved transcript never executes a voice command.
 
 The entire grammar is the explicit `GRAMMAR` table in [os_actions.py](os_actions.py):
 

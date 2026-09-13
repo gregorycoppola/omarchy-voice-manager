@@ -40,7 +40,7 @@ class CommandRoutingTests(unittest.TestCase):
     def test_unlisted_sentence_is_only_saved(self):
         events, app = self.route("I was going to open Chrome.", True)
         self.assertEqual(events, ["saved"])
-        self.assertIn("No matching voice command", app.finished.call_args.args[1])
+        self.assertIn("Unrecognized command — no action taken", app.finished.call_args.args[1])
 
     def test_pausing_cancels_pending_action_but_saves_text(self):
         events, _ = self.route("Open Chrome.", True, guard=lambda: False)

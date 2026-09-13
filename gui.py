@@ -17,7 +17,7 @@ from keety import load_model
 from recordings import new_recording, save_transcript
 from live_audio import read_growing_wav
 from level_meter import LevelMeter, pcm_level
-from os_actions import parse_command, execute_command
+from os_actions import GRAMMAR, parse_command, execute_command
 from listener import Listener
 from push_to_talk import PushToTalk
 
@@ -60,7 +60,7 @@ class Keety(Gtk.Application):
         self.window.set_default_size(760, 620)
         self.window.connect("close-request", self.on_close)
         header = Gtk.HeaderBar()
-        header.set_title_widget(Gtk.Label(label="Keety · Local dictation"))
+        header.set_title_widget(Gtk.Label(label="Keety · Voice commands"))
         self.window.set_titlebar(header)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         for side in ["top", "bottom", "start", "end"]:
@@ -70,16 +70,15 @@ class Keety(Gtk.Application):
         page.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         page.set_child(box)
         self.window.set_child(page)
-        title = Gtk.Label(label="Speak. Keep the words.", xalign=0)
+        title = Gtk.Label(label="Speak a command.", xalign=0)
         title.add_css_class("title-1")
         box.append(title)
         subtitle = Gtk.Label(label="Hold Super + R to talk. Release to transcribe and run your command.", xalign=0, wrap=True)
         subtitle.add_css_class("dim-label")
         box.append(subtitle)
-        self.voice_commands = Gtk.CheckButton(label="Voice commands — say “open Chrome” or “bring up Chrome”")
-        self.voice_commands.set_active(True)
-        self.voice_commands.set_tooltip_text("When enabled, a completed utterance matching the exact grammar controls Chromium. Other speech is saved as text.")
-        box.append(self.voice_commands)
+        commands_label = Gtk.Label(label="Commands only — say “open Chrome” or “bring up Chrome”", xalign=0)
+        commands_label.set_tooltip_text("Accepted phrases:\n" + "\n".join(GRAMMAR))
+        box.append(commands_label)
         self.hands_free = Gtk.CheckButton(label="Hands-free listening — detect speech and stop after a short silence")
         self.hands_free.set_active(self.hands_free_default)
         self.hands_free.connect("toggled", self.toggle_listening)
@@ -257,7 +256,7 @@ class Keety(Gtk.Application):
                 audio.setsampwidth(2)
                 audio.setframerate(16000)
                 audio.writeframes(pcm)
-            self.auto_queue.put_nowait((token, path, self.voice_commands.get_active()))
+            self.auto_queue.put_nowait((token, path, True))
             self.auto_pending += 1
             self.set_busy(True)
             self.spinner.start()
@@ -311,7 +310,6 @@ class Keety(Gtk.Application):
 
     def set_busy(self, value):
         self.busy = value
-        self.voice_commands.set_sensitive(not value)
         self.record.set_sensitive(not value and self.model is not None and self.listener is None)
         self.history.set_sensitive(not value)
         self.play.set_sensitive(not value and self.selected is not None and self.listener is None)
@@ -336,7 +334,7 @@ class Keety(Gtk.Application):
             return
         self.set_busy(True)
         self.active_path = path
-        self.command_for_take = self.voice_commands.get_active()
+        self.command_for_take = True
         self.stop_requested = False
         self.meter_bytes = 0
         self.meter.reset()
@@ -434,7 +432,7 @@ class Keety(Gtk.Application):
                 except Exception as exc:
                     message += f" · Could not complete voice command: {exc}"
             else:
-                message += " · No matching voice command"
+                message += " · Unrecognized command — no action taken"
         GLib.idle_add(completed, path, message)
 
     def show_saved_transcript(self, path):

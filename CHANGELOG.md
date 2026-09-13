@@ -4,7 +4,8 @@
 
 - Global Super/Command + R hold-to-talk: press records, release either key
   transcribes and runs an exact command match without focusing the app.
-- Hands-free listening now defaults off; voice commands remain enabled.
+- Hands-free listening now defaults off; command mode is permanent.
+- Unlisted phrases show “Unrecognized command” and trigger no action.
 - Optional hands-free mode: local Silero VAD detects speech onset/end.
 - Continuous amplitude/speech-probability display and explicit Pause listening.
 - Background audio stays in a bounded buffer; detected utterances save and
@@ -12,11 +13,11 @@
 - About 0.7s silence endpoint, pre-roll, short-noise rejection and a 28s take limit.
 - Pause prevents queued utterances from starting OS actions.
 
-- Voice commands enabled by default, using an explicit phrase-to-action table.
+- Voice commands use an explicit phrase-to-action table.
 - “Open Chrome” / “bring up Chrome” and listed aliases launch or focus Chromium.
 - “Bring up” phrases also set fullscreen; repeating them keeps fullscreen enabled.
 - Keety stays pinned on eDP-1; controlled browser windows move to external DP-1.
-- Exact normalized matching; other speech remains saved dictation.
+- Exact normalized matching; unmatched speech remains saved for review.
 - Saved transcription retries never execute commands.
 
 ## 0.1.0 — 2026-09-13
