@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
         return original_popen(command, **kwargs)
 
     gui.subprocess.Popen = fake_microphone
-    app = gui.Keety()
+    app = gui.Keety(hands_free_default=False)
     app.set_application_id("io.github.gregorycoppola.Keety.Test")
     started = time.monotonic()
     state = {"phase": "load", "error": None}

@@ -1,11 +1,13 @@
 """Keety's native GTK4 desktop window."""
 import os
+import queue
 from pathlib import Path
 import signal
 import subprocess
 import sys
 import threading
 import time
+import wave
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -16,12 +18,13 @@ from recordings import new_recording, save_transcript
 from live_audio import read_growing_wav
 from level_meter import LevelMeter, pcm_level
 from os_actions import parse_command, execute_command
+from listener import Listener
 
 DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "keety/recordings"
 
 
 class Keety(Gtk.Application):
-    def __init__(self):
+    def __init__(self, hands_free_default=True):
         super().__init__(application_id="io.github.gregorycoppola.Keety")
         self.window = None
         self.model = None
@@ -33,6 +36,13 @@ class Keety(Gtk.Application):
         self.active_path = None
         self.stop_requested = False
         self.command_for_take = False
+        self.hands_free_default = hands_free_default
+        self.listener = None
+        self.listener_generation = None
+        self.auto_pending = 0
+        self.auto_queue = queue.Queue(maxsize=3)
+        self.asr_lock = threading.Lock()
+        threading.Thread(target=self.auto_worker, daemon=True).start()
 
     def do_activate(self):
         if self.window:
@@ -56,13 +66,17 @@ class Keety(Gtk.Application):
         title = Gtk.Label(label="Speak. Keep the words.", xalign=0)
         title.add_css_class("title-1")
         box.append(title)
-        subtitle = Gtk.Label(label="Watch your voice. Press Stop to get your transcript.", xalign=0, wrap=True)
+        subtitle = Gtk.Label(label="Speak a command, then pause. Keety handles the rest.", xalign=0, wrap=True)
         subtitle.add_css_class("dim-label")
         box.append(subtitle)
         self.voice_commands = Gtk.CheckButton(label="Voice commands — say “open Chrome” or “bring up Chrome”")
         self.voice_commands.set_active(True)
-        self.voice_commands.set_tooltip_text("When enabled, recognized commands launch or focus your Chromium browser after Stop. Other speech is saved as text.")
+        self.voice_commands.set_tooltip_text("When enabled, a completed utterance matching the exact grammar controls Chromium. Other speech is saved as text.")
         box.append(self.voice_commands)
+        self.hands_free = Gtk.CheckButton(label="Hands-free listening — detect speech and stop after a short silence")
+        self.hands_free.set_active(self.hands_free_default)
+        self.hands_free.connect("toggled", self.toggle_listening)
+        box.append(self.hands_free)
         controls = Gtk.Box(spacing=12)
         self.record = Gtk.Button(label="●  Record")
         self.record.add_css_class("suggested-action")
@@ -73,7 +87,8 @@ class Keety(Gtk.Application):
         self.stop.set_sensitive(False)
         self.stop.connect("clicked", self.stop_recording)
         controls.append(self.stop)
-        controls.append(Gtk.Label(label="Up to 30 seconds per recording", xalign=0))
+        self.capture_hint = Gtk.Label(label="Up to 30 seconds per recording", xalign=0)
+        controls.append(self.capture_hint)
         box.append(controls)
         self.status = Gtk.Label(label="Loading local speech model…", xalign=0, wrap=True)
         self.status.set_selectable(True)
@@ -135,6 +150,110 @@ class Keety(Gtk.Application):
         self.record.set_sensitive(True)
         self.retry.set_sensitive(self.selected is not None)
         self.status.set_text("Ready. Press Record when you want to speak.")
+        if self.hands_free.get_active():
+            self.start_listening()
+
+    def toggle_listening(self, *_):
+        if self.model is None:
+            return
+        if self.hands_free.get_active():
+            if self.busy:
+                self.hands_free.set_active(False)
+                self.status.set_text("Finish the current take before starting hands-free mode.")
+            else:
+                self.start_listening()
+        else:
+            self.pause_listening()
+
+    def start_listening(self):
+        if self.listener is not None:
+            return
+        if self.player and self.player.poll() is None:
+            self.player.terminate()
+        token = object()
+        self.listener_generation = token
+        self.listener = Listener(
+            lambda pcm, score: GLib.idle_add(self.auto_level, token, pcm, score),
+            lambda active: GLib.idle_add(self.auto_state, token, active),
+            lambda pcm: GLib.idle_add(self.auto_take, token, pcm),
+            lambda error: GLib.idle_add(self.auto_error, token, error),
+        )
+        self.meter.reset()
+        self.record.set_sensitive(False)
+        self.play.set_sensitive(False)
+        self.retry.set_sensitive(False)
+        self.stop.set_label("■  Pause listening")
+        self.capture_hint.set_text("Stops after about 0.7s of silence")
+        self.stop.set_sensitive(True)
+        self.status.set_text("Starting local speech detection…")
+        self.listener.start()
+
+    def pause_listening(self):
+        if self.listener:
+            self.listener.stop()
+        self.listener = None
+        self.listener_generation = None  # prevents queued utterances from running OS actions
+        if self.hands_free.get_active():
+            self.hands_free.set_active(False)
+        self.stop.set_label("■  Stop")
+        self.capture_hint.set_text("Up to 30 seconds per recording")
+        self.stop.set_sensitive(False)
+        self.meter.active = False
+        self.meter.queue_draw()
+        self.set_busy(self.busy)
+        self.level_label.set_text("Microphone paused")
+        self.status.set_text("Paused. Finishing saved transcripts…" if self.busy else "Paused. Enable Hands-free listening or press Record.")
+
+    def auto_level(self, token, pcm, score):
+        if token is self.listener_generation:
+            level, db = pcm_level(pcm)
+            self.meter.push(level)
+            self.level_label.set_text(f"Microphone · {db:.0f} dBFS · speech probability {score:.0%}")
+
+    def auto_state(self, token, active):
+        if token is self.listener_generation and not self.busy:
+            self.status.set_text("● Hearing speech… pause briefly to finish your command." if active
+                                 else "Listening · waiting for speech. Pause listening to mute the microphone.")
+
+    def auto_take(self, token, pcm):
+        if token is not self.listener_generation:
+            return
+        path = None
+        try:
+            path = new_recording(DATA)
+            with wave.open(str(path), "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(16000)
+                audio.writeframes(pcm)
+            self.auto_queue.put_nowait((token, path, self.voice_commands.get_active()))
+            self.auto_pending += 1
+            self.set_busy(True)
+            self.spinner.start()
+            self.status.set_text("Speech ended. Transcribing locally…")
+        except Exception as exc:
+            self.status.set_text(f"Could not queue transcription: {exc}. Captured audio remains saved.")
+
+    def auto_worker(self):
+        while True:
+            token, path, commands = self.auto_queue.get()
+            try:
+                self.convert(path, commands, completion=self.auto_finished,
+                             command_guard=lambda: token is self.listener_generation)
+            finally:
+                self.auto_queue.task_done()
+
+    def auto_finished(self, path, message):
+        self.auto_pending -= 1
+        self.finished(path, message)
+        if self.auto_pending:
+            self.set_busy(True)
+            self.spinner.start()
+
+    def auto_error(self, token, error):
+        if token is self.listener_generation:
+            self.pause_listening()
+            self.status.set_text(f"Hands-free listening stopped: {error}")
 
     def refresh_history(self, select=None):
         self.paths = sorted(DATA.glob("*.wav"), reverse=True)
@@ -156,19 +275,19 @@ class Keety(Gtk.Application):
                 text = "Audio saved. No transcript yet; use Transcribe again to retry."
         self.text.get_buffer().set_text(text)
         self.copy.set_sensitive(bool(self.selected and self.selected.with_suffix(".txt").exists()))
-        self.play.set_sensitive(self.selected is not None and not self.busy)
-        self.retry.set_sensitive(self.selected is not None and self.model is not None and not self.busy)
+        self.play.set_sensitive(self.selected is not None and not self.busy and self.listener is None)
+        self.retry.set_sensitive(self.selected is not None and self.model is not None and not self.busy and self.listener is None)
 
     def set_busy(self, value):
         self.busy = value
         self.voice_commands.set_sensitive(not value)
-        self.record.set_sensitive(not value and self.model is not None)
+        self.record.set_sensitive(not value and self.model is not None and self.listener is None)
         self.history.set_sensitive(not value)
-        self.play.set_sensitive(not value and self.selected is not None)
-        self.retry.set_sensitive(not value and self.selected is not None and self.model is not None)
+        self.play.set_sensitive(not value and self.selected is not None and self.listener is None)
+        self.retry.set_sensitive(not value and self.selected is not None and self.model is not None and self.listener is None)
 
     def start_recording(self, *_):
-        if self.busy or self.model is None:
+        if self.busy or self.model is None or self.listener is not None:
             return
         path = None
         try:
@@ -225,6 +344,9 @@ class Keety(Gtk.Application):
         return True
 
     def stop_recording(self, *_):
+        if self.listener is not None:
+            self.pause_listening()
+            return
         if self.recorder and self.recorder.poll() is None:
             self.stop_requested = True
             try:
@@ -261,15 +383,17 @@ class Keety(Gtk.Application):
                 process.communicate()
             GLib.idle_add(self.finished, path, f"Recording problem: {exc}. Any captured audio is kept.")
 
-    def convert(self, path, commands=False):
+    def convert(self, path, commands=False, completion=None, command_guard=None):
+        completed = completion or self.finished
         try:
-            text, metrics = save_transcript(self.model, path)
+            with self.asr_lock:
+                text, metrics = save_transcript(self.model, path)
             message = f"Saved audio + transcript · {metrics['audio_seconds']:.1f}s audio · {metrics['transcribe_seconds']:.2f}s transcription"
         except Exception as exc:
             message = f"Audio kept; transcription failed: {exc}"
-            GLib.idle_add(self.finished, path, message)
+            GLib.idle_add(completed, path, message)
             return
-        if commands:
+        if commands and (command_guard is None or command_guard()):
             command = parse_command(text)
             if command:
                 GLib.idle_add(self.show_saved_transcript, path)
@@ -279,7 +403,7 @@ class Keety(Gtk.Application):
                     message += f" · Could not complete voice command: {exc}"
             else:
                 message += " · No matching voice command"
-        GLib.idle_add(self.finished, path, message)
+        GLib.idle_add(completed, path, message)
 
     def show_saved_transcript(self, path):
         self.refresh_history(path)
@@ -288,12 +412,12 @@ class Keety(Gtk.Application):
     def finished(self, path, message):
         self.recorder = None
         self.spinner.stop()
-        self.meter.active = False
+        self.meter.active = self.listener is not None
         self.meter.queue_draw()
-        self.stop.set_sensitive(False)
+        self.stop.set_sensitive(self.listener is not None)
         self.set_busy(False)
         self.refresh_history(path)
-        self.status.set_text(message)
+        self.status.set_text(message + (" · Listening for the next command" if self.listener else ""))
 
     def retry_transcription(self, *_):
         if self.selected and not self.busy and self.model:
@@ -322,6 +446,8 @@ class Keety(Gtk.Application):
             self.status.set_text(f"Could not open folder: {exc}")
 
     def on_close(self, *_):
+        if self.listener:
+            self.pause_listening()
         if self.busy:
             self.stop_recording()
             self.status.set_text("Finishing and saving this recording. Close again when it is ready.")

@@ -2,6 +2,13 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Hands-free mode enabled at startup: local Silero VAD detects speech onset/end.
+- Continuous amplitude/speech-probability display and explicit Pause listening.
+- Background audio stays in a bounded buffer; detected utterances save and
+  transcribe automatically, then pass through the exact grammar.
+- About 0.7s silence endpoint, pre-roll, short-noise rejection and a 28s take limit.
+- Pause prevents queued utterances from starting OS actions.
+
 - Voice commands enabled by default, using an explicit phrase-to-action table.
 - “Open Chrome” / “bring up Chrome” and listed aliases launch or focus Chromium.
 - “Bring up” phrases also set fullscreen; repeating them keeps fullscreen enabled.
