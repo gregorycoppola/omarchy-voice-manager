@@ -2,6 +2,13 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Close-enough, unambiguous voice matches now run and learn their phrase
+  automatically without a recognition confirmation. Terminal running-job
+  warnings still follow the saved preference.
+
+- “Maximize this window” maximizes the window captured when recording starts
+  on its current screen, including after fuzzy confirmation.
+
 - “Move to other screen” / “move window to other screen” move the window focused
   when recording started to the other monitor's active workspace and follow it.
   Fuzzy confirmations retain that target rather than moving the confirmation UI.

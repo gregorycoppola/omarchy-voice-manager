@@ -136,6 +136,24 @@ def window_target(context):
     return dict(target)
 
 
+def maximize_current_window(target):
+    target = window_target({"active": target or {}})
+    clients = json.loads(run(["hyprctl", "clients", "-j"]))
+    current = next((c for c in clients if c.get("address") == target["address"]), None)
+    if current is None or any(current.get(k) != target.get(k) for k in ("pid", "class", "stableId")):
+        raise RuntimeError("That window closed or changed. No other window was maximized.")
+    address = target["address"]
+    focus(current)
+    run(["hyprctl", "dispatch", 'hl.dsp.window.fullscreen_state({ internal = 1, client = 1, '
+         f'action = "set", window = "address:{address}" }})'])
+    maximized = next((c for c in json.loads(run(["hyprctl", "clients", "-j"]))
+                      if c.get("address") == address), None)
+    if (maximized is None or maximized.get("fullscreen") != 1
+            or maximized.get("fullscreenClient") != 1 or maximized.get("monitor") != current.get("monitor")):
+        raise RuntimeError("Could not confirm the window was maximized on its current screen")
+    return "Maximized this window"
+
+
 def move_other_screen(target):
     target = window_target({"active": target})
     clients = json.loads(run(["hyprctl", "clients", "-j"]))

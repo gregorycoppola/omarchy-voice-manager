@@ -64,17 +64,14 @@ class MoveRoutingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             matcher = IntentMatcher(Path(directory)/'aliases.json')
             for phrase, exact in [('move to other screen', True), ('move to other screan', False)]:
-                app = SimpleNamespace(model=object(), matcher=matcher, finished=Mock(), offer_suggestion=Mock())
+                app = SimpleNamespace(model=object(), refresh_aliases=Mock(), matcher=matcher, finished=Mock(), offer_suggestion=Mock())
                 with patch('gui.save_transcript', return_value=(phrase, {'audio_seconds':1,'transcribe_seconds':.1})), \
                      patch('gui.move_other_screen', return_value='Moved') as move, \
                      patch('gui.GLib.idle_add', side_effect=lambda callback,*args: callback(*args)):
                     Keety.convert(app, Path('test.wav'), commands=True, context={'active':TARGET})
-                    if exact:
-                        move.assert_called_once_with(TARGET)
-                        app.offer_suggestion.assert_not_called()
-                    else:
-                        move.assert_not_called()
-                        self.assertEqual(app.offer_suggestion.call_args.args[-1], TARGET)
+                    move.assert_called_once_with(TARGET)
+                    app.offer_suggestion.assert_not_called()
+                    self.assertEqual(matcher.exact(phrase), 'move:other_screen')
 
     def test_fuzzy_confirmation_uses_captured_target(self):
         app = SimpleNamespace(finished=Mock())

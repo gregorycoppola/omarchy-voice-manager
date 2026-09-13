@@ -73,15 +73,12 @@ with tempfile.TemporaryDirectory(prefix='keety-terminal-test-') as directory:
                 text[0] = 'close this termnal'
                 convert()
                 state['phase'] = 'fuzzy'
-            elif phase == 'fuzzy' and app.pending_suggestion:
-                assert close.call_count == 3, 'Fuzzy matches still need explicit approval'
-                app.confirm.emit('clicked')
-                state['phase'] = 'learned'
-            elif phase == 'learned' and not app.busy:
+            elif phase == 'fuzzy' and not app.busy:
+                assert app.pending_suggestion is None
                 assert close.call_count == 4
                 assert app.matcher.exact('close this termnal') == 'close:terminal_current'
                 state['passed'] = True
-                print('PASS: terminal title confirmation, cancel, fixed target, one close, saved opt-out, fuzzy approval')
+                print('PASS: terminal title confirmation, cancel, fixed target, one close, saved opt-out, automatic fuzzy learning')
                 app.window.close()
                 return False
         except Exception as exc:

@@ -103,14 +103,11 @@ substantially more memory.
 Hold Super + R throughout one allowed phrase, then release.
 The transcript and audio save first; a matching phrase then runs its fixed action.
 Built-in phrases and learned aliases run immediately on an exact normalized match.
-A close match opens a prominent modal **Did you mean…?** dialog with
-**Yes — run and remember** and **No**, bringing Keety forward. Escape or closing
-the dialog dismisses it too.
-Yes saves the heard phrase as an alias for that intent and runs the command.
-Next time that phrase is recognized, it works immediately. No dismisses the
-suggestion without saving or running anything. Unrelated or ambiguous speech
-shows “Unrecognized command.” Audio and transcripts remain saved for review.
-Retrying a saved transcript never executes a command or offers a suggestion.
+A sufficiently close match runs immediately and saves the heard phrase as an
+alternate for that intent. Keety displays the matched command in its status;
+there is no “Did you mean” prompt. Learned phrases can be removed with **Forget**.
+Unrelated or ambiguous speech shows “Unrecognized command.” Audio and transcripts
+remain saved for review. Retrying a saved transcript never executes or learns a command.
 
 Stable intent IDs, display labels, and built-in phrases live in `INTENTS` in
 [command_catalog.py](command_catalog.py), beside the fixed website URL registry.
@@ -162,8 +159,7 @@ it maximized. If the app is closed, Keety reports that instead of launching it.
 window, including Chromium. The window moves to the other screen's active
 workspace and receives focus. With more than two screens, the destination is
 the next connected monitor in monitor-ID order. It reports an error if only one
-screen is available. Fuzzy confirmation keeps the original window as its target,
-even when the dialog takes focus. A closed or replaced window is never substituted.
+screen is available. Fuzzy matches keep the original captured window as their target. A closed or replaced window is never substituted.
 
 Terminal close commands close an idle shell prompt directly. If a program or job
 is running, they show a modal confirmation with the chosen window's title.
@@ -173,9 +169,8 @@ nothing if the focused window was not a terminal. “Close terminal” chooses t
 most recently used terminal across screens/workspaces. Only that window is closed.
 
 **Confirm before closing a terminal with running programs** defaults on. Turn it off in Keety to skip
-confirmation for exact terminal-close commands; the choice persists locally in
-`~/.local/share/keety/settings.json` (respecting `XDG_DATA_HOME`). Fuzzy suggestions
-still require approval. Keety inspects the terminal's process tree and foreground process group. A lone
+confirmation for terminal-close commands; the choice persists locally in
+`~/.local/share/keety/settings.json` (respecting `XDG_DATA_HOME`). Fuzzy matches follow the same running-program warning setting. Keety inspects the terminal's process tree and foreground process group. A lone
 interactive shell with no live child jobs is treated as idle; foreground commands,
 background/stopped jobs, and directly launched apps count as running programs.
 Unknown states (including shared terminal servers that cannot be resolved per
@@ -231,7 +226,8 @@ library text similarity, scoring built-in and learned phrases and grouping them
 by intent. A suggestion needs at least 0.72 similarity and a 0.06 lead over the
 next intent; ambiguous matches, explicit negation, single-word fragments, and long dictation are skipped.
 These are initial heuristics, not confidence probabilities; some mishearings may
-still produce no suggestion. Fuzzy matches always require a click before acting.
+still produce no match or choose an incorrect intent. Accepted fuzzy matches run
+and are remembered automatically.
 No extra model or dependency is needed. Website destinations and OS actions remain
 fixed; speech cannot supply a URL, shell command, or browser argument.
 
@@ -275,6 +271,7 @@ node --test tests/test_browser_tabs.cjs
 .venv/bin/python tests/terminal_activity_smoke.py
 .venv/bin/python tests/window_close_smoke.py
 .venv/bin/python tests/window_close_smoke.py --maximize
+.venv/bin/python tests/window_close_smoke.py --maximize-current
 .venv/bin/python tests/window_close_smoke.py --maximize --move
 # With the public sample downloaded as described in docs/first-run.md:
 .venv/bin/python tests/gui_smoke.py local/jfk.wav
@@ -303,3 +300,7 @@ works. A real recording previously skipped transcription because this installed
 app now accepts that requested-stop result and validates/transcribes the WAV;
 the regression test covers this exact case. The owner subsequently confirmed
 that the meter and automatic transcription work in the updated app.
+
+Say **“maximize this window”** to maximize the window focused when recording starts,
+on its current screen. Repeating the command keeps it maximized; browser tabs
+and normal window controls stay visible.

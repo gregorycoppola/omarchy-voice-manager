@@ -1,4 +1,4 @@
-"""Exact intent aliases and confirmation-only fuzzy suggestions; no extra model."""
+"""Exact intent aliases and confidence-filtered fuzzy matching; no extra model."""
 from difflib import SequenceMatcher
 import json
 import os

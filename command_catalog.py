@@ -133,6 +133,10 @@ INTENTS = {
             "close this terminal"
         ]
     },
+    "maximize:current_window": {
+        "label": "Maximize this window",
+        "phrases": ["maximize this window", "maximize the current window"]
+    },
     "move:other_screen": {
         "label": "Move window to the other screen",
         "phrases": [

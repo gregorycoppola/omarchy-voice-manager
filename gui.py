@@ -16,7 +16,7 @@ from keety import load_model
 from recordings import new_recording, save_transcript
 from live_audio import read_growing_wav
 from level_meter import LevelMeter, pcm_level
-from os_actions import execute_command, capture_window_context, window_target, move_other_screen, terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS
+from os_actions import execute_command, capture_window_context, window_target, move_other_screen, maximize_current_window, terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS
 from settings import Settings
 from terminal_activity import terminal_has_jobs
 from command_catalog import GRAMMAR, INTENTS
@@ -112,7 +112,7 @@ class Keety(Gtk.Application):
         for side in ["top", "bottom", "start", "end"]:
             getattr(self.suggestion_box, "set_margin_" + side)(28)
         self.suggestion_dialog.set_child(self.suggestion_box)
-        self.confirm_heading = Gtk.Label(label="Did you mean…?", xalign=0)
+        self.confirm_heading = Gtk.Label(label="Close this terminal?", xalign=0)
         self.confirm_heading.add_css_class("title-1")
         self.suggestion_box.append(self.confirm_heading)
         self.suggestion_label = Gtk.Label(xalign=0, wrap=True)
@@ -121,7 +121,7 @@ class Keety(Gtk.Application):
         self.heard_label = Gtk.Label(xalign=0, wrap=True)
         self.suggestion_box.append(self.heard_label)
         confirmation = Gtk.Box(spacing=8)
-        self.confirm = Gtk.Button(label="Yes — run and remember")
+        self.confirm = Gtk.Button(label="Close terminal")
         self.confirm.add_css_class("suggested-action")
         self.confirm.connect("clicked", self.accept_suggestion)
         confirmation.append(self.confirm)
@@ -337,13 +337,20 @@ class Keety(Gtk.Application):
         if commands:
             command = self.matcher.exact(text)
             candidate = command or self.matcher.suggest(text)
-            if candidate == "move:other_screen":
+            if candidate and not command:
+                message += f" · Matched: {INTENTS[candidate]['label']}"
+                try:
+                    self.matcher.learn(text, candidate)
+                    GLib.idle_add(self.refresh_aliases)
+                    message += " · Phrase remembered"
+                except (OSError, ValueError) as exc:
+                    message += f" · Could not remember phrase: {exc}"
+                command = candidate
+            if candidate in {"move:other_screen", "maximize:current_window"}:
                 try:
                     target = window_target(context)
-                    if not command:
-                        GLib.idle_add(self.offer_suggestion, path, message, text, candidate, target)
-                        return
-                    message += " · " + move_other_screen(target)
+                    action = move_other_screen if candidate == "move:other_screen" else maximize_current_window
+                    message += " · " + action(target)
                 except Exception as exc:
                     message += f" · {exc}"
                 GLib.idle_add(self.finished, path, message)
@@ -351,7 +358,7 @@ class Keety(Gtk.Application):
             if candidate in TERMINAL_CLOSE_INTENTS:
                 try:
                     target = terminal_close_target(candidate, context)
-                    if not command or (self.settings.confirm_terminal_close and terminal_has_jobs(target) is not False):
+                    if self.settings.confirm_terminal_close and terminal_has_jobs(target) is not False:
                         GLib.idle_add(self.offer_terminal_close, path, message, text, candidate, target, not bool(command))
                         return
                     message += " · " + close_terminal(target)
@@ -366,23 +373,8 @@ class Keety(Gtk.Application):
                 except Exception as exc:
                     message += f" · Could not complete voice command: {exc}"
             else:
-                intent = self.matcher.suggest(text)
-                if intent:
-                    GLib.idle_add(self.offer_suggestion, path, message, text, intent)
-                    return
                 message += " · Unrecognized command — no action taken"
         GLib.idle_add(self.finished, path, message)
-
-    def offer_suggestion(self, path, message, text, intent, target=None):
-        self.finished(path, message + " · Waiting for command confirmation")
-        self.pending_suggestion = (path, text, intent, target, True)
-        self.confirm_heading.set_text("Did you mean…?")
-        self.confirm.set_label("Yes — run and remember")
-        self.suggestion_label.set_text(INTENTS[intent]["label"])
-        self.heard_label.set_text(f'Heard: “{text.strip()}”\nYes runs this command and remembers your phrase.')
-        self.window.present()
-        self.suggestion_dialog.present()
-        self.reject.grab_focus()
 
     def offer_terminal_close(self, path, message, text, intent, target, learn):
         self.finished(path, message + " · Waiting for terminal confirmation")
@@ -443,6 +435,8 @@ class Keety(Gtk.Application):
         try:
             if intent == "move:other_screen":
                 result = move_other_screen(target)
+            elif intent == "maximize:current_window":
+                result = maximize_current_window(target)
             elif target is not None:
                 result = close_terminal(target)
             else:
@@ -463,7 +457,7 @@ class Keety(Gtk.Application):
             row.append(forget)
             self.learned_list.append(row)
         if not self.matcher.aliases:
-            self.learned_list.append(Gtk.Label(label="Confirmed phrases will appear here.", xalign=0))
+            self.learned_list.append(Gtk.Label(label="Automatically learned phrases will appear here.", xalign=0))
 
     def forget_alias(self, _, phrase):
         if self.busy:
