@@ -1,0 +1,41 @@
+{
+  "repo": "istupakov/parakeet-tdt-0.6b-v3-onnx",
+  "revision": "8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce",
+  "files": [
+    {
+      "rfilename": "README.md",
+      "blobId": "73e4a765c1f5604589c5345bdf47ad12cf9a70ac",
+      "size": 1207
+    },
+    {
+      "rfilename": "config.json",
+      "blobId": "02a773005666393de591dfd55230b778da1653d8",
+      "size": 97
+    },
+    {
+      "rfilename": "decoder_joint-model.int8.onnx",
+      "blobId": "86f5a1716b5726e3b80701ef99076d44b3c36b0c",
+      "size": 18202004,
+      "lfs": {
+        "sha256": "eea7483ee3d1a30375daedc8ed83e3960c91b098812127a0d99d1c8977667a70",
+        "size": 18202004,
+        "pointerSize": 133
+      }
+    },
+    {
+      "rfilename": "encoder-model.int8.onnx",
+      "blobId": "f60d30a325223080203157bba7bf86df44a69dc3",
+      "size": 652183999,
+      "lfs": {
+        "sha256": "6139d2fa7e1b086097b277c7149725edbab89cc7c7ae64b23c741be4055aff09",
+        "size": 652183999,
+        "pointerSize": 134
+      }
+    },
+    {
+      "rfilename": "vocab.txt",
+      "blobId": "fc43e1c723e262df60b70e1919614417162d1fe2",
+      "size": 93939
+    }
+  ]
+}
