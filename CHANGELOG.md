@@ -2,6 +2,9 @@
 
 ## Unreleased — 0.2.0-dev
 
+- “Tile open windows” restores the captured workspace’s windows to normal
+  tiling, excluding Keety. Repeated commands keep the windows tiled.
+
 - Close-enough, unambiguous voice matches now run and learn their phrase
   automatically without a recognition confirmation. Terminal running-job
   warnings still follow the saved preference.

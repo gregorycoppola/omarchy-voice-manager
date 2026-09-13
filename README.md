@@ -270,6 +270,7 @@ node --test tests/test_browser_tabs.cjs
 .venv/bin/python tests/terminal_confirmation_smoke.py
 .venv/bin/python tests/terminal_activity_smoke.py
 .venv/bin/python tests/window_close_smoke.py
+.venv/bin/python tests/tile_windows_smoke.py
 .venv/bin/python tests/window_close_smoke.py --maximize
 .venv/bin/python tests/window_close_smoke.py --maximize-current
 .venv/bin/python tests/window_close_smoke.py --maximize --move
@@ -304,3 +305,9 @@ that the meter and automatic transcription work in the updated app.
 Say **“maximize this window”** to maximize the window focused when recording starts,
 on its current screen. Repeating the command keeps it maximized; browser tabs
 and normal window controls stay visible.
+
+Say **“tile open windows”** (or **“tile all windows”**) to arrange the windows
+on the workspace focused when recording starts using the normal Hyprland layout.
+It exits maximize/fullscreen, separates grouped windows, and turns off floating.
+Keety is excluded. Other workspaces stay as they are; repeating the command keeps
+the windows tiled.

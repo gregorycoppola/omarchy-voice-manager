@@ -137,6 +137,10 @@ INTENTS = {
         "label": "Maximize this window",
         "phrases": ["maximize this window", "maximize the current window"]
     },
+    "windows:tile": {
+        "label": "Tile open windows",
+        "phrases": ["tile open windows", "tile all open windows", "tile windows", "tile all windows"]
+    },
     "move:other_screen": {
         "label": "Move window to the other screen",
         "phrases": [

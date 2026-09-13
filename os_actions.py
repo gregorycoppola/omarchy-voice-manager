@@ -136,6 +136,44 @@ def window_target(context):
     return dict(target)
 
 
+def tile_open_windows(context):
+    workspace = (context or {}).get("active", {}).get("workspace", {}).get("id")
+    if type(workspace) is not int:
+        raise RuntimeError("Could not identify the workspace when recording started")
+    targets = [c for c in context.get("clients", [])
+               if c.get("workspace", {}).get("id") == workspace
+               and c.get("mapped", True)
+               and c.get("class") != "io.github.gregorycoppola.Keety"
+               and c.get("initialClass") != "io.github.gregorycoppola.Keety"
+               and re.fullmatch(r"0x[0-9a-fA-F]+", c.get("address", ""))]
+    tiled = 0
+    skipped = 0
+    for target in targets:
+        address = target["address"]
+        current = next((c for c in json.loads(run(["hyprctl", "clients", "-j"]))
+                        if c.get("address") == address), None)
+        if (current is None or not current.get("mapped", True)
+                or current.get("workspace", {}).get("id") != workspace
+                or any(current.get(k) != target.get(k) for k in ("pid", "class", "stableId"))):
+            skipped += 1
+            continue
+        run(["hyprctl", "dispatch", 'hl.dsp.window.fullscreen_state({ internal = 0, client = 0, '
+             f'action = "set", window = "address:{address}" }})'])
+        if len(current.get("grouped", [])) > 1:
+            run(["hyprctl", "dispatch", f'hl.dsp.window.move({{ out_of_group = true, window = "address:{address}" }})'])
+        run(["hyprctl", "dispatch", f'hl.dsp.window.float({{ action = "off", window = "address:{address}" }})'])
+        updated = next((c for c in json.loads(run(["hyprctl", "clients", "-j"]))
+                        if c.get("address") == address), None)
+        if (updated is None or updated.get("floating") or updated.get("fullscreen") != 0
+                or updated.get("fullscreenClient") != 0):
+            raise RuntimeError(f"Tiled {tiled} windows; could not confirm tiling another window")
+        tiled += 1
+    message = f"Tiled {tiled} windows" if tiled else "No open windows to tile on this workspace"
+    if skipped:
+        message += f" · Skipped {skipped} closed, moved, or changed windows"
+    return message
+
+
 def maximize_current_window(target):
     target = window_target({"active": target or {}})
     clients = json.loads(run(["hyprctl", "clients", "-j"]))
