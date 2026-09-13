@@ -123,6 +123,7 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 
 | Allowed phrase | Action |
 | --- | --- |
+| open a new terminal / open a terminal / open terminal / open new terminal | Open a fresh default terminal window on DP-1 |
 | open chrome | Launch Chromium or focus an existing browser window |
 | bring up chrome | Launch/focus Chromium and maximize with tabs visible |
 | launch chrome | Same |
@@ -138,6 +139,8 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 | maximize chrome / maximize chromium / maximize google chrome | Maximize the most recently used normal browser window |
 | maximize discord | Maximize Discord’s app window |
 | maximize x / maximize twitter | Maximize X/Twitter’s app window |
+| close terminal / close the terminal / close a terminal | Close the most recently used terminal; ask if programs are running |
+| close this terminal | Close the terminal focused when recording started; ask if programs are running |
 | close discord | Close the most recently used Discord app window |
 | close x / close twitter | Close the most recently used X/Twitter app window |
 | close chrome / close chromium / close google chrome | Close one normal Chrome/Chromium window, including its tabs |
@@ -153,6 +156,25 @@ Maximize commands select one existing window, move it to DP-1 and focus it,
 then set maximized mode for both the compositor and app. Normal browser controls
 remain visible; this is different from fullscreen. Repeating the command keeps
 it maximized. If the app is closed, Keety reports that instead of launching it.
+
+Terminal close commands close an idle shell prompt directly. If a program or job
+is running, they show a modal confirmation with the chosen window's title.
+The target is captured when recording starts, so the confirmation dialog taking
+focus cannot change which terminal gets closed. “Close this terminal” does
+nothing if the focused window was not a terminal. “Close terminal” chooses the
+most recently used terminal across screens/workspaces. Only that window is closed.
+
+**Confirm before closing a terminal with running programs** defaults on. Turn it off in Keety to skip
+confirmation for exact terminal-close commands; the choice persists locally in
+`~/.local/share/keety/settings.json` (respecting `XDG_DATA_HOME`). Fuzzy suggestions
+still require approval. Keety inspects the terminal's process tree and foreground process group. A lone
+interactive shell with no live child jobs is treated as idle; foreground commands,
+background/stopped jobs, and directly launched apps count as running programs.
+Unknown states (including shared terminal servers that cannot be resolved per
+window) still ask. This detects processes, not unsaved work. Closing can stop them. Keety sends a normal close request and leaves
+any additional terminal/app confirmation to you; it never force-kills them.
+If the selected window disappears or is replaced before approval, Keety will not
+close a different window.
 
 Close commands send a normal window-close request to one matching window,
 preferring the most recently used match across workspaces. They do not focus,
@@ -241,6 +263,8 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 .venv/bin/python -m unittest discover -s tests -v
 node --test tests/test_browser_tabs.cjs
 .venv/bin/python tests/learning_smoke.py
+.venv/bin/python tests/terminal_confirmation_smoke.py
+.venv/bin/python tests/terminal_activity_smoke.py
 .venv/bin/python tests/window_close_smoke.py
 .venv/bin/python tests/window_close_smoke.py --maximize
 # With the public sample downloaded as described in docs/first-run.md:

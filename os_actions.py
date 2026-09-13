@@ -11,6 +11,8 @@ from intent_matching import normalize
 
 BROWSER_CLASSES = {"chromium", "google-chrome", "google-chrome-stable", "chrome"}
 MAIN_MONITOR = "DP-1"
+TERMINAL_CLASSES = {"foot", "footclient", "alacritty", "kitty", "org.wezfurlong.wezterm", "com.mitchellh.ghostty"}
+TERMINAL_CLOSE_INTENTS = {"close:terminal", "close:terminal_current"}
 
 
 def parse_command(text):
@@ -81,6 +83,8 @@ def move_to_main_screen(window):
 
 
 def execute_command(command):
+    if command == "terminal:new":
+        return open_terminal()
     if command in APPS:
         return present_app(command)
     if command.startswith("maximize:"):
@@ -115,6 +119,71 @@ def execute_command(command):
             return "Opened the browser maximized" if fullscreen else "Opened the browser"
         time.sleep(0.15)
     raise RuntimeError("Launch requested, but no browser window appeared within 10 seconds")
+
+
+def terminal_context():
+    try:
+        return {"active": json.loads(run(["hyprctl", "activewindow", "-j"])),
+                "clients": json.loads(run(["hyprctl", "clients", "-j"]))}
+    except Exception:
+        return None
+
+
+def is_terminal(window):
+    return (window.get("class", "").lower() in TERMINAL_CLASSES
+            and window.get("mapped", True)
+            and re.fullmatch(r"0x[0-9a-fA-F]+", window.get("address", "")))
+
+
+def terminal_close_target(intent, context):
+    if intent not in TERMINAL_CLOSE_INTENTS:
+        raise ValueError("Unsupported terminal command")
+    if context is None:
+        raise RuntimeError("Could not identify the terminal when recording started. Try again.")
+    if intent == "close:terminal_current":
+        target = context["active"]
+        if not is_terminal(target):
+            raise RuntimeError("The window you were in was not a terminal. No window was closed.")
+    else:
+        target = min((c for c in context["clients"] if is_terminal(c)),
+                     key=lambda c: c.get("focusHistoryID", 99999), default=None)
+        if target is None:
+            raise RuntimeError("No open terminal window")
+    return dict(target)
+
+
+def close_terminal(target):
+    if not is_terminal(target):
+        raise ValueError("Invalid terminal target")
+    clients = json.loads(run(["hyprctl", "clients", "-j"]))
+    current = next((c for c in clients if c.get("address") == target["address"]), None)
+    if current is None:
+        return "That terminal has already closed"
+    if not is_terminal(current) or any(current.get(k) != target.get(k) for k in ("pid", "class", "stableId")):
+        raise RuntimeError("The terminal changed. No window was closed; try again.")
+    run(["hyprctl", "dispatch", f'hl.dsp.window.close({{ window = "address:{target["address"]}" }})'])
+    return "Asked the selected terminal to close. Respond to any confirmation it shows."
+
+
+def open_terminal():
+    main_monitor(json.loads(run(["hyprctl", "monitors", "-j"])))
+    before = {c["address"] for c in json.loads(run(["hyprctl", "clients", "-j"]))}
+    # Use the configured desktop terminal, with no speech-derived shell arguments.
+    run(["hyprctl", "dispatch", 'hl.dsp.exec_cmd("omarchy launch terminal")'])
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        clients = json.loads(run(["hyprctl", "clients", "-j"]))
+        window = next((c for c in clients
+                       if c.get("address") not in before
+                       and c.get("class", "").lower() in TERMINAL_CLASSES
+                       and c.get("mapped", True)
+                       and re.fullmatch(r"0x[0-9a-fA-F]+", c.get("address", ""))), None)
+        if window:
+            move_to_main_screen(window)
+            focus(window)
+            return "Opened a new terminal"
+        time.sleep(0.1)
+    raise RuntimeError("Launch requested, but no new terminal window appeared within 10 seconds")
 
 
 def app_window(key, clients):

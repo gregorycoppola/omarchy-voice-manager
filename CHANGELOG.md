@@ -2,6 +2,17 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Idle terminal prompts close directly. Confirmation is needed only for running
+  commands/jobs or an unknown process state, unless disabled in preferences.
+
+- “Close terminal” selects the most recent terminal; “close this terminal” uses
+  the window focused when recording started. Confirmation names that window
+  and remains tied to it even after focus changes. A saved setting can disable
+  exact-match terminal confirmations; fuzzy matches always require approval.
+
+- “Open a new terminal” / “open a terminal” launch a fresh default terminal
+  through Omarchy and focus it on DP-1.
+
 - Browser and website commands preserve Chromium’s tabs/address bar by using
   maximized mode. Bringing up an already-fullscreen browser restores its controls.
 

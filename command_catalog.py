@@ -109,6 +109,29 @@ INTENTS = {
             "maximize x",
             "maximize twitter"
         ]
+    },
+    "terminal:new": {
+        "label": "Open a new terminal",
+        "phrases": [
+            "open a new terminal",
+            "open a terminal",
+            "open terminal",
+            "open new terminal"
+        ]
+    },
+    "close:terminal": {
+        "label": "Close the most recent terminal",
+        "phrases": [
+            "close terminal",
+            "close the terminal",
+            "close a terminal"
+        ]
+    },
+    "close:terminal_current": {
+        "label": "Close this terminal",
+        "phrases": [
+            "close this terminal"
+        ]
     }
 }
 

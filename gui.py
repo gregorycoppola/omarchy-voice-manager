@@ -16,7 +16,9 @@ from keety import load_model
 from recordings import new_recording, save_transcript
 from live_audio import read_growing_wav
 from level_meter import LevelMeter, pcm_level
-from os_actions import execute_command
+from os_actions import execute_command, terminal_context, terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS
+from settings import Settings
+from terminal_activity import terminal_has_jobs
 from command_catalog import GRAMMAR, INTENTS
 from intent_matching import IntentMatcher
 from push_to_talk import PushToTalk
@@ -36,6 +38,7 @@ class Keety(Gtk.Application):
         self.paths = []
         self.active_path = None
         self.stop_requested = False
+        self.settings = Settings(DATA.parent / "settings.json")
         self.matcher = IntentMatcher(DATA.parent / "aliases.json")
         self.pending_suggestion = None
         self.ptt_held = False
@@ -71,7 +74,7 @@ class Keety(Gtk.Application):
         subtitle = Gtk.Label(label="Hold Super + R to talk. Release to transcribe and run your command.", xalign=0, wrap=True)
         subtitle.add_css_class("dim-label")
         box.append(subtitle)
-        commands_label = Gtk.Label(label="Commands — Chrome · Gmail · GitHub · Discord · X / Twitter · Windows", xalign=0)
+        commands_label = Gtk.Label(label="Commands — Chrome · Gmail · GitHub · Discord · X / Twitter · Terminal · Windows", xalign=0)
         commands_label.set_tooltip_text("Accepted phrases:\n" + "\n".join(GRAMMAR))
         box.append(commands_label)
         vocabulary = Gtk.Expander(label="Accepted commands")
@@ -83,6 +86,10 @@ class Keety(Gtk.Application):
         learned.set_child(self.learned_list)
         box.append(learned)
         self.refresh_aliases()
+        self.confirm_terminal = Gtk.CheckButton(label="Confirm before closing a terminal with running programs")
+        self.confirm_terminal.set_active(self.settings.confirm_terminal_close)
+        self.confirm_terminal.connect("toggled", self.toggle_terminal_confirmation)
+        box.append(self.confirm_terminal)
         box.append(Gtk.Label(label="Records only while Super + R is held · up to 30 seconds", xalign=0))
         self.status = Gtk.Label(label="Loading local speech model…", xalign=0, wrap=True)
         self.status.set_selectable(True)
@@ -105,9 +112,9 @@ class Keety(Gtk.Application):
         for side in ["top", "bottom", "start", "end"]:
             getattr(self.suggestion_box, "set_margin_" + side)(28)
         self.suggestion_dialog.set_child(self.suggestion_box)
-        heading = Gtk.Label(label="Did you mean…?", xalign=0)
-        heading.add_css_class("title-1")
-        self.suggestion_box.append(heading)
+        self.confirm_heading = Gtk.Label(label="Did you mean…?", xalign=0)
+        self.confirm_heading.add_css_class("title-1")
+        self.suggestion_box.append(self.confirm_heading)
         self.suggestion_label = Gtk.Label(xalign=0, wrap=True)
         self.suggestion_label.add_css_class("title-2")
         self.suggestion_box.append(self.suggestion_label)
@@ -172,7 +179,7 @@ class Keety(Gtk.Application):
     def ready(self):
         self.spinner.stop()
         self.retry.set_sensitive(self.selected is not None)
-        self.status.set_text(self.matcher.error or "Ready. Hold Super + R to speak.")
+        self.status.set_text(self.matcher.error or self.settings.error or "Ready. Hold Super + R to speak.")
         if self.ptt_held:
             self.begin_ptt()
 
@@ -303,6 +310,7 @@ class Keety(Gtk.Application):
         self.status.set_text("Audio saved. Transcribing locally…")
 
     def finish_recording(self, path, process):
+        context = terminal_context()
         try:
             _, error = process.communicate(timeout=45)
             # This installed pw-record returns 1 on a requested SIGINT stop, even
@@ -311,14 +319,14 @@ class Keety(Gtk.Application):
             if process.returncode not in (0, -signal.SIGINT) and not requested_stop:
                 raise RuntimeError(f"Recorder exited {process.returncode}: {error.strip()}")
             GLib.idle_add(self.processing)
-            self.convert(path, commands=True)
+            self.convert(path, commands=True, context=context)
         except Exception as exc:
             if process.poll() is None:
                 process.kill()
                 process.communicate()
             GLib.idle_add(self.finished, path, f"Recording problem: {exc}. Any captured audio is kept.")
 
-    def convert(self, path, commands=False):
+    def convert(self, path, commands=False, context=None):
         try:
             text, metrics = save_transcript(self.model, path)
             message = f"Saved audio + transcript · {metrics['audio_seconds']:.1f}s audio · {metrics['transcribe_seconds']:.2f}s transcription"
@@ -328,6 +336,18 @@ class Keety(Gtk.Application):
             return
         if commands:
             command = self.matcher.exact(text)
+            candidate = command or self.matcher.suggest(text)
+            if candidate in TERMINAL_CLOSE_INTENTS:
+                try:
+                    target = terminal_close_target(candidate, context)
+                    if not command or (self.settings.confirm_terminal_close and terminal_has_jobs(target) is not False):
+                        GLib.idle_add(self.offer_terminal_close, path, message, text, candidate, target, not bool(command))
+                        return
+                    message += " · " + close_terminal(target)
+                except Exception as exc:
+                    message += f" · {exc}"
+                GLib.idle_add(self.finished, path, message)
+                return
             if command:
                 GLib.idle_add(self.show_saved_transcript, path)
                 try:
@@ -344,12 +364,36 @@ class Keety(Gtk.Application):
 
     def offer_suggestion(self, path, message, text, intent):
         self.finished(path, message + " · Waiting for command confirmation")
-        self.pending_suggestion = (path, text, intent)
+        self.pending_suggestion = (path, text, intent, None, True)
+        self.confirm_heading.set_text("Did you mean…?")
+        self.confirm.set_label("Yes — run and remember")
         self.suggestion_label.set_text(INTENTS[intent]["label"])
         self.heard_label.set_text(f'Heard: “{text.strip()}”\nYes runs this command and remembers your phrase.')
         self.window.present()
         self.suggestion_dialog.present()
         self.reject.grab_focus()
+
+    def offer_terminal_close(self, path, message, text, intent, target, learn):
+        self.finished(path, message + " · Waiting for terminal confirmation")
+        self.pending_suggestion = (path, text, intent, target, learn)
+        self.confirm_heading.set_text("Close this terminal?")
+        title = " ".join((target.get("title") or target["class"]).split())
+        self.suggestion_label.set_text(title[:120])
+        self.heard_label.set_text(f'Heard: “{text.strip()}”\nClosing may stop programs running in this terminal.'
+                                 + ("\nYour phrase will also be remembered." if learn else ""))
+        self.confirm.set_label("Yes — close and remember" if learn else "Close terminal")
+        self.window.present()
+        self.suggestion_dialog.present()
+        self.reject.grab_focus()
+
+    def toggle_terminal_confirmation(self, button):
+        try:
+            self.settings.set_confirm_terminal_close(button.get_active())
+        except (OSError, ValueError) as exc:
+            button.handler_block_by_func(self.toggle_terminal_confirmation)
+            button.set_active(self.settings.confirm_terminal_close)
+            button.handler_unblock_by_func(self.toggle_terminal_confirmation)
+            self.status.set_text(f"Could not save preference: {exc}")
 
     def dismiss_suggestion(self, *args):
         self.pending_suggestion = None
@@ -370,23 +414,25 @@ class Keety(Gtk.Application):
     def accept_suggestion(self, *_):
         if self.busy or self.pending_suggestion is None:
             return
-        path, text, intent = self.pending_suggestion
+        path, text, intent, target, learn = self.pending_suggestion
         try:
-            self.matcher.learn(text, intent)
+            if learn:
+                self.matcher.learn(text, intent)
         except (OSError, ValueError) as exc:
             self.heard_label.set_text(f"Could not remember phrase: {exc}. No command was run.")
             return
         self.refresh_aliases()
         self.set_busy(True)
         self.spinner.start()
-        self.status.set_text("Phrase remembered. Running command…")
-        threading.Thread(target=self.run_confirmed, args=(path, intent), daemon=True).start()
+        self.status.set_text("Running confirmed command…")
+        threading.Thread(target=self.run_confirmed, args=(path, intent, target, learn), daemon=True).start()
 
-    def run_confirmed(self, path, intent):
+    def run_confirmed(self, path, intent, target=None, learn=True):
+        prefix = "Phrase remembered · " if learn else ""
         try:
-            message = "Phrase remembered · " + execute_command(intent)
+            message = prefix + (close_terminal(target) if target is not None else execute_command(intent))
         except Exception as exc:
-            message = f"Phrase remembered · Could not complete voice command: {exc}"
+            message = prefix + f"Could not complete voice command: {exc}"
         GLib.idle_add(self.finished, path, message)
 
     def refresh_aliases(self):

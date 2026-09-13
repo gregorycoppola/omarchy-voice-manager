@@ -143,6 +143,34 @@ class CommandTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "confirm"):
                 execute_command("maximize:browser")
 
+    def test_new_terminal_phrases(self):
+        for phrase in ["Open a new terminal.", "open a terminal", "open terminal", "open new terminal"]:
+            self.assertEqual(parse_command(phrase), "terminal:new")
+        self.assertIsNone(parse_command("open a terminal and run ls"))
+
+    def test_terminal_always_launches_and_targets_only_new_terminal(self):
+        old = {"class": "foot", "address": "0x1"}
+        new = {"class": "foot", "address": "0x2"}
+        unrelated = {"class": "chromium", "address": "0x3"}
+        with patch("os_actions.run", side_effect=[MONITORS, json.dumps([old]), "ok", json.dumps([old, unrelated, new])]) as run, \
+             patch("os_actions.move_to_main_screen") as move, patch("os_actions.focus") as focus:
+            self.assertEqual(execute_command("terminal:new"), "Opened a new terminal")
+            self.assertEqual(run.call_args_list[2].args[0], ["hyprctl", "dispatch", 'hl.dsp.exec_cmd("omarchy launch terminal")'])
+            move.assert_called_once_with(new)
+            focus.assert_called_once_with(new)
+
+    def test_terminal_missing_monitor_does_not_launch(self):
+        with patch("os_actions.run", return_value="[]") as run:
+            with self.assertRaisesRegex(RuntimeError, "not connected"):
+                execute_command("terminal:new")
+            run.assert_called_once()
+
+    def test_terminal_reports_launch_timeout(self):
+        with patch("os_actions.run", side_effect=[MONITORS, "[]", "ok"]), \
+             patch("os_actions.time.monotonic", side_effect=[0, 11]):
+            with self.assertRaisesRegex(RuntimeError, "no new terminal"):
+                execute_command("terminal:new")
+
     def test_window_phrases_are_exact_commands(self):
         for phrase in ["Show all windows.", " SHOW  ALL OPEN WINDOWS! ", "Show all open window."]:
             self.assertEqual(parse_command(phrase), "windows")
@@ -218,7 +246,7 @@ class CommandTests(unittest.TestCase):
 
     def test_dictation_is_not_executed(self):
         for text in ["Don't open Chrome", "I said open Chrome", "open chrome; rm -rf /",
-                     "open chrome and send a message", "open terminal", "",
+                     "open chrome and send a message", "open a terminal and run ls", "",
                      "please open chrome", "open chrome please"]:
             with self.subTest(text=text):
                 self.assertIsNone(parse_command(text))
