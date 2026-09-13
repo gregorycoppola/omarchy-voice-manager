@@ -4,3 +4,5 @@ models/
 local/
 *.wav
 *.egg-info/
+
+.playwright-mcp/
