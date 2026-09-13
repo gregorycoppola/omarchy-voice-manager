@@ -2,7 +2,10 @@
 
 ## Unreleased — 0.2.0-dev
 
-- Hands-free mode enabled at startup: local Silero VAD detects speech onset/end.
+- Global Super/Command + R hold-to-talk: press records, release either key
+  transcribes and runs an exact command match without focusing the app.
+- Hands-free listening now defaults off; voice commands remain enabled.
+- Optional hands-free mode: local Silero VAD detects speech onset/end.
 - Continuous amplitude/speech-probability display and explicit Pause listening.
 - Background audio stays in a bounded buffer; detected utterances save and
   transcribe automatically, then pass through the exact grammar.

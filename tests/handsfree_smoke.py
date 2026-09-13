@@ -38,7 +38,7 @@ while True:
         return original_popen(command, **kwargs)
 
     listener.subprocess.Popen = fake_mic
-    app = gui.Keety()
+    app = gui.Keety(hands_free_default=True)
     app.set_application_id("io.github.gregorycoppola.Keety.HandsfreeTest")
     start = time.monotonic()
     state = {"error": None}

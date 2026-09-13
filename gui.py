@@ -19,12 +19,13 @@ from live_audio import read_growing_wav
 from level_meter import LevelMeter, pcm_level
 from os_actions import parse_command, execute_command
 from listener import Listener
+from push_to_talk import PushToTalk
 
 DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "keety/recordings"
 
 
 class Keety(Gtk.Application):
-    def __init__(self, hands_free_default=True):
+    def __init__(self, hands_free_default=False):
         super().__init__(application_id="io.github.gregorycoppola.Keety")
         self.window = None
         self.model = None
@@ -42,6 +43,12 @@ class Keety(Gtk.Application):
         self.auto_pending = 0
         self.auto_queue = queue.Queue(maxsize=3)
         self.asr_lock = threading.Lock()
+        self.ptt_held = False
+        self.ptt_owned = False
+        self.ptt = PushToTalk(self.ptt_press, self.ptt_release)
+        action = Gio.SimpleAction.new("ptt-event", GLib.VariantType.new("s"))
+        action.connect("activate", lambda _, value: self.ptt.event(value.get_string()))
+        self.add_action(action)
         threading.Thread(target=self.auto_worker, daemon=True).start()
 
     def do_activate(self):
@@ -66,7 +73,7 @@ class Keety(Gtk.Application):
         title = Gtk.Label(label="Speak. Keep the words.", xalign=0)
         title.add_css_class("title-1")
         box.append(title)
-        subtitle = Gtk.Label(label="Speak a command, then pause. Keety handles the rest.", xalign=0, wrap=True)
+        subtitle = Gtk.Label(label="Hold Super + R to talk. Release to transcribe and run your command.", xalign=0, wrap=True)
         subtitle.add_css_class("dim-label")
         box.append(subtitle)
         self.voice_commands = Gtk.CheckButton(label="Voice commands — say “open Chrome” or “bring up Chrome”")
@@ -149,9 +156,33 @@ class Keety(Gtk.Application):
         self.spinner.stop()
         self.record.set_sensitive(True)
         self.retry.set_sensitive(self.selected is not None)
-        self.status.set_text("Ready. Press Record when you want to speak.")
+        self.status.set_text("Ready. Hold Super + R to speak, or use Record / Stop.")
         if self.hands_free.get_active():
             self.start_listening()
+        elif self.ptt_held:
+            self.begin_ptt()
+
+    def ptt_press(self):
+        self.ptt_held = True
+        if self.listener:
+            self.pause_listening()
+        if self.model is None:
+            self.status.set_text("Loading model… keep holding Super + R.")
+            return
+        self.begin_ptt()
+
+    def begin_ptt(self):
+        if self.busy:
+            self.status.set_text("Still finishing the previous take. Release and hold Super + R again.")
+            return
+        self.start_recording()
+        self.ptt_owned = self.recorder is not None
+
+    def ptt_release(self):
+        self.ptt_held = False
+        if self.ptt_owned:
+            self.ptt_owned = False
+            self.stop_recording()
 
     def toggle_listening(self, *_):
         if self.model is None:
@@ -311,7 +342,7 @@ class Keety(Gtk.Application):
         self.meter.reset()
         self.last_audio_at = time.monotonic()
         self.copy.set_sensitive(False)
-        self.text.get_buffer().set_text("Recording your voice. Your transcript will appear automatically when you press Stop.")
+        self.text.get_buffer().set_text("Recording your voice. Your transcript will appear automatically when recording stops.")
         self.stop.set_sensitive(True)
         self.record_start = time.monotonic()
         self.status.set_text("Recording… speak now. Press Stop when finished.")
@@ -324,7 +355,8 @@ class Keety(Gtk.Application):
             return False
         seconds = min(30, int(time.monotonic() - self.record_start))
         if not self.stop_requested:
-            self.status.set_text(f"● Recording · {seconds}s / 30s — press Stop to transcribe")
+            ending = "release Super + R to transcribe" if self.ptt_owned else "press Stop to transcribe"
+            self.status.set_text(f"● Recording · {seconds}s / 30s — {ending}")
         try:
             pcm = read_growing_wav(path)
             if pcm and len(pcm) > self.meter_bytes:
@@ -411,6 +443,7 @@ class Keety(Gtk.Application):
 
     def finished(self, path, message):
         self.recorder = None
+        self.ptt_owned = False
         self.spinner.stop()
         self.meter.active = self.listener is not None
         self.meter.queue_draw()

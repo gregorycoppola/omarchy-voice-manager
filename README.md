@@ -40,7 +40,22 @@ files are SHA-256 verified. Model files occupy about 639 MiB and stay in ignored
 Launch **Keety** from the application launcher, run `keety` in a terminal on
 this installation, or run `./launch.sh` from the checkout.
 
-**Hands-free listening is on by default.** Speak an allowed command, then pause
+**Hold Super/Command + R to speak; release either key to transcribe.** Keety
+must be open and ready, but another app can have keyboard focus. The amplitude
+bars show recording activity; the completed transcript stays visible and an
+exact command match runs automatically. Takes are limited to 30 seconds.
+Wait for transcription to finish before holding the shortcut for another take.
+
+The shortcut is installed on this machine in `~/.config/hypr/keety-ptt.lua`,
+loaded by `~/.config/hypr/bindings.lua`. Source:
+[config/hyprland-keety-ptt.lua](config/hyprland-keety-ptt.lua).
+To choose another letter, change `keety_key` in that file after checking for
+conflicting shortcuts, then run `hyprctl reload` and `hyprctl configerrors`.
+The shortcut is a separate Hyprland configuration; the desktop installer does
+not install it. It sends typed D-Bus actions through `gapplication`.
+
+**Hands-free listening is off by default.** Enable it optionally, then speak
+an allowed command and pause
 for about 0.7 seconds. Keety detects speech, saves the take, transcribes it and
 runs an exact grammar match, then continues listening. No Record/Stop clicks
 are needed. The level display shows microphone amplitude and speech probability.
@@ -82,16 +97,16 @@ the program has no audio upload code. Transcripts print to stdout, and timing
 and Linux peak process RAM measurements print to stderr. Nothing is pasted into
 another application automatically.
 
-The CLI reloads the model on each invocation; the GUI keeps it loaded. A global
-push-to-talk shortcut and longer-recording segmentation are future work.
+The CLI reloads the model on each invocation; the GUI keeps it loaded. Longer
+manual recordings still need segmentation.
 INT8 can affect accuracy; test your own voice and technical terms.
 This prototype limits clips to 30 seconds because longer inputs need segmentation
 and can consume substantially more memory.
 
 ## Deterministic voice commands (0.2.0-dev)
 
-Both **Voice commands** and **Hands-free listening** start enabled. Speak one
-allowed phrase and pause, or use manual Record/Stop with hands-free mode paused.
+**Voice commands** starts enabled; **Hands-free listening** starts disabled.
+Hold Super + R, speak one allowed phrase, and release. Manual Record/Stop also works.
 The transcript and audio save first; a matching phrase then runs its fixed action.
 The toggle defaults on each time the app starts. With it off, all recordings
 are dictation. Retrying a saved transcript never executes a voice command.
@@ -180,6 +195,13 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 .venv/bin/python tests/gui_smoke.py local/jfk.wav --auto
 .venv/bin/python tests/handsfree_smoke.py local/jfk.wav
 ```
+
+With the real Keety app closed and the shortcut installed, `tests/gui_smoke.py`
+also supports `--ptt` and `--ptt --super-first`. These use `wtype` to exercise
+the compositor binding and D-Bus action, checking transcription before the
+second key is released. For this virtual keyboard test only, temporarily set
+`input.resolve_binds_by_sym` to true with `hyprctl eval`, then restore its prior
+value afterward. Physical keyboard usage does not require this setting.
 
 The GUI smoke test opens a temporary test window and substitutes a prerecorded
 sample for the microphone. It verifies amplitude activity during recording and

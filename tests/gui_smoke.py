@@ -20,6 +20,8 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
     original_popen = subprocess.Popen
     sample = Path(sys.argv[1]).resolve()
     automatic = "--auto" in sys.argv
+    ptt = "--ptt" in sys.argv
+    super_first = "--super-first" in sys.argv
 
     def fake_microphone(command, **kwargs):
         if command[0] == "pw-record":
@@ -30,17 +32,26 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
 
     gui.subprocess.Popen = fake_microphone
     app = gui.Keety(hands_free_default=False)
-    app.set_application_id("io.github.gregorycoppola.Keety.Test")
+    if not ptt:
+        app.set_application_id("io.github.gregorycoppola.Keety.Test")
     started = time.monotonic()
-    state = {"phase": "load", "error": None}
+    state = {"phase": "load", "error": None, "passed": False}
 
     def step():
         try:
-            assert time.monotonic() - started < 45, "GUI test timed out"
+            assert time.monotonic() - started < 45, f"GUI test timed out in {state['phase']}"
             if state["phase"] == "load" and app.model and app.record.get_sensitive():
+                if ptt:
+                    release = ["-P", "Super_L", "-p", "Super_L", "-m", "logo", "-s", "2500", "-p", "r"] if super_first else ["-p", "r", "-s", "2500", "-m", "logo"]
+                    state["keyboard"] = original_popen(["wtype", "-M", "logo", "-P", "r", "-s", "1500", *release])
+                    state["phase"] = "press"
+                    return True
                 app.record.emit("clicked")
                 assert app.busy and app.stop.get_sensitive()
                 state.update(phase="record", since=time.monotonic())
+            elif state["phase"] == "press" and app.recorder:
+                assert app.ptt_owned and app.busy
+                state["phase"] = "record"
             elif state["phase"] == "record":
                 buffer = app.text.get_buffer()
                 text = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False)
@@ -48,7 +59,7 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
                 if not any(level > 0 for level in app.meter.levels):
                     return True
                 assert app.recorder.poll() is None, "Meter must respond during recording"
-                if not automatic:
+                if not automatic and not ptt:
                     app.stop.emit("clicked")
                 state["phase"] = "save"
             elif state["phase"] == "save" and not app.busy:
@@ -62,8 +73,13 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
                 app.refresh_history()  # reload from disk, not transient widget state
                 assert app.selected == wav
                 assert app.copy.get_sensitive() and app.play.get_sensitive()
-                print("PASS:", "automatic recording end" if automatic else "Stop exit-code-1 regression",
+                if ptt:
+                    assert not app.ptt_held and not app.ptt_owned
+                    assert state["keyboard"].poll() is None, "Transcription must finish before the second key is released"
+                    assert state["keyboard"].wait(timeout=4) == 0
+                print("PASS:", ("global Super+R, Super released first" if super_first else "global Super+R, R released first") if ptt else ("automatic recording end" if automatic else "Stop exit-code-1 regression"),
                       "— actual amplitude meter, no live text, automatic visible transcript, saved WAV/text/metrics, disk history")
+                state["passed"] = True
                 app.quit()
                 return False
         except Exception as exc:
@@ -79,3 +95,5 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
     app.run(["keety-gui-test"])
     if state["error"]:
         raise SystemExit(state["error"])
+    if not state["passed"]:
+        raise SystemExit("Test exited before completing; close any existing Keety instance for --ptt")
