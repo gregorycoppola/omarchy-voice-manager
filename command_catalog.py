@@ -88,6 +88,27 @@ INTENTS = {
             "close chromium",
             "close google chrome"
         ]
+    },
+    "maximize:browser": {
+        "label": "Maximize Chrome window",
+        "phrases": [
+            "maximize chrome",
+            "maximize chromium",
+            "maximize google chrome"
+        ]
+    },
+    "maximize:discord": {
+        "label": "Maximize Discord window",
+        "phrases": [
+            "maximize discord"
+        ]
+    },
+    "maximize:x": {
+        "label": "Maximize X (Twitter) window",
+        "phrases": [
+            "maximize x",
+            "maximize twitter"
+        ]
     }
 }
 

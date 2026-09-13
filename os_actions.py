@@ -79,6 +79,8 @@ def move_to_main_screen(window):
 def execute_command(command):
     if command in APPS:
         return present_app(command)
+    if command.startswith("maximize:"):
+        return maximize_app(command.removeprefix("maximize:"))
     if command.startswith("close:"):
         return close_app(command.removeprefix("close:"))
     if command == "windows":
@@ -142,6 +144,27 @@ def present_app(key):
             return f"Opened {name}"
         time.sleep(0.15)
     raise RuntimeError(f"Launch requested, but no {name} window appeared within 15 seconds")
+
+
+def maximize_app(key):
+    if key != "browser" and key not in APPS:
+        raise ValueError("Unsupported app to maximize")
+    name = "Chrome" if key == "browser" else APPS[key]["name"]
+    clients = json.loads(run(["hyprctl", "clients", "-j"]))
+    window = browser_window(clients) if key == "browser" else app_window(key, clients)
+    if window is None:
+        return f"No open {name} window"
+    move_to_main_screen(window)
+    focus(window)
+    address = window["address"]
+    # Set both compositor and client to maximized, including when leaving fullscreen.
+    run(["hyprctl", "dispatch", 'hl.dsp.window.fullscreen_state({ internal = 1, client = 1, '
+         f'action = "set", window = "address:{address}" }})'])
+    clients = json.loads(run(["hyprctl", "clients", "-j"]))
+    maximized = next((c for c in clients if c.get("address") == address), None)
+    if maximized is None or maximized.get("fullscreen") != 1 or maximized.get("fullscreenClient") != 1:
+        raise RuntimeError(f"Could not confirm that {name} was maximized")
+    return f"Maximized {name} window"
 
 
 def close_app(key):

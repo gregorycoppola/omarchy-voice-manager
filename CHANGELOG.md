@@ -2,6 +2,10 @@
 
 ## Unreleased — 0.2.0-dev
 
+- “Maximize Chrome/Chromium,” “maximize Discord,” and “maximize X/Twitter”
+  select an existing window on DP-1 and set maximized mode, keeping normal
+  app controls visible. Repeated commands keep the window maximized.
+
 - Open/bring up X or Twitter reuses the installed X app window, or launches it.
 - Close Discord, X/Twitter, or Chrome/Chromium sends a normal close request to
   one matching window. Open and close have separate learnable intent IDs.

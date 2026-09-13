@@ -128,6 +128,9 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 | open gmail / bring up gmail | Bring up Gmail |
 | open github / bring up github | Bring up GitHub |
 | open x / open twitter / bring up x / bring up twitter | Launch X’s installed app or focus its existing window |
+| maximize chrome / maximize chromium / maximize google chrome | Maximize the most recently used normal browser window |
+| maximize discord | Maximize Discord’s app window |
+| maximize x / maximize twitter | Maximize X/Twitter’s app window |
 | close discord | Close the most recently used Discord app window |
 | close x / close twitter | Close the most recently used X/Twitter app window |
 | close chrome / close chromium / close google chrome | Close one normal Chrome/Chromium window, including its tabs |
@@ -138,6 +141,11 @@ Discord and X use their installed desktop launchers (the Omarchy web apps on
 this machine). Opening moves their windows to DP-1 and makes them fullscreen.
 X and Twitter are synonyms for one intent. Exact app classes identify their
 windows; ordinary browser tabs titled Discord or X are not treated as app windows.
+
+Maximize commands select one existing window, move it to DP-1 and focus it,
+then set maximized mode for both the compositor and app. Normal browser controls
+remain visible; this is different from fullscreen. Repeating the command keeps
+it maximized. If the app is closed, Keety reports that instead of launching it.
 
 Close commands send a normal window-close request to one matching window,
 preferring the most recently used match across workspaces. They do not focus,
@@ -227,6 +235,7 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 node --test tests/test_browser_tabs.cjs
 .venv/bin/python tests/learning_smoke.py
 .venv/bin/python tests/window_close_smoke.py
+.venv/bin/python tests/window_close_smoke.py --maximize
 # With the public sample downloaded as described in docs/first-run.md:
 .venv/bin/python tests/gui_smoke.py local/jfk.wav
 .venv/bin/python tests/gui_smoke.py local/jfk.wav --auto

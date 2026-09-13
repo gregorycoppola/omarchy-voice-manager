@@ -106,6 +106,43 @@ class CommandTests(unittest.TestCase):
             self.assertIn("window is still open", execute_command("close:discord"))
             self.assertEqual(run.call_count, 2)
 
+    def test_maximize_vocabulary(self):
+        for phrase, intent in [("Maximize Chromium!", "maximize:browser"),
+                               ("maximize chrome", "maximize:browser"),
+                               ("maximize google chrome", "maximize:browser"),
+                               ("maximize discord", "maximize:discord"),
+                               ("maximize x", "maximize:x"), ("maximize twitter", "maximize:x")]:
+            self.assertEqual(parse_command(phrase), intent)
+        self.assertIsNone(parse_command("do not maximize chromium"))
+
+    def test_maximize_sets_one_exact_window_and_both_states(self):
+        for key, app_class in [("browser", "chromium"), ("discord", "discord"), ("x", "chrome-x.com__-Default")]:
+            window = {"class": app_class, "address": "0x2", "fullscreen": 2}
+            verified = dict(window, fullscreen=1, fullscreenClient=1)
+            with patch("os_actions.run", side_effect=[json.dumps([window]), "ok", json.dumps([verified])]) as run, \
+                 patch("os_actions.move_to_main_screen") as move, patch("os_actions.focus") as focus:
+                self.assertIn("Maximized", execute_command("maximize:" + key))
+                move.assert_called_once_with(window)
+                focus.assert_called_once_with(window)
+                self.assertEqual(run.call_args_list[1].args[0], ["hyprctl", "dispatch",
+                    'hl.dsp.window.fullscreen_state({ internal = 1, client = 1, action = "set", window = "address:0x2" })'])
+
+    def test_maximize_missing_window_does_not_launch(self):
+        with patch("os_actions.run", return_value="[]") as run:
+            self.assertEqual(execute_command("maximize:browser"), "No open Chrome window")
+            run.assert_called_once()
+        with patch("os_actions.run") as run:
+            with self.assertRaises(ValueError):
+                execute_command("maximize:arbitrary")
+            run.assert_not_called()
+
+    def test_maximize_reports_failed_confirmation(self):
+        window = {"class": "chromium", "address": "0x2", "fullscreen": 2, "fullscreenClient": 2}
+        with patch("os_actions.run", side_effect=[json.dumps([window]), "ok", json.dumps([window])]), \
+             patch("os_actions.move_to_main_screen"), patch("os_actions.focus"):
+            with self.assertRaisesRegex(RuntimeError, "confirm"):
+                execute_command("maximize:browser")
+
     def test_window_phrases_are_exact_commands(self):
         for phrase in ["Show all windows.", " SHOW  ALL OPEN WINDOWS! ", "Show all open window."]:
             self.assertEqual(parse_command(phrase), "windows")
