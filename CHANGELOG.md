@@ -2,6 +2,13 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Gmail and GitHub website commands: “open” / “bring up,” with explicit
+  “g mail” and “git hub” transcription variants.
+- Reuse each site's dedicated Chromium window, fullscreen on DP-1; launch a
+  site window if absent, using existing browser logins.
+- Central command/website registry and an expandable Accepted commands list.
+- Ordinary browser tabs are not searched; website windows are managed separately.
+
 - Global Super/Command + R hold-to-talk: press records, release either key
   transcribes and runs an exact command match without focusing the app.
 - Hands-free listening now defaults off; command mode is permanent.

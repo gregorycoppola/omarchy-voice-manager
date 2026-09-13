@@ -3,6 +3,8 @@ import unittest
 from unittest.mock import patch
 
 from os_actions import parse_command, browser_window, execute_command, move_to_main_screen, main_monitor
+from os_actions import site_window
+from command_catalog import SITES
 
 MONITORS = '[{"name":"eDP-1","id":0,"activeWorkspace":{"id":1}},{"name":"DP-1","id":1,"activeWorkspace":{"id":7}}]'
 
@@ -17,6 +19,14 @@ class CommandTests(unittest.TestCase):
     def test_bring_up_requests_fullscreen(self):
         for text in ["Bring up Chrome!", "bring up chromium", "bring up Google Chrome."]:
             self.assertEqual(parse_command(text), "browser_fullscreen")
+
+    def test_fixed_website_vocabulary(self):
+        for phrase, site in [("Bring up Gmail.", "gmail"), ("open g mail", "gmail"),
+                             ("bring up GitHub", "github"), ("OPEN  GIT HUB!", "github")]:
+            self.assertEqual(parse_command(phrase), "site:" + site)
+        for phrase in ["open gmail and github", "do not open github", "open github.com",
+                       "bring up example.com", "open gmail please"]:
+            self.assertIsNone(parse_command(phrase))
 
     def test_fullscreen_is_set_not_toggled(self):
         for current_state in (0, 2):
@@ -61,6 +71,31 @@ class CommandTests(unittest.TestCase):
     def test_no_usable_external_workspace(self):
         with self.assertRaisesRegex(RuntimeError, "no usable"):
             main_monitor([{"name": "DP-1", "id": 1, "activeWorkspace": {"id": -1}}])
+
+    def test_website_reuses_exact_window_without_launch(self):
+        window = {"class": SITES["github"]["class"], "address": "0x123"}
+        with patch("os_actions.run", side_effect=[MONITORS, json.dumps([window])]), \
+             patch("os_actions.present_browser") as present, patch("os_actions.subprocess.Popen") as launch:
+            self.assertEqual(execute_command("site:github"), "Brought GitHub fullscreen")
+            present.assert_called_once_with(window, fullscreen=True)
+            launch.assert_not_called()
+
+    def test_site_does_not_match_arbitrary_page_titles(self):
+        self.assertIsNone(site_window(SITES["gmail"], [
+            {"class": "chromium", "title": "Gmail", "address": "0x123"},
+            {"class": "chrome-mail.google.com.evil__-Default", "address": "0x124"}]))
+
+    def test_arbitrary_website_id_rejected_before_os_access(self):
+        with patch("os_actions.run") as run:
+            with self.assertRaises(ValueError):
+                execute_command("site:https://example.com")
+            run.assert_not_called()
+
+    def test_site_requires_external_before_launch(self):
+        with patch("os_actions.run", return_value="[]"), patch("os_actions.subprocess.Popen") as launch:
+            with self.assertRaisesRegex(RuntimeError, "not connected"):
+                execute_command("site:gmail")
+            launch.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -4,20 +4,12 @@ from pathlib import Path
 import re
 import subprocess
 import time
+import shutil
+
+from command_catalog import GRAMMAR, SITES
 
 BROWSER_CLASSES = {"chromium", "google-chrome", "google-chrome-stable", "chrome"}
 MAIN_MONITOR = "DP-1"
-GRAMMAR = {
-    "open chrome": "browser",
-    "bring up chrome": "browser_fullscreen",
-    "launch chrome": "browser",
-    "focus chrome": "browser",
-    "switch to chrome": "browser",
-    "open chromium": "browser",
-    "bring up chromium": "browser_fullscreen",
-    "open google chrome": "browser",
-    "bring up google chrome": "browser_fullscreen",
-}
 
 
 def parse_command(text):
@@ -85,6 +77,8 @@ def move_to_main_screen(window):
 
 
 def execute_command(command):
+    if command.startswith("site:"):
+        return present_site(command.removeprefix("site:"))
     if command not in ("browser", "browser_fullscreen"):
         raise ValueError("Unsupported voice command")
     fullscreen = command == "browser_fullscreen"
@@ -109,3 +103,37 @@ def execute_command(command):
             return "Opened the browser fullscreen" if fullscreen else "Opened the browser"
         time.sleep(0.15)
     raise RuntimeError("Launch requested, but no browser window appeared within 10 seconds")
+
+
+def site_window(site, clients):
+    matches = [c for c in clients if c.get("class") == site["class"]
+               and re.fullmatch(r"0x[0-9a-fA-F]+", c.get("address", ""))]
+    return min(matches, key=lambda c: c.get("focusHistoryID", 99999), default=None)
+
+
+def present_site(key):
+    if key not in SITES:
+        raise ValueError("Unsupported website command")
+    site = SITES[key]
+    main_monitor(json.loads(run(["hyprctl", "monitors", "-j"])))
+    window = site_window(site, json.loads(run(["hyprctl", "clients", "-j"])))
+    if window:
+        present_browser(window, fullscreen=True)
+        return f"Brought {site['name']} fullscreen"
+    browser = shutil.which("chromium")
+    if not browser:
+        raise RuntimeError("Chromium is not installed")
+    # URL comes exclusively from the fixed registry. Preserve the normal profile
+    # so the site uses the user's existing logins. No recognized text is executed.
+    process = subprocess.Popen([browser, "--app=" + site["url"]],
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, start_new_session=True)
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        process.poll()  # reap the short-lived launcher when Chromium was running
+        window = site_window(site, json.loads(run(["hyprctl", "clients", "-j"])))
+        if window:
+            present_browser(window, fullscreen=True)
+            return f"Opened {site['name']} fullscreen"
+        time.sleep(0.15)
+    raise RuntimeError(f"Launch requested, but no {site['name']} window appeared within 10 seconds")

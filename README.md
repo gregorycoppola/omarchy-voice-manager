@@ -112,7 +112,9 @@ Only the accepted phrases below trigger actions. Other speech shows “Unrecogni
 command” and does nothing. Audio and transcripts remain saved for review.
 Retrying a saved transcript never executes a voice command.
 
-The entire grammar is the explicit `GRAMMAR` table in [os_actions.py](os_actions.py):
+The entire grammar is the explicit `GRAMMAR` table in
+[command_catalog.py](command_catalog.py), beside the fixed website URL registry.
+Expand **Accepted commands** in Keety to see every accepted phrase.
 
 | Allowed phrase | Action |
 | --- | --- |
@@ -125,12 +127,28 @@ The entire grammar is the explicit `GRAMMAR` table in [os_actions.py](os_actions
 | bring up chromium | Launch/focus Chromium and enter fullscreen |
 | open google chrome | Same |
 | bring up google chrome | Launch/focus Chromium and enter fullscreen |
+| open gmail / bring up gmail | Bring up Gmail |
+| open github / bring up github | Bring up GitHub |
+
+The explicit spellings “g mail” and “git hub” are accepted too.
+
+Website commands open a separate Chromium app window using the normal browser
+profile and existing logins. Both “open” and “bring up” reuse that site's existing
+window and set fullscreen on DP-1. They do not search or activate ordinary Chrome
+tabs; a site already open only in a normal tab gets a separate site window.
+Window classes in the registry are specific to this installation's Default
+profile. Repeat commands do not reload the existing site window.
+
+To add a website, add its fixed URL and verified window class to `SITES`, then
+list each accepted phrase explicitly in `GRAMMAR`. No wildcard domain command
+is enabled.
 
 Matching only lowercases, collapses whitespace and removes surrounding
 sentence-ending `. ! ?` punctuation. Extra words, negations and unlisted phrases
 do not match. There is no fuzzy matching, LLM command interpretation, arbitrary
 shell execution, or chaining. ASR can still mishear speech; matching itself is
-deterministic. Only the fixed browser action is implemented.
+deterministic. Website destinations are fixed in the registry; recognized speech
+cannot supply a URL or a browser argument.
 
 ### Speech detection and noise
 
