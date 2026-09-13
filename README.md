@@ -1,6 +1,7 @@
 # Keety
 
-Current release: **0.1.0**. See [the changelog](CHANGELOG.md).
+Current release: **0.1.0**. This checkout includes **0.2.0-dev** voice-command
+work. See [the changelog](CHANGELOG.md).
 
 A local speech-to-text app in development for an M2 MacBook Pro running ARM
 Linux / Omarchy. It has a native GTK4 window with Record/Stop, a live microphone
@@ -75,6 +76,37 @@ push-to-talk shortcut and longer-recording segmentation are future work.
 INT8 can affect accuracy; test your own voice and technical terms.
 This prototype limits clips to 30 seconds because longer inputs need segmentation
 and can consume substantially more memory.
+
+## Deterministic voice commands (0.2.0-dev)
+
+Enable **Voice commands**, press Record, speak one allowed phrase, then Stop.
+The transcript and audio save first; a matching phrase then runs its fixed action.
+The toggle defaults off each time the app starts. With it off, all recordings
+are dictation. Retrying a saved transcript never executes a voice command.
+
+The entire grammar is the explicit `GRAMMAR` table in [os_actions.py](os_actions.py):
+
+| Allowed phrase | Action |
+| --- | --- |
+| open chrome | Launch Chromium or focus an existing browser window |
+| bring up chrome | Same |
+| launch chrome | Same |
+| focus chrome | Same |
+| switch to chrome | Same |
+| open chromium | Same |
+| bring up chromium | Same |
+| open google chrome | Same |
+| bring up google chrome | Same |
+
+Matching only lowercases, collapses whitespace and removes surrounding
+sentence-ending `. ! ?` punctuation. Extra words, negations and unlisted phrases
+do not match. There is no fuzzy matching, LLM command interpretation, arbitrary
+shell execution, or chaining. ASR can still mishear speech; matching itself is
+deterministic. Only the fixed browser action is implemented.
+
+The OS adapter reads Hyprland's window list, focuses an exact browser class, or
+launches the installed browser desktop entry. It excludes Chromium-hosted web
+apps such as Discord. On this installation, “Chrome” maps to Chromium.
 
 ## Model provenance
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — 0.2.0-dev
+
+- Opt-in voice commands using an explicit phrase-to-action table.
+- “Open Chrome” / “bring up Chrome” and listed aliases launch or focus Chromium.
+- Exact normalized matching; other speech remains saved dictation.
+- Saved transcription retries never execute commands.
+
 ## 0.1.0 — 2026-09-13
 
 First working release for the tested M2 ARM Linux / Omarchy installation.

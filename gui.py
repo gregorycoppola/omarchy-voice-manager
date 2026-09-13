@@ -15,6 +15,7 @@ from keety import load_model
 from recordings import new_recording, save_transcript
 from live_audio import read_growing_wav
 from level_meter import LevelMeter, pcm_level
+from os_actions import parse_command, execute_command
 
 DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "keety/recordings"
 
@@ -31,6 +32,7 @@ class Keety(Gtk.Application):
         self.paths = []
         self.active_path = None
         self.stop_requested = False
+        self.command_for_take = False
 
     def do_activate(self):
         if self.window:
@@ -57,6 +59,9 @@ class Keety(Gtk.Application):
         subtitle = Gtk.Label(label="Watch your voice. Press Stop to get your transcript.", xalign=0, wrap=True)
         subtitle.add_css_class("dim-label")
         box.append(subtitle)
+        self.voice_commands = Gtk.CheckButton(label="Voice commands — say “open Chrome” or “bring up Chrome”")
+        self.voice_commands.set_tooltip_text("When enabled, recognized commands launch or focus your Chromium browser after Stop. Other speech is saved as text.")
+        box.append(self.voice_commands)
         controls = Gtk.Box(spacing=12)
         self.record = Gtk.Button(label="●  Record")
         self.record.add_css_class("suggested-action")
@@ -155,6 +160,7 @@ class Keety(Gtk.Application):
 
     def set_busy(self, value):
         self.busy = value
+        self.voice_commands.set_sensitive(not value)
         self.record.set_sensitive(not value and self.model is not None)
         self.history.set_sensitive(not value)
         self.play.set_sensitive(not value and self.selected is not None)
@@ -179,6 +185,7 @@ class Keety(Gtk.Application):
             return
         self.set_busy(True)
         self.active_path = path
+        self.command_for_take = self.voice_commands.get_active()
         self.stop_requested = False
         self.meter_bytes = 0
         self.meter.reset()
@@ -246,20 +253,36 @@ class Keety(Gtk.Application):
             if process.returncode not in (0, -signal.SIGINT) and not requested_stop:
                 raise RuntimeError(f"Recorder exited {process.returncode}: {error.strip()}")
             GLib.idle_add(self.processing)
-            self.convert(path)
+            self.convert(path, self.command_for_take)
         except Exception as exc:
             if process.poll() is None:
                 process.kill()
                 process.communicate()
             GLib.idle_add(self.finished, path, f"Recording problem: {exc}. Any captured audio is kept.")
 
-    def convert(self, path):
+    def convert(self, path, commands=False):
         try:
-            _, metrics = save_transcript(self.model, path)
+            text, metrics = save_transcript(self.model, path)
             message = f"Saved audio + transcript · {metrics['audio_seconds']:.1f}s audio · {metrics['transcribe_seconds']:.2f}s transcription"
         except Exception as exc:
             message = f"Audio kept; transcription failed: {exc}"
+            GLib.idle_add(self.finished, path, message)
+            return
+        if commands:
+            command = parse_command(text)
+            if command:
+                GLib.idle_add(self.show_saved_transcript, path)
+                try:
+                    message += " · " + execute_command(command)
+                except Exception as exc:
+                    message += f" · Could not complete voice command: {exc}"
+            else:
+                message += " · No matching voice command"
         GLib.idle_add(self.finished, path, message)
+
+    def show_saved_transcript(self, path):
+        self.refresh_history(path)
+        self.status.set_text("Transcript saved. Bringing up the browser…")
 
     def finished(self, path, message):
         self.recorder = None
