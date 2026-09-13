@@ -89,14 +89,14 @@ The entire grammar is the explicit `GRAMMAR` table in [os_actions.py](os_actions
 | Allowed phrase | Action |
 | --- | --- |
 | open chrome | Launch Chromium or focus an existing browser window |
-| bring up chrome | Same |
+| bring up chrome | Launch/focus Chromium and enter fullscreen |
 | launch chrome | Same |
 | focus chrome | Same |
 | switch to chrome | Same |
 | open chromium | Same |
-| bring up chromium | Same |
+| bring up chromium | Launch/focus Chromium and enter fullscreen |
 | open google chrome | Same |
-| bring up google chrome | Same |
+| bring up google chrome | Launch/focus Chromium and enter fullscreen |
 
 Matching only lowercases, collapses whitespace and removes surrounding
 sentence-ending `. ! ?` punctuation. Extra words, negations and unlisted phrases

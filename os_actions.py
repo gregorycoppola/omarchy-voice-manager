@@ -8,14 +8,14 @@ import time
 BROWSER_CLASSES = {"chromium", "google-chrome", "google-chrome-stable", "chrome"}
 GRAMMAR = {
     "open chrome": "browser",
-    "bring up chrome": "browser",
+    "bring up chrome": "browser_fullscreen",
     "launch chrome": "browser",
     "focus chrome": "browser",
     "switch to chrome": "browser",
     "open chromium": "browser",
-    "bring up chromium": "browser",
+    "bring up chromium": "browser_fullscreen",
     "open google chrome": "browser",
-    "bring up google chrome": "browser",
+    "bring up google chrome": "browser_fullscreen",
 }
 
 
@@ -48,13 +48,24 @@ def focus(window):
         raise RuntimeError("Browser found, but Hyprland did not focus it")
 
 
+def present_browser(window, fullscreen):
+    focus(window)
+    if fullscreen:
+        # Set an explicit state: repeating the command must never toggle it off.
+        run(["hyprctl", "dispatch", "hl.dsp.window.fullscreen_state({ internal = 2, client = 2 })"])
+        active = json.loads(run(["hyprctl", "activewindow", "-j"]))
+        if active.get("address") != window["address"] or active.get("fullscreen") != 2:
+            raise RuntimeError("Browser focused, but fullscreen was not confirmed")
+
+
 def execute_command(command):
-    if command != "browser":
+    if command not in ("browser", "browser_fullscreen"):
         raise ValueError("Unsupported voice command")
+    fullscreen = command == "browser_fullscreen"
     window = browser_window(json.loads(run(["hyprctl", "clients", "-j"])))
     if window:
-        focus(window)
-        return "Brought the browser forward"
+        present_browser(window, fullscreen)
+        return "Brought the browser fullscreen" if fullscreen else "Brought the browser forward"
     candidates = [Path.home() / ".local/share/applications/chromium.desktop",
                   Path("/usr/share/applications/chromium.desktop"),
                   Path("/usr/share/applications/google-chrome.desktop")]
@@ -66,7 +77,7 @@ def execute_command(command):
     while time.monotonic() < deadline:
         window = browser_window(json.loads(run(["hyprctl", "clients", "-j"])))
         if window:
-            focus(window)
-            return "Opened the browser"
+            present_browser(window, fullscreen)
+            return "Opened the browser fullscreen" if fullscreen else "Opened the browser"
         time.sleep(0.15)
     raise RuntimeError("Launch requested, but no browser window appeared within 10 seconds")
