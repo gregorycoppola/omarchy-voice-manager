@@ -61,7 +61,7 @@ def load_model(threads):
     return model, time.perf_counter() - start
 
 
-def transcribe(model, path, load_seconds):
+def recognize_file(model, path, load_seconds=0):
     import numpy as np
 
     with wave.open(str(path), "rb") as audio:
@@ -75,15 +75,20 @@ def transcribe(model, path, load_seconds):
     start = time.perf_counter()
     result = model.recognize(samples, sample_rate=rate)
     elapsed = time.perf_counter() - start
-    print(result)
-    print(json.dumps({
+    return result, {
         "audio_seconds": round(duration, 3),
         "load_seconds": round(load_seconds, 3),
         "transcribe_seconds": round(elapsed, 3),
         "times_realtime": round(duration / elapsed, 2),
         "peak_rss_mib": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1),
         "provider": "CPUExecutionProvider",
-    }), file=sys.stderr)
+    }
+
+
+def transcribe(model, path, load_seconds):
+    result, metrics = recognize_file(model, path, load_seconds)
+    print(result)
+    print(json.dumps(metrics), file=sys.stderr)
 
 
 def main():

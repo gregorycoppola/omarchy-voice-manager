@@ -1,8 +1,8 @@
 # Keety
 
 A local speech-to-text app in development for an M2 MacBook Pro running ARM
-Linux / Omarchy. The first version is a command-line prototype: transcribe a
-short WAV, or explicitly record a short microphone clip and print the transcript.
+Linux / Omarchy. It has a native GTK4 window with Record/Stop, saved recordings,
+transcript history, playback and Copy text, plus a command-line interface.
 
 Uses NVIDIA Parakeet TDT 0.6B v3 through a community INT8 ONNX conversion and
 `onnx-asr`. Inference runs on the CPU. No NVIDIA GPU, cloud transcription,
@@ -11,18 +11,36 @@ PyTorch, system package updates, or macOS frameworks are required.
 ## Setup
 
 ```bash
-python -m venv .venv
+python -m venv --system-site-packages .venv
 .venv/bin/pip install -r requirements.lock
 .venv/bin/python keety.py download
 ```
 
 Tested dependency versions are in `requirements.lock` (Python 3.14, Linux
 aarch64). `requirements.txt` records the direct dependency.
+The GUI uses system GTK4 and PyGObject (`gtk4` and `python-gobject` on Arch),
+already present on this machine. System-site-packages exposes those bindings to
+the environment without modifying installed system packages.
 The model download is pinned by revision in `model-manifest.json`; large weight
 files are SHA-256 verified. Model files occupy about 639 MiB and stay in ignored
 `models/`. Model download and dependency installation require internet access.
 
 ## Use
+
+Launch **Keety** from the application launcher, run `keety` in a terminal on
+this installation, or run `./launch.sh` from the checkout.
+
+Press **Record**, speak, and press **Stop**. Recordings stop automatically at
+30 seconds. The model stays loaded until the window closes. Audio (`.wav`),
+transcripts (`.txt`), and timing metadata (`.json`) are saved in
+`~/.local/share/keety/recordings/` (or under `XDG_DATA_HOME` when set).
+The transcript stays visible and the history is restored when reopening Keety.
+Use **Play recording**, **Copy text**, **Transcribe again**, or **Open folder**.
+The GUI retains audio even if transcription fails, so it can be retried.
+Closing during a take stops and finishes saving it; close again afterward.
+There is no automatic deletion; files remain until you delete them from the folder.
+
+For the command-line interface:
 
 ```bash
 # A mono, 16-bit PCM, 16 kHz WAV, up to 30 seconds:
@@ -40,9 +58,9 @@ the program has no audio upload code. Transcripts print to stdout, and timing
 and Linux peak process RAM measurements print to stderr. Nothing is pasted into
 another application automatically.
 
-The initial prototype reloads the model on each invocation. A persistent model,
-push-to-talk shortcut, desktop interface, and longer-recording segmentation are
-future work. INT8 can affect accuracy; test your own voice and technical terms.
+The CLI reloads the model on each invocation; the GUI keeps it loaded. A global
+push-to-talk shortcut and longer-recording segmentation are future work.
+INT8 can affect accuracy; test your own voice and technical terms.
 This prototype limits clips to 30 seconds because longer inputs need segmentation
 and can consume substantially more memory.
 
@@ -58,3 +76,17 @@ Weights are downloaded separately and are not committed to this repository.
 Keety is an independent app, not an NVIDIA product.
 
 See [the first local benchmark](docs/first-run.md) for hardware and measurements.
+
+## Validation
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+# With the public sample downloaded as described in docs/first-run.md:
+.venv/bin/python tests/gui_smoke.py local/jfk.wav
+```
+
+The GUI smoke test opens a temporary test window and substitutes a prerecorded
+sample for the microphone. It exercises Record/Stop, actual model inference,
+WAV/transcript/metrics persistence, history reloading and returning to ready.
+It never records the real microphone. Actual microphone input still needs a
+hands-on test.
