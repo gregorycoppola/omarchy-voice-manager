@@ -76,7 +76,7 @@ class Keety(Gtk.Application):
         subtitle = Gtk.Label(label="Hold Super + R to talk. Release to transcribe and run your command.", xalign=0, wrap=True)
         subtitle.add_css_class("dim-label")
         box.append(subtitle)
-        commands_label = Gtk.Label(label="Commands only — Chrome · Gmail · GitHub", xalign=0)
+        commands_label = Gtk.Label(label="Commands only — Chrome · Gmail · GitHub · Windows", xalign=0)
         commands_label.set_tooltip_text("Accepted phrases:\n" + "\n".join(GRAMMAR))
         box.append(commands_label)
         vocabulary = Gtk.Expander(label="Accepted commands")

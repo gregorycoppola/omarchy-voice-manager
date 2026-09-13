@@ -129,6 +129,7 @@ Expand **Accepted commands** in Keety to see every accepted phrase.
 | bring up google chrome | Launch/focus Chromium and enter fullscreen |
 | open gmail / bring up gmail | Bring up Gmail |
 | open github / bring up github | Bring up GitHub |
+| show all windows / show all open windows | Show a searchable window list across all screens and workspaces; select a window to focus it, or press Escape to dismiss |
 
 The explicit spellings “g mail” and “git hub” are accepted too.
 

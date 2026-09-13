@@ -77,6 +77,8 @@ def move_to_main_screen(window):
 
 
 def execute_command(command):
+    if command == "windows":
+        return show_windows()
     if command.startswith("site:"):
         return present_site(command.removeprefix("site:"))
     if command not in ("browser", "browser_fullscreen"):
@@ -103,6 +105,38 @@ def execute_command(command):
             return "Opened the browser fullscreen" if fullscreen else "Opened the browser"
         time.sleep(0.15)
     raise RuntimeError("Launch requested, but no browser window appeared within 10 seconds")
+
+
+def show_windows():
+    clients = json.loads(run(["hyprctl", "clients", "-j"]))
+    choices = {}
+    for client in sorted(clients, key=lambda c: c.get("focusHistoryID", 99999)):
+        address = client.get("address", "")
+        if not client.get("mapped") or not re.fullmatch(r"0x[0-9a-fA-F]+", address):
+            continue
+        title = " ".join((client.get("title") or client.get("class") or "Untitled").split())
+        workspace = " ".join(str(client.get("workspace", {}).get("name", "?")).split())
+        label = f"{len(choices) + 1}. {title} — Workspace {workspace}"
+        choices[label] = address
+    if not choices:
+        return "No open windows"
+    # Wait for the user's selection, without the short timeout used for OS calls.
+    # Supply titles through stdin so even '--' and shell text remain plain data.
+    selection = subprocess.run(["omarchy", "menu", "select", "Open windows"],
+                               input="\n".join(choices) + "\n",
+                               capture_output=True, text=True)
+    if selection.returncode == 1 and not selection.stdout.strip() and not selection.stderr.strip():
+        return "Window list closed"
+    if selection.returncode:
+        raise RuntimeError(selection.stderr.strip() or "Could not show open windows")
+    address = choices.get(selection.stdout.strip())
+    if address is None:
+        raise RuntimeError("Window selection was not recognized")
+    run(["hyprctl", "dispatch", f'hl.dsp.focus({{ window = "address:{address}" }})'])
+    active = json.loads(run(["hyprctl", "activewindow", "-j"]))
+    if active.get("address") != address:
+        raise RuntimeError("Selected window could not be focused; it may have closed")
+    return "Brought selected window forward"
 
 
 def present_site(key):

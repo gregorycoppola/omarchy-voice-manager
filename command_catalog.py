@@ -6,6 +6,8 @@ SITES = {
 }
 
 GRAMMAR = {
+    "show all windows": "windows",
+    "show all open windows": "windows",
     "open chrome": "browser",
     "bring up chrome": "browser_fullscreen",
     "launch chrome": "browser",
