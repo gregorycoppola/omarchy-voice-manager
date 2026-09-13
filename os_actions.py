@@ -1,5 +1,6 @@
 """Small explicit speech-command vocabulary for the installed Hyprland desktop."""
 import json
+import math
 from pathlib import Path
 import re
 import subprocess
@@ -136,6 +137,29 @@ def window_target(context):
     return dict(target)
 
 
+def equal_grid(count, monitor):
+    """Equal logical-pixel rectangles, with room for the panel and window borders."""
+    if count < 1:
+        return []
+    width, height = monitor["width"], monitor["height"]
+    if monitor.get("transform", 0) % 2:
+        width, height = height, width
+    scale = monitor.get("scale", 1)
+    left, top, right, bottom = monitor.get("reserved", [0, 0, 0, 0])
+    width, height = int(width / scale) - left - right, int(height / scale) - top - bottom
+    columns = math.ceil(math.sqrt(count))
+    rows = math.ceil(count / columns)
+    if height > width:
+        columns, rows = rows, columns
+    gap = 12
+    w, h = (width - gap * (columns + 1)) // columns, (height - gap * (rows + 1)) // rows
+    if w < 100 or h < 80:
+        raise RuntimeError("Too many windows to fit an equal grid on this screen")
+    return [(monitor["x"] + left + gap + (i % columns) * (w + gap),
+             monitor["y"] + top + gap + (i // columns) * (h + gap), w, h)
+            for i in range(count)]
+
+
 def tile_open_windows(context):
     workspace = (context or {}).get("active", {}).get("workspace", {}).get("id")
     if type(workspace) is not int:
@@ -146,9 +170,27 @@ def tile_open_windows(context):
                and c.get("class") != "io.github.gregorycoppola.Keety"
                and c.get("initialClass") != "io.github.gregorycoppola.Keety"
                and re.fullmatch(r"0x[0-9a-fA-F]+", c.get("address", ""))]
+    if not targets:
+        return "No open windows to tile on this workspace"
+    clients = json.loads(run(["hyprctl", "clients", "-j"]))
+    live = {c["address"]: c for c in clients}
+    valid = [t for t in targets if t["address"] in live
+             and live[t["address"]].get("mapped", True)
+             and live[t["address"]].get("workspace", {}).get("id") == workspace
+             and all(live[t["address"]].get(k) == t.get(k) for k in ("pid", "class", "stableId"))]
+    skipped = len(targets) - len(valid)
+    if not valid:
+        return f"No open windows to tile on this workspace · Skipped {skipped} closed, moved, or changed windows"
+    monitor_id = live[valid[0]["address"]].get("monitor")
+    monitor = next((m for m in json.loads(run(["hyprctl", "monitors", "-j"]))
+                    if m["id"] == monitor_id and not m.get("disabled")), None)
+    if monitor is None:
+        raise RuntimeError("The workspace's screen is no longer available")
+    # Stable visual order makes repeated commands keep windows in their cells.
+    valid.sort(key=lambda t: (*t.get("at", [0, 0])[::-1], t["address"]))
+    rectangles = equal_grid(len(valid), monitor)
     tiled = 0
-    skipped = 0
-    for target in targets:
+    for target, (x, y, width, height) in zip(valid, rectangles):
         address = target["address"]
         current = next((c for c in json.loads(run(["hyprctl", "clients", "-j"]))
                         if c.get("address") == address), None)
@@ -161,12 +203,20 @@ def tile_open_windows(context):
              f'action = "set", window = "address:{address}" }})'])
         if len(current.get("grouped", [])) > 1:
             run(["hyprctl", "dispatch", f'hl.dsp.window.move({{ out_of_group = true, window = "address:{address}" }})'])
-        run(["hyprctl", "dispatch", f'hl.dsp.window.float({{ action = "off", window = "address:{address}" }})'])
-        updated = next((c for c in json.loads(run(["hyprctl", "clients", "-j"]))
-                        if c.get("address") == address), None)
-        if (updated is None or updated.get("floating") or updated.get("fullscreen") != 0
-                or updated.get("fullscreenClient") != 0):
-            raise RuntimeError(f"Tiled {tiled} windows; could not confirm tiling another window")
+        run(["hyprctl", "dispatch", f'hl.dsp.window.float({{ action = "on", window = "address:{address}" }})'])
+        run(["hyprctl", "dispatch", f'hl.dsp.window.resize({{ x = {width}, y = {height}, relative = false, window = "address:{address}" }})'])
+        run(["hyprctl", "dispatch", f'hl.dsp.window.move({{ x = {x}, y = {y}, relative = false, window = "address:{address}" }})'])
+        for attempt in range(10):
+            updated = next((c for c in json.loads(run(["hyprctl", "clients", "-j"]))
+                            if c.get("address") == address), None)
+            if (updated is not None and updated.get("fullscreen") == 0
+                    and updated.get("fullscreenClient") == 0
+                    and all(abs(a - b) <= 2 for a, b in zip(updated.get("at", []) + updated.get("size", []), (x, y, width, height)))
+                    and len(updated.get("at", []) + updated.get("size", [])) == 4):
+                break
+            time.sleep(.05)
+        else:
+            raise RuntimeError(f"Tiled {tiled} windows; could not confirm an equal tile for another window (it may have a minimum size)")
         tiled += 1
     message = f"Tiled {tiled} windows" if tiled else "No open windows to tile on this workspace"
     if skipped:

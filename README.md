@@ -307,7 +307,10 @@ on its current screen. Repeating the command keeps it maximized; browser tabs
 and normal window controls stay visible.
 
 Say **“tile open windows”** (or **“tile all windows”**) to arrange the windows
-on the workspace focused when recording starts using the normal Hyprland layout.
-It exits maximize/fullscreen, separates grouped windows, and turns off floating.
+on the workspace focused when recording starts in equal-sized grid cells (four
+windows form a 2 × 2 grid). It exits maximize/fullscreen and separates groups.
+The adapter uses positioned floating windows to avoid inheriting old split ratios,
+respects monitor scaling and the panel, and leaves spare cells empty for odd counts.
+Run the command again after opening or closing windows to rearrange the grid.
 Keety is excluded. Other workspaces stay as they are; repeating the command keeps
 the windows tiled.

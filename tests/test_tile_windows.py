@@ -6,12 +6,26 @@ import unittest
 from unittest.mock import Mock, patch
 from gui import Keety
 from intent_matching import IntentMatcher
-from os_actions import tile_open_windows, parse_command
+from os_actions import tile_open_windows, parse_command, equal_grid
 
-WINDOW = dict(address='0x1', pid=100, stableId='one', **{'class':'foot'}, workspace={'id':2}, mapped=True)
+WINDOW = dict(address='0x1', pid=100, stableId='one', **{'class':'foot'}, workspace={'id':2}, mapped=True, monitor=1)
 
+MONITOR = dict(id=1, width=1920, height=1080, scale=1, x=1280, y=0, reserved=[0,26,0,0])
 
 class TileTests(unittest.TestCase):
+    def test_equal_cells_scaling_rotation_and_odd_counts(self):
+        for monitor in [MONITOR, dict(MONITOR,width=2560,height=1600,scale=2,x=-1280), dict(MONITOR,transform=1)]:
+            for count in range(1,10):
+                cells = equal_grid(count,monitor)
+                self.assertEqual(len(cells),count)
+                self.assertEqual(len({(w,h) for x,y,w,h in cells}),1)
+                for i,(x,y,w,h) in enumerate(cells):
+                    for xx,yy,ww,hh in cells[i+1:]:
+                        self.assertTrue(x+w<=xx or xx+ww<=x or y+h<=yy or yy+hh<=y)
+        cells = equal_grid(4,MONITOR)
+        self.assertEqual(len({x for x,y,w,h in cells}),2)
+        self.assertEqual(len({y for x,y,w,h in cells}),2)
+
     def test_phrases(self):
         for phrase in ['Tile open windows!', 'tile all open windows', 'tile windows', 'tile all windows']:
             self.assertEqual(parse_command(phrase), 'windows:tile')
@@ -22,15 +36,16 @@ class TileTests(unittest.TestCase):
                     dict(WINDOW,address='0x4',mapped=False),
                     dict(WINDOW,address='0x5',initialClass='io.github.gregorycoppola.Keety')]
         for initial in [dict(WINDOW,floating=True,fullscreen=2), dict(WINDOW,floating=False,fullscreen=0)]:
-            final = dict(WINDOW,floating=False,fullscreen=0,fullscreenClient=0)
-            with patch('os_actions.run',side_effect=[json.dumps([initial]+excluded),'ok','ok',json.dumps([final]+excluded)]) as run:
+            x,y,w,h = equal_grid(1,MONITOR)[0]
+            final = dict(WINDOW,floating=True,fullscreen=0,fullscreenClient=0,at=[x,y],size=[w,h])
+            with patch('os_actions.run',side_effect=[json.dumps([initial]+excluded),json.dumps([MONITOR]),json.dumps([initial]+excluded),'ok','ok','ok','ok',json.dumps([final]+excluded)]) as run:
                 result = tile_open_windows({'active':WINDOW,'clients':[initial]+excluded})
                 self.assertEqual(result,'Tiled 1 windows')
                 dispatches = [c.args[0][-1] for c in run.call_args_list if 'dispatch' in c.args[0]]
-                self.assertEqual(len(dispatches),2)
+                self.assertEqual(len(dispatches),4)
                 self.assertTrue(all('address:0x1' in d for d in dispatches))
                 self.assertIn('internal = 0, client = 0',dispatches[0])
-                self.assertIn('action = "off"',dispatches[1])
+                self.assertIn('action = "on"',dispatches[1])
 
     def test_stale_targets_never_dispatch(self):
         for clients in [[], [dict(WINDOW,pid=101)], [dict(WINDOW,workspace={'id':3})]]:
@@ -46,8 +61,8 @@ class TileTests(unittest.TestCase):
             run.assert_not_called()
 
     def test_failed_dispatch_state_is_reported(self):
-        with patch('os_actions.run',side_effect=[json.dumps([WINDOW]),'ok','ok',json.dumps([dict(WINDOW,floating=True)])]):
-            with self.assertRaisesRegex(RuntimeError,'could not confirm'):
+        with patch('os_actions.run',side_effect=[json.dumps([WINDOW]),json.dumps([MONITOR]),json.dumps([WINDOW]),'ok','ok','ok','ok']+[json.dumps([dict(WINDOW,floating=True)])]*10):
+            with patch('os_actions.time.sleep'), self.assertRaisesRegex(RuntimeError,'could not confirm'):
                 tile_open_windows({'active':WINDOW,'clients':[WINDOW]})
 
     def test_exact_and_fuzzy_use_original_workspace_context(self):

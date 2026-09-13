@@ -2,6 +2,9 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Tiling now assigns equal-sized grid cells, including a 2 × 2 grid for four
+  windows, instead of preserving the old unequal layout splits.
+
 - “Tile open windows” restores the captured workspace’s windows to normal
   tiling, excluding Keety. Repeated commands keep the windows tiled.
 

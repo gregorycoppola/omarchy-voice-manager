@@ -23,7 +23,7 @@ def test():
         workspace = next(i for i in range(9000,9100) if i not in occupied)
         clients = json.loads(run(['hyprctl','clients','-j']))
         targets = [c for c in clients if c['class'] == APP_ID]
-        assert len(targets) == 2, targets
+        assert len(targets) == 4, targets
         keety = [c for c in clients if c['class'] == 'io.github.gregorycoppola.Keety']
         for target in targets:
             address = target['address']
@@ -34,22 +34,26 @@ def test():
         targets = [c for c in json.loads(run(['hyprctl','clients','-j'])) if c['class'] == APP_ID]
         context = {'active':targets[0],'clients':targets+keety}
         for _ in range(2):
-            assert tile_open_windows(context) == 'Tiled 2 windows'
+            assert tile_open_windows(context) == 'Tiled 4 windows'
         time.sleep(.3)
         after = json.loads(run(['hyprctl','clients','-j']))
         tiled = [c for c in after if c['class'] == APP_ID]
-        assert len(tiled) == 2
+        assert len(tiled) == 4
         for c in tiled:
-            assert not c['floating'] and c['fullscreen'] == c['fullscreenClient'] == 0, c
+            assert c['floating'] and c['fullscreen'] == c['fullscreenClient'] == 0, c
             assert c['workspace']['id'] == workspace, c
-        a,b = tiled
-        assert (a['at'][0]+a['size'][0] <= b['at'][0] or b['at'][0]+b['size'][0] <= a['at'][0]
-                or a['at'][1]+a['size'][1] <= b['at'][1] or b['at'][1]+b['size'][1] <= a['at'][1]), tiled
+        assert len({tuple(c['size']) for c in tiled}) == 1, tiled
+        assert len({c['at'][0] for c in tiled}) == 2, tiled
+        assert len({c['at'][1] for c in tiled}) == 2, tiled
+        for i,a in enumerate(tiled):
+            for b in tiled[i+1:]:
+                assert (a['at'][0]+a['size'][0] <= b['at'][0] or b['at'][0]+b['size'][0] <= a['at'][0]
+                        or a['at'][1]+a['size'][1] <= b['at'][1] or b['at'][1]+b['size'][1] <= a['at'][1]), tiled
         for before in keety:
             current = next(c for c in after if c['address']==before['address'])
             for key in ['at','size','floating','fullscreen','fullscreenClient','workspace','monitor']:
                 assert current[key] == before[key], (key,before,current)
-        result.append('PASS: two disposable windows tiled without overlap, repeated command, Keety unchanged')
+        result.append('PASS: four disposable windows in equal 2x2 grid without overlap, repeated command, Keety unchanged')
     except Exception as exc:
         result.append(exc)
     finally:
@@ -57,7 +61,7 @@ def test():
 
 
 def activate(*_):
-    for index in range(2):
+    for index in range(4):
         window = Gtk.ApplicationWindow(application=app,title=f'Keety tiling test {index}')
         window.set_default_size(200,100)
         window.present()
