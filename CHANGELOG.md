@@ -2,6 +2,10 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Keety now starts in the background with an Omarchy top-bar status button.
+  Click for history/settings; closing the window hides it without stopping
+  push-to-talk. An explicit Quit button stops Keety.
+
 - Tiling now assigns equal-sized grid cells, including a 2 × 2 grid for four
   windows, instead of preserving the old unequal layout splits.
 

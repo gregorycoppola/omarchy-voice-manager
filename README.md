@@ -267,6 +267,7 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 .venv/bin/python -m unittest discover -s tests -v
 node --test tests/test_browser_tabs.cjs
 .venv/bin/python tests/learning_smoke.py
+.venv/bin/python tests/bar_mode_smoke.py
 .venv/bin/python tests/terminal_confirmation_smoke.py
 .venv/bin/python tests/terminal_activity_smoke.py
 .venv/bin/python tests/window_close_smoke.py
@@ -314,3 +315,19 @@ respects monitor scaling and the panel, and leaves spare cells empty for odd cou
 Run the command again after opening or closing windows to rearrange the grid.
 Keety is excluded. Other workspaces stay as they are; repeating the command keeps
 the windows tiled.
+
+### Top-bar mode
+
+`./launch.sh` starts Keety in the background with no mapped app window. Hold
+Super + R as usual. The top-bar **Keety** button shows loading, ready, recording,
+working, or confirmation status; hover for the latest result. Click it to open
+history/settings. Closing that window hides it while voice commands keep working.
+Use **Quit Keety** inside the window to stop the app. Terminal job warnings still
+open their own dialog. `./launch.sh --show` opens the controls directly.
+
+Install the user-owned Omarchy widget and login launcher with
+`.venv/bin/python install_bar.py`. It backs up `~/.config/omarchy/shell.json`,
+installs `config/keety-bar` under `~/.config/omarchy/plugins/greg.keety`, and adds a
+user autostart entry. No packaged Omarchy files are changed. Status lives privately
+under `XDG_RUNTIME_DIR` and expires in the widget if the app stops responding.
+For foreground development/tests, run `.venv/bin/python gui.py` directly.

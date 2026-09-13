@@ -1,5 +1,6 @@
 """Keety's native GTK4 desktop window."""
 import os
+import json
 from pathlib import Path
 import signal
 import subprocess
@@ -29,6 +30,7 @@ DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "ke
 class Keety(Gtk.Application):
     def __init__(self):
         super().__init__(application_id="io.github.gregorycoppola.Keety")
+        self.bar_mode = os.environ.get("KEETY_BAR_MODE") == "1"
         self.window = None
         self.model = None
         self.busy = False
@@ -47,6 +49,9 @@ class Keety(Gtk.Application):
         action = Gio.SimpleAction.new("ptt-event", GLib.VariantType.new("s"))
         action.connect("activate", lambda _, value: self.ptt.event(value.get_string()))
         self.add_action(action)
+        quit_action = Gio.SimpleAction.new("quit", None)
+        quit_action.connect("activate", self.request_quit)
+        self.add_action(quit_action)
         GLib.timeout_add(50, self.ptt.check_held)
 
     def do_activate(self):
@@ -93,6 +98,13 @@ class Keety(Gtk.Application):
         box.append(Gtk.Label(label="Records only while Super + R is held · up to 30 seconds", xalign=0))
         self.status = Gtk.Label(label="Loading local speech model…", xalign=0, wrap=True)
         self.status.set_selectable(True)
+        if self.bar_mode:
+            self.hold()
+            self.status.connect("notify::label", lambda *_: self.publish_bar_state())
+            GLib.timeout_add_seconds(5, self.publish_bar_state)
+            quit_button = Gtk.Button(label="Quit Keety")
+            quit_button.connect("clicked", self.request_quit)
+            header.pack_end(quit_button)
         progress = Gtk.Box(spacing=10)
         self.spinner = Gtk.Spinner()
         self.spinner.start()
@@ -166,7 +178,9 @@ class Keety(Gtk.Application):
         location.add_css_class("dim-label")
         box.append(location)
         self.refresh_history()
-        self.window.present()
+        if not self.bar_mode or os.environ.get("KEETY_SHOW_WINDOW") == "1":
+            self.window.present()
+        self.publish_bar_state()
         threading.Thread(target=self.prepare, daemon=True).start()
 
     def prepare(self):
@@ -392,7 +406,8 @@ class Keety(Gtk.Application):
         self.heard_label.set_text(f'Heard: “{text.strip()}”\nClosing may stop programs running in this terminal.'
                                  + ("\nYour phrase will also be remembered." if learn else ""))
         self.confirm.set_label("Yes — close and remember" if learn else "Close terminal")
-        self.window.present()
+        if not self.bar_mode:
+            self.window.present()
         self.suggestion_dialog.present()
         self.reject.grab_focus()
 
@@ -516,7 +531,36 @@ class Keety(Gtk.Application):
         except GLib.Error as exc:
             self.status.set_text(f"Could not open folder: {exc}")
 
+    def publish_bar_state(self, stopped=False):
+        if not self.bar_mode:
+            return False
+        state = ("Stopped" if stopped else "Confirm" if self.pending_suggestion else
+                 "Recording" if self.recorder and self.recorder.poll() is None else
+                 "Working" if self.busy else "Ready" if self.model else "Loading")
+        path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / f"keety-{os.getuid()}-status.json"
+        try:
+            temporary = path.with_suffix(".tmp")
+            temporary.write_text(json.dumps({"state": state, "message": self.status.get_text(), "updated": time.time()}))
+            temporary.chmod(0o600)
+            temporary.replace(path)
+        except OSError:
+            pass
+        return not stopped
+
+    def request_quit(self, *_):
+        if self.busy:
+            self.stop_recording()
+            self.status.set_text("Finishing this recording. Click Quit Keety again when ready.")
+            return
+        if self.player and self.player.poll() is None:
+            self.player.terminate()
+        self.publish_bar_state(stopped=True)
+        self.quit()
+
     def on_close(self, *_):
+        if self.bar_mode:
+            self.window.set_visible(False)
+            return True
         if self.busy:
             self.stop_recording()
             self.status.set_text("Finishing and saving this recording. Close again when it is ready.")
@@ -529,4 +573,7 @@ class Keety(Gtk.Application):
 
 if __name__ == "__main__":
     os.umask(0o077)
+    if "--show" in sys.argv:
+        sys.argv.remove("--show")
+        os.environ["KEETY_SHOW_WINDOW"] = "1"
     raise SystemExit(Keety().run(sys.argv))
