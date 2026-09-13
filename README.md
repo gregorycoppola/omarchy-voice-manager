@@ -1,5 +1,7 @@
 # Keety
 
+Current release: **0.1.0**. See [the changelog](CHANGELOG.md).
+
 A local speech-to-text app in development for an M2 MacBook Pro running ARM
 Linux / Omarchy. It has a native GTK4 window with Record/Stop, a live microphone
 amplitude display, saved recordings,
@@ -15,13 +17,18 @@ PyTorch, system package updates, or macOS frameworks are required.
 python -m venv --system-site-packages .venv
 .venv/bin/pip install -r requirements.lock
 .venv/bin/python keety.py download
+python install_desktop.py
 ```
 
 Tested dependency versions are in `requirements.lock` (Python 3.14, Linux
 aarch64). `requirements.txt` records the direct dependency.
-The GUI uses system GTK4 and PyGObject (`gtk4` and `python-gobject` on Arch),
+The GUI uses system GTK4, PyGObject and Cairo (`gtk4`, `python-gobject` and
+`python-cairo` on Arch),
 already present on this machine. System-site-packages exposes those bindings to
 the environment without modifying installed system packages.
+The launcher installer adds Keety to your per-user application menu and creates
+`~/.local/bin/keety`. Keep the checkout at the same path after installation,
+or rerun the installer if you move it. `launch.sh` also works directly.
 The model download is pinned by revision in `model-manifest.json`; large weight
 files are SHA-256 verified. Model files occupy about 639 MiB and stay in ignored
 `models/`. Model download and dependency installation require internet access.
@@ -88,6 +95,7 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 .venv/bin/python -m unittest discover -s tests -v
 # With the public sample downloaded as described in docs/first-run.md:
 .venv/bin/python tests/gui_smoke.py local/jfk.wav
+.venv/bin/python tests/gui_smoke.py local/jfk.wav --auto
 ```
 
 The GUI smoke test opens a temporary test window and substitutes a prerecorded
@@ -99,5 +107,5 @@ It never records the real microphone. The owner confirmed microphone recording
 works. A real recording previously skipped transcription because this installed
 `pw-record` returned 1 after a requested Stop despite saving a valid WAV. The
 app now accepts that requested-stop result and validates/transcribes the WAV;
-the regression test covers this exact case. The new meter still needs a
-hands-on voice test.
+the regression test covers this exact case. The owner subsequently confirmed
+that the meter and automatic transcription work in the updated app.
