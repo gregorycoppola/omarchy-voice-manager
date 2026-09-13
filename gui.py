@@ -14,6 +14,7 @@ from gi.repository import Gio, GLib, Gtk
 from keety import load_model
 from recordings import new_recording, save_transcript
 from live_audio import read_growing_wav
+from level_meter import LevelMeter, pcm_level
 
 DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "keety/recordings"
 
@@ -29,6 +30,7 @@ class Keety(Gtk.Application):
         self.selected = None
         self.paths = []
         self.active_path = None
+        self.stop_requested = False
 
     def do_activate(self):
         if self.window:
@@ -41,14 +43,18 @@ class Keety(Gtk.Application):
         header = Gtk.HeaderBar()
         header.set_title_widget(Gtk.Label(label="Keety · Local dictation"))
         self.window.set_titlebar(header)
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         for side in ["top", "bottom", "start", "end"]:
-            getattr(box, "set_margin_" + side)(24)
-        self.window.set_child(box)
+            getattr(box, "set_margin_" + side)(16)
+        # Keep every control reachable when Hyprland tiles this into a short window.
+        page = Gtk.ScrolledWindow()
+        page.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        page.set_child(box)
+        self.window.set_child(page)
         title = Gtk.Label(label="Speak. Keep the words.", xalign=0)
         title.add_css_class("title-1")
         box.append(title)
-        subtitle = Gtk.Label(label="Live words while you speak. Everything stays on this computer.", xalign=0, wrap=True)
+        subtitle = Gtk.Label(label="Watch your voice. Press Stop to get your transcript.", xalign=0, wrap=True)
         subtitle.add_css_class("dim-label")
         box.append(subtitle)
         controls = Gtk.Box(spacing=12)
@@ -65,7 +71,18 @@ class Keety(Gtk.Application):
         box.append(controls)
         self.status = Gtk.Label(label="Loading local speech model…", xalign=0, wrap=True)
         self.status.set_selectable(True)
-        box.append(self.status)
+        progress = Gtk.Box(spacing=10)
+        self.spinner = Gtk.Spinner()
+        self.spinner.start()
+        progress.append(self.spinner)
+        progress.append(self.status)
+        self.status.set_hexpand(True)
+        box.append(progress)
+        self.meter = LevelMeter()
+        box.append(self.meter)
+        self.level_label = Gtk.Label(label="Microphone idle · everything stays on this computer", xalign=0)
+        self.level_label.add_css_class("dim-label")
+        box.append(self.level_label)
         self.history = Gtk.DropDown()
         self.history.connect("notify::selected", self.select_recording)
         box.append(self.history)
@@ -74,7 +91,7 @@ class Keety(Gtk.Application):
         self.text.set_bottom_margin(16)
         self.text.set_left_margin(16)
         self.text.set_right_margin(16)
-        scroll = Gtk.ScrolledWindow(vexpand=True, min_content_height=180)
+        scroll = Gtk.ScrolledWindow(vexpand=True, min_content_height=120)
         scroll.set_child(self.text)
         scroll.add_css_class("card")
         box.append(scroll)
@@ -108,6 +125,7 @@ class Keety(Gtk.Application):
             GLib.idle_add(self.status.set_text, f"Could not load model: {exc}")
 
     def ready(self):
+        self.spinner.stop()
         self.record.set_sensitive(True)
         self.retry.set_sensitive(self.selected is not None)
         self.status.set_text("Ready. Press Record when you want to speak.")
@@ -161,73 +179,75 @@ class Keety(Gtk.Application):
             return
         self.set_busy(True)
         self.active_path = path
+        self.stop_requested = False
+        self.meter_bytes = 0
+        self.meter.reset()
+        self.last_audio_at = time.monotonic()
         self.copy.set_sensitive(False)
-        self.text.get_buffer().set_text("Listening… words will appear as you speak.")
+        self.text.get_buffer().set_text("Recording your voice. Your transcript will appear automatically when you press Stop.")
         self.stop.set_sensitive(True)
         self.record_start = time.monotonic()
         self.status.set_text("Recording… speak now. Press Stop when finished.")
-        GLib.timeout_add(250, self.tick)
-        preview_stop = threading.Event()
-        preview = threading.Thread(target=self.preview_recording, args=(path, preview_stop), daemon=True)
-        preview.start()
+        GLib.timeout_add(50, self.tick, path)
         threading.Thread(target=self.finish_recording,
-                         args=(path, self.recorder, preview_stop, preview), daemon=True).start()
+                         args=(path, self.recorder), daemon=True).start()
 
-    def tick(self):
-        if not self.recorder or self.recorder.poll() is not None:
+    def tick(self, path):
+        if self.active_path != path or not self.recorder or self.recorder.poll() is not None:
             return False
         seconds = min(30, int(time.monotonic() - self.record_start))
-        self.status.set_text(f"Recording · {seconds}s / 30s · live preview may revise earlier words")
+        if not self.stop_requested:
+            self.status.set_text(f"● Recording · {seconds}s / 30s — press Stop to transcribe")
+        try:
+            pcm = read_growing_wav(path)
+            if pcm and len(pcm) > self.meter_bytes:
+                # Display newly captured samples, not old audio or a decorative pulse.
+                fresh = pcm[self.meter_bytes:]
+                level, db = pcm_level(fresh[-3200:])
+                self.meter_bytes = len(pcm)
+                self.last_audio_at = time.monotonic()
+                self.meter.push(level)
+                self.level_label.set_text(f"Microphone level · {db:.0f} dBFS" if db > -60 else "Microphone connected · very quiet")
+            else:
+                self.meter.push(0)
+                if time.monotonic() - self.last_audio_at > 2:
+                    self.level_label.set_text("Waiting for microphone audio…")
+        except (OSError, ValueError) as exc:
+            self.level_label.set_text(f"Level display unavailable: {exc}")
         return True
 
     def stop_recording(self, *_):
         if self.recorder and self.recorder.poll() is None:
+            self.stop_requested = True
             try:
                 self.recorder.send_signal(signal.SIGINT)
             except ProcessLookupError:
                 pass
         self.stop.set_sensitive(False)
+        if self.busy:
+            self.spinner.start()
+            self.status.set_text("Stopping and transcribing…")
 
     def processing(self):
         self.recorder = None
         self.stop.set_sensitive(False)
+        self.spinner.start()
+        self.meter.active = False
+        self.meter.queue_draw()
+        self.level_label.set_text("Recording saved · microphone stopped")
         self.status.set_text("Audio saved. Transcribing locally…")
 
-    def preview_recording(self, path, stop):
-        import numpy as np
-        last_length = 0
-        while not stop.wait(1.0):
-            try:
-                pcm = read_growing_wav(path)
-                if not pcm or len(pcm) < 24000 or len(pcm) <= last_length:
-                    continue
-                last_length = len(pcm)
-                samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768
-                text = self.model.recognize(samples, sample_rate=16000)
-                if not stop.is_set():
-                    GLib.idle_add(self.show_preview, path, text)
-            except Exception as exc:
-                # Preserve recording/final transcription even if preview is unavailable.
-                print(f"Live preview unavailable: {exc}", file=sys.stderr, flush=True)
-                GLib.idle_add(self.show_preview, path, "Live preview unavailable. Your final transcript will appear after Stop.")
-                return
-
-    def show_preview(self, path, text):
-        if self.active_path == path and self.recorder is not None:
-            self.text.get_buffer().set_text(text or "Listening…")
-
-    def finish_recording(self, path, process, preview_stop, preview):
+    def finish_recording(self, path, process):
         try:
             _, error = process.communicate(timeout=45)
-            preview_stop.set()
-            preview.join()  # Serialize preview and final inference on the loaded model.
-            if process.returncode not in (0, -signal.SIGINT):
-                raise RuntimeError(error.strip() or f"Recorder exited {process.returncode}")
+            # This installed pw-record returns 1 on a requested SIGINT stop, even
+            # after correctly finalizing the WAV. Validate/transcribe that audio.
+            requested_stop = self.stop_requested and process.returncode == 1
+            if process.returncode not in (0, -signal.SIGINT) and not requested_stop:
+                raise RuntimeError(f"Recorder exited {process.returncode}: {error.strip()}")
             GLib.idle_add(self.processing)
             self.convert(path)
         except Exception as exc:
-            preview_stop.set()
-            preview.join()
             if process.poll() is None:
                 process.kill()
                 process.communicate()
@@ -243,6 +263,9 @@ class Keety(Gtk.Application):
 
     def finished(self, path, message):
         self.recorder = None
+        self.spinner.stop()
+        self.meter.active = False
+        self.meter.queue_draw()
         self.stop.set_sensitive(False)
         self.set_busy(False)
         self.refresh_history(path)
@@ -251,6 +274,7 @@ class Keety(Gtk.Application):
     def retry_transcription(self, *_):
         if self.selected and not self.busy and self.model:
             self.set_busy(True)
+            self.spinner.start()
             self.status.set_text("Transcribing saved audio…")
             threading.Thread(target=self.convert, args=(self.selected,), daemon=True).start()
 

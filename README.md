@@ -1,7 +1,8 @@
 # Keety
 
 A local speech-to-text app in development for an M2 MacBook Pro running ARM
-Linux / Omarchy. It has a native GTK4 window with Record/Stop, saved recordings,
+Linux / Omarchy. It has a native GTK4 window with Record/Stop, a live microphone
+amplitude display, saved recordings,
 transcript history, playback and Copy text, plus a command-line interface.
 
 Uses NVIDIA Parakeet TDT 0.6B v3 through a community INT8 ONNX conversion and
@@ -30,9 +31,10 @@ files are SHA-256 verified. Model files occupy about 639 MiB and stay in ignored
 Launch **Keety** from the application launcher, run `keety` in a terminal on
 this installation, or run `./launch.sh` from the checkout.
 
-Press **Record** and words appear while you speak, typically updating every
-one to two seconds. This is a provisional preview: earlier words can change as
-more context arrives. Press **Stop** to produce and save the final transcript.
+Press **Record** and the scrolling bars show the actual microphone amplitude.
+There is no live text preview. Press **Stop** and Keety automatically transcribes,
+shows the final text, and saves it. A spinner indicates the brief transcription
+step. The model is already loaded, so no new model load is needed after Stop.
 Recordings stop automatically at 30 seconds. The model stays loaded until the
 window closes. Audio (`.wav`),
 transcripts (`.txt`), and timing metadata (`.json`) are saved in
@@ -89,8 +91,13 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 ```
 
 The GUI smoke test opens a temporary test window and substitutes a prerecorded
-sample for the microphone. It verifies text appears while recording is still
-active, then exercises Stop, actual model inference,
+sample for the microphone. It verifies amplitude activity during recording and
+no live text, then exercises Stop with the installed recorder's exit-code-1
+behavior, automatic on-screen transcription, actual model inference,
 WAV/transcript/metrics persistence, history reloading and returning to ready.
 It never records the real microphone. The owner confirmed microphone recording
-and final transcription work; live preview still needs a hands-on voice test.
+works. A real recording previously skipped transcription because this installed
+`pw-record` returned 1 after a requested Stop despite saving a valid WAV. The
+app now accepts that requested-stop result and validates/transcribes the WAV;
+the regression test covers this exact case. The new meter still needs a
+hands-on voice test.
