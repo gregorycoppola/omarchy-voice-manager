@@ -13,6 +13,7 @@ from gi.repository import Gio, GLib, Gtk
 
 from keety import load_model
 from recordings import new_recording, save_transcript
+from live_audio import read_growing_wav
 
 DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "keety/recordings"
 
@@ -27,6 +28,7 @@ class Keety(Gtk.Application):
         self.player = None
         self.selected = None
         self.paths = []
+        self.active_path = None
 
     def do_activate(self):
         if self.window:
@@ -46,7 +48,7 @@ class Keety(Gtk.Application):
         title = Gtk.Label(label="Speak. Keep the words.", xalign=0)
         title.add_css_class("title-1")
         box.append(title)
-        subtitle = Gtk.Label(label="Audio and transcripts stay on this computer.", xalign=0)
+        subtitle = Gtk.Label(label="Live words while you speak. Everything stays on this computer.", xalign=0, wrap=True)
         subtitle.add_css_class("dim-label")
         box.append(subtitle)
         controls = Gtk.Box(spacing=12)
@@ -158,17 +160,24 @@ class Keety(Gtk.Application):
             self.status.set_text(f"Could not start recording: {exc}")
             return
         self.set_busy(True)
+        self.active_path = path
+        self.copy.set_sensitive(False)
+        self.text.get_buffer().set_text("Listening… words will appear as you speak.")
         self.stop.set_sensitive(True)
         self.record_start = time.monotonic()
         self.status.set_text("Recording… speak now. Press Stop when finished.")
         GLib.timeout_add(250, self.tick)
-        threading.Thread(target=self.finish_recording, args=(path, self.recorder), daemon=True).start()
+        preview_stop = threading.Event()
+        preview = threading.Thread(target=self.preview_recording, args=(path, preview_stop), daemon=True)
+        preview.start()
+        threading.Thread(target=self.finish_recording,
+                         args=(path, self.recorder, preview_stop, preview), daemon=True).start()
 
     def tick(self):
         if not self.recorder or self.recorder.poll() is not None:
             return False
         seconds = min(30, int(time.monotonic() - self.record_start))
-        self.status.set_text(f"Recording · {seconds}s / 30s — press Stop when finished.")
+        self.status.set_text(f"Recording · {seconds}s / 30s · live preview may revise earlier words")
         return True
 
     def stop_recording(self, *_):
@@ -184,14 +193,41 @@ class Keety(Gtk.Application):
         self.stop.set_sensitive(False)
         self.status.set_text("Audio saved. Transcribing locally…")
 
-    def finish_recording(self, path, process):
+    def preview_recording(self, path, stop):
+        import numpy as np
+        last_length = 0
+        while not stop.wait(1.0):
+            try:
+                pcm = read_growing_wav(path)
+                if not pcm or len(pcm) < 24000 or len(pcm) <= last_length:
+                    continue
+                last_length = len(pcm)
+                samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768
+                text = self.model.recognize(samples, sample_rate=16000)
+                if not stop.is_set():
+                    GLib.idle_add(self.show_preview, path, text)
+            except Exception as exc:
+                # Preserve recording/final transcription even if preview is unavailable.
+                print(f"Live preview unavailable: {exc}", file=sys.stderr, flush=True)
+                GLib.idle_add(self.show_preview, path, "Live preview unavailable. Your final transcript will appear after Stop.")
+                return
+
+    def show_preview(self, path, text):
+        if self.active_path == path and self.recorder is not None:
+            self.text.get_buffer().set_text(text or "Listening…")
+
+    def finish_recording(self, path, process, preview_stop, preview):
         try:
             _, error = process.communicate(timeout=45)
+            preview_stop.set()
+            preview.join()  # Serialize preview and final inference on the loaded model.
             if process.returncode not in (0, -signal.SIGINT):
                 raise RuntimeError(error.strip() or f"Recorder exited {process.returncode}")
             GLib.idle_add(self.processing)
             self.convert(path)
         except Exception as exc:
+            preview_stop.set()
+            preview.join()
             if process.poll() is None:
                 process.kill()
                 process.communicate()

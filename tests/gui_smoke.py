@@ -29,6 +29,7 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
 
     gui.subprocess.Popen = fake_microphone
     app = gui.Keety()
+    app.set_application_id("io.github.gregorycoppola.Keety.Test")
     started = time.monotonic()
     state = {"phase": "load", "error": None}
 
@@ -39,7 +40,12 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
                 app.record.emit("clicked")
                 assert app.busy and app.stop.get_sensitive()
                 state.update(phase="record", since=time.monotonic())
-            elif state["phase"] == "record" and time.monotonic() - state["since"] > 1:
+            elif state["phase"] == "record":
+                buffer = app.text.get_buffer()
+                preview = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), False)
+                if "country" not in preview:
+                    return True
+                assert app.recorder.poll() is None, "Preview must appear before recording ends"
                 app.stop.emit("clicked")
                 state["phase"] = "save"
             elif state["phase"] == "save" and not app.busy:
@@ -51,7 +57,7 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
                 app.refresh_history()  # reload from disk, not transient widget state
                 assert app.selected == wav
                 assert app.copy.get_sensitive() and app.play.get_sensitive()
-                print("PASS: GTK Record/Stop, real ASR, saved WAV/text/metrics, disk history, ready for next take")
+                print("PASS: live preview before Stop, GTK Record/Stop, real ASR, saved WAV/text/metrics, disk history, ready for next take")
                 app.quit()
                 return False
         except Exception as exc:

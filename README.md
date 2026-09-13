@@ -30,8 +30,11 @@ files are SHA-256 verified. Model files occupy about 639 MiB and stay in ignored
 Launch **Keety** from the application launcher, run `keety` in a terminal on
 this installation, or run `./launch.sh` from the checkout.
 
-Press **Record**, speak, and press **Stop**. Recordings stop automatically at
-30 seconds. The model stays loaded until the window closes. Audio (`.wav`),
+Press **Record** and words appear while you speak, typically updating every
+one to two seconds. This is a provisional preview: earlier words can change as
+more context arrives. Press **Stop** to produce and save the final transcript.
+Recordings stop automatically at 30 seconds. The model stays loaded until the
+window closes. Audio (`.wav`),
 transcripts (`.txt`), and timing metadata (`.json`) are saved in
 `~/.local/share/keety/recordings/` (or under `XDG_DATA_HOME` when set).
 The transcript stays visible and the history is restored when reopening Keety.
@@ -86,7 +89,8 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 ```
 
 The GUI smoke test opens a temporary test window and substitutes a prerecorded
-sample for the microphone. It exercises Record/Stop, actual model inference,
+sample for the microphone. It verifies text appears while recording is still
+active, then exercises Stop, actual model inference,
 WAV/transcript/metrics persistence, history reloading and returning to ready.
-It never records the real microphone. Actual microphone input still needs a
-hands-on test.
+It never records the real microphone. The owner confirmed microphone recording
+and final transcription work; live preview still needs a hands-on voice test.
