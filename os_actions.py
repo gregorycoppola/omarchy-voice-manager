@@ -6,6 +6,7 @@ import subprocess
 import time
 
 BROWSER_CLASSES = {"chromium", "google-chrome", "google-chrome-stable", "chrome"}
+MAIN_MONITOR = "DP-1"
 GRAMMAR = {
     "open chrome": "browser",
     "bring up chrome": "browser_fullscreen",
@@ -49,6 +50,7 @@ def focus(window):
 
 
 def present_browser(window, fullscreen):
+    move_to_main_screen(window)
     focus(window)
     if fullscreen:
         # Set an explicit state: repeating the command must never toggle it off.
@@ -58,10 +60,36 @@ def present_browser(window, fullscreen):
             raise RuntimeError("Browser focused, but fullscreen was not confirmed")
 
 
+def main_monitor(monitors):
+    monitor = next((m for m in monitors if m.get("name") == MAIN_MONITOR and not m.get("disabled")), None)
+    if monitor is None:
+        raise RuntimeError(f"External screen {MAIN_MONITOR} is not connected")
+    workspace = monitor.get("activeWorkspace", {}).get("id")
+    if not isinstance(workspace, int) or workspace <= 0:
+        raise RuntimeError("External screen has no usable active workspace")
+    return monitor
+
+
+def move_to_main_screen(window):
+    monitor = main_monitor(json.loads(run(["hyprctl", "monitors", "-j"])))
+    address = window["address"]
+    if not re.fullmatch(r"0x[0-9a-fA-F]+", address):
+        raise ValueError("Invalid Hyprland window address")
+    workspace = monitor["activeWorkspace"]["id"]
+    run(["hyprctl", "dispatch",
+         f'hl.dsp.window.move({{ window = "address:{address}", workspace = "{workspace}", follow = false }})'])
+    clients = json.loads(run(["hyprctl", "clients", "-j"]))
+    moved = next((c for c in clients if c.get("address") == address), None)
+    if moved is None or moved.get("monitor") != monitor["id"]:
+        raise RuntimeError("Could not move the browser to the external screen")
+
+
 def execute_command(command):
     if command not in ("browser", "browser_fullscreen"):
         raise ValueError("Unsupported voice command")
     fullscreen = command == "browser_fullscreen"
+    # Check before launching anything: keep the laptop reserved for Keety.
+    main_monitor(json.loads(run(["hyprctl", "monitors", "-j"])))
     window = browser_window(json.loads(run(["hyprctl", "clients", "-j"])))
     if window:
         present_browser(window, fullscreen)

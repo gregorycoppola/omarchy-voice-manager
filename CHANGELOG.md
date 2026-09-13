@@ -5,6 +5,7 @@
 - Opt-in voice commands using an explicit phrase-to-action table.
 - “Open Chrome” / “bring up Chrome” and listed aliases launch or focus Chromium.
 - “Bring up” phrases also set fullscreen; repeating them keeps fullscreen enabled.
+- Keety stays pinned on eDP-1; controlled browser windows move to external DP-1.
 - Exact normalized matching; other speech remains saved dictation.
 - Saved transcription retries never execute commands.
 

@@ -108,6 +108,19 @@ The OS adapter reads Hyprland's window list, focuses an exact browser class, or
 launches the installed browser desktop entry. It excludes Chromium-hosted web
 apps such as Discord. On this installation, “Chrome” maps to Chromium.
 
+### Two-screen layout on this MacBook
+
+Keety opens as a pinned floating window on the laptop panel, **eDP-1**. It stays
+visible across that screen's workspaces. Its voice commands move the controlled
+browser to the active workspace on the external screen, **DP-1**, before focusing
+or fullscreening it. If DP-1 is absent, commands report that it is disconnected.
+They do not redirect controlled apps onto the laptop panel.
+
+The installed user rule is `~/.config/hypr/keety.lua`, loaded by
+`~/.config/hypr/hyprland.lua`. Its source is [config/hyprland-keety.lua](config/hyprland-keety.lua).
+Display names are deliberately specific to this machine. This rule does not
+change the experimental display driver or monitor modes.
+
 ## Model provenance
 
 - Original model: [NVIDIA Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)
