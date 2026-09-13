@@ -1,8 +1,8 @@
 """The complete accepted vocabulary and fixed website destinations."""
 
 SITES = {
-    "gmail": {"name": "Gmail", "url": "https://mail.google.com/", "class": "chrome-mail.google.com__-Default"},
-    "github": {"name": "GitHub", "url": "https://github.com/", "class": "chrome-github.com__-Default"},
+    "gmail": {"name": "Gmail", "url": "https://mail.google.com/", "host": "mail.google.com"},
+    "github": {"name": "GitHub", "url": "https://github.com/", "host": "github.com"},
 }
 
 GRAMMAR = {

@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 import subprocess
 import time
-import shutil
+from browser_connection import connection
 
 from command_catalog import GRAMMAR, SITES
 
@@ -105,35 +105,19 @@ def execute_command(command):
     raise RuntimeError("Launch requested, but no browser window appeared within 10 seconds")
 
 
-def site_window(site, clients):
-    matches = [c for c in clients if c.get("class") == site["class"]
-               and re.fullmatch(r"0x[0-9a-fA-F]+", c.get("address", ""))]
-    return min(matches, key=lambda c: c.get("focusHistoryID", 99999), default=None)
-
-
 def present_site(key):
     if key not in SITES:
         raise ValueError("Unsupported website command")
     site = SITES[key]
     main_monitor(json.loads(run(["hyprctl", "monitors", "-j"])))
-    window = site_window(site, json.loads(run(["hyprctl", "clients", "-j"])))
-    if window:
-        present_browser(window, fullscreen=True)
-        return f"Brought {site['name']} fullscreen"
-    browser = shutil.which("chromium")
-    if not browser:
-        raise RuntimeError("Chromium is not installed")
-    # URL comes exclusively from the fixed registry. Preserve the normal profile
-    # so the site uses the user's existing logins. No recognized text is executed.
-    process = subprocess.Popen([browser, "--app=" + site["url"]],
-                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL, start_new_session=True)
-    deadline = time.monotonic() + 10
+    # Ensure the regular browser exists before connecting to its extension.
+    execute_command("browser")
+    selected = connection.bring_up(site)
+    deadline = time.monotonic() + 3
     while time.monotonic() < deadline:
-        process.poll()  # reap the short-lived launcher when Chromium was running
-        window = site_window(site, json.loads(run(["hyprctl", "clients", "-j"])))
-        if window:
-            present_browser(window, fullscreen=True)
-            return f"Opened {site['name']} fullscreen"
-        time.sleep(0.15)
-    raise RuntimeError(f"Launch requested, but no {site['name']} window appeared within 10 seconds")
+        active = json.loads(run(["hyprctl", "activewindow", "-j"]))
+        if browser_window([active]):
+            present_browser(active, fullscreen=True)
+            return f"{'Reused' if selected['reused'] else 'Opened'} {site['name']} tab"
+        time.sleep(0.05)
+    raise RuntimeError("Tab selected, but the browser window did not become active")

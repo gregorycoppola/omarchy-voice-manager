@@ -3,7 +3,6 @@ import unittest
 from unittest.mock import patch
 
 from os_actions import parse_command, browser_window, execute_command, move_to_main_screen, main_monitor
-from os_actions import site_window
 from command_catalog import SITES
 
 MONITORS = '[{"name":"eDP-1","id":0,"activeWorkspace":{"id":1}},{"name":"DP-1","id":1,"activeWorkspace":{"id":7}}]'
@@ -72,18 +71,17 @@ class CommandTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "no usable"):
             main_monitor([{"name": "DP-1", "id": 1, "activeWorkspace": {"id": -1}}])
 
-    def test_website_reuses_exact_window_without_launch(self):
-        window = {"class": SITES["github"]["class"], "address": "0x123"}
-        with patch("os_actions.run", side_effect=[MONITORS, json.dumps([window])]), \
-             patch("os_actions.present_browser") as present, patch("os_actions.subprocess.Popen") as launch:
-            self.assertEqual(execute_command("site:github"), "Brought GitHub fullscreen")
+    def test_site_uses_browser_tab_then_fullscreens_selected_browser(self):
+        window = {"class": "chromium", "address": "0x123"}
+        with patch("os_actions.run", side_effect=[MONITORS, json.dumps(window)]), \
+             patch("os_actions.execute_command") as ensure, \
+             patch("os_actions.connection.bring_up", return_value={"reused": True}) as tabs, \
+             patch("os_actions.present_browser") as present:
+            from os_actions import present_site
+            self.assertEqual(present_site("github"), "Reused GitHub tab")
+            ensure.assert_called_once_with("browser")
+            tabs.assert_called_once_with(SITES["github"])
             present.assert_called_once_with(window, fullscreen=True)
-            launch.assert_not_called()
-
-    def test_site_does_not_match_arbitrary_page_titles(self):
-        self.assertIsNone(site_window(SITES["gmail"], [
-            {"class": "chromium", "title": "Gmail", "address": "0x123"},
-            {"class": "chrome-mail.google.com.evil__-Default", "address": "0x124"}]))
 
     def test_arbitrary_website_id_rejected_before_os_access(self):
         with patch("os_actions.run") as run:

@@ -4,10 +4,12 @@
 
 - Gmail and GitHub website commands: “open” / “bring up,” with explicit
   “g mail” and “git hub” transcription variants.
-- Reuse each site's dedicated Chromium window, fullscreen on DP-1; launch a
-  site window if absent, using existing browser logins.
+- Reuse matching Gmail/GitHub tabs; otherwise open a tab in the existing normal
+  browser window. Activate its window fullscreen on DP-1.
 - Central command/website registry and an expandable Accepted commands list.
-- Ordinary browser tabs are not searched; website windows are managed separately.
+- Deterministic exact-host tab selection through the installed local browser
+  extension; duplicate matches prefer the focused window and most recent tab.
+- Standalone site windows are no longer created; earlier app windows are left intact.
 
 - Global Super/Command + R hold-to-talk: press records, release either key
   transcribes and runs an exact command match without focusing the app.

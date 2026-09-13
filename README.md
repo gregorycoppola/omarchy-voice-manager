@@ -132,16 +132,36 @@ Expand **Accepted commands** in Keety to see every accepted phrase.
 
 The explicit spellings “g mail” and “git hub” are accepted too.
 
-Website commands open a separate Chromium app window using the normal browser
-profile and existing logins. Both “open” and “bring up” reuse that site's existing
-window and set fullscreen on DP-1. They do not search or activate ordinary Chrome
-tabs; a site already open only in a normal tab gets a separate site window.
-Window classes in the registry are specific to this installation's Default
-profile. Repeat commands do not reload the existing site window.
+Website commands now operate on **normal browser tabs**:
 
-To add a website, add its fixed URL and verified window class to `SITES`, then
+1. Find an HTTPS tab whose hostname exactly matches the registered site.
+2. Reuse it without reloading. If there are duplicates, prefer the focused
+   browser window, then the most recently accessed matching tab.
+3. If no matching tab exists, create one in the focused normal browser window,
+   or the most recently used normal window. Open a normal browser window if needed.
+4. Activate the tab and bring its browser fullscreen on DP-1.
+
+Private windows, standalone app windows from the earlier implementation, and
+extension-only control windows are excluded. Existing app windows are left intact.
+Pending navigations count as matching tabs to avoid duplicates during page loads.
+Both “open” and “bring up” currently follow these same rules.
+
+Tab control uses the already installed Playwright extension (0.4.0) and the pinned
+local Playwright MCP runtime from `codex-browser-tools` (0.0.80). Keety sends fixed
+JavaScript to the extension's tabs API; no AI agent interprets or runs commands.
+The local connection is stored at `~/.config/keety/browser-connection.json`, with
+mode 0600, using the installed runtime's `command`, `args` (including `--extension`),
+and `env`. The existing extension connection token remains outside this repo.
+This machine is configured; other installations need their own extension connection.
+Keety keeps a connection open after the first website command; an extension control
+tab supports that connection. Closing Keety stops its connection process.
+A connection failure reports an error rather than opening duplicate fallback tabs.
+
+To add a website, add its fixed HTTPS URL and exact hostname to `SITES`, then
 list each accepted phrase explicitly in `GRAMMAR`. No wildcard domain command
-is enabled.
+is enabled. Tab-selection rules live in `browser_tabs.js`, using the documented
+[Chrome tabs](https://developer.chrome.com/docs/extensions/reference/api/tabs)
+and [windows](https://developer.chrome.com/docs/extensions/reference/api/windows) APIs.
 
 Matching only lowercases, collapses whitespace and removes surrounding
 sentence-ending `. ! ?` punctuation. Extra words, negations and unlisted phrases
@@ -209,6 +229,7 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
+node --test tests/test_browser_tabs.cjs
 # With the public sample downloaded as described in docs/first-run.md:
 .venv/bin/python tests/gui_smoke.py local/jfk.wav
 .venv/bin/python tests/gui_smoke.py local/jfk.wav --auto
