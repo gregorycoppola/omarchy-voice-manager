@@ -9,13 +9,16 @@ import time
 
 import gi
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gio, GLib, Gtk
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gdk, Gio, GLib, Gtk
 
 from keety import load_model
 from recordings import new_recording, save_transcript
 from live_audio import read_growing_wav
 from level_meter import LevelMeter, pcm_level
-from os_actions import GRAMMAR, parse_command, execute_command
+from os_actions import execute_command
+from command_catalog import GRAMMAR, INTENTS
+from intent_matching import IntentMatcher
 from push_to_talk import PushToTalk
 
 DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "keety/recordings"
@@ -33,6 +36,8 @@ class Keety(Gtk.Application):
         self.paths = []
         self.active_path = None
         self.stop_requested = False
+        self.matcher = IntentMatcher(DATA.parent / "aliases.json")
+        self.pending_suggestion = None
         self.ptt_held = False
         self.ptt_owned = False
         self.ptt = PushToTalk(self.ptt_press, self.ptt_release)
@@ -65,13 +70,18 @@ class Keety(Gtk.Application):
         subtitle = Gtk.Label(label="Hold Super + R to talk. Release to transcribe and run your command.", xalign=0, wrap=True)
         subtitle.add_css_class("dim-label")
         box.append(subtitle)
-        commands_label = Gtk.Label(label="Commands only — Chrome · Gmail · GitHub · Discord · Windows", xalign=0)
+        commands_label = Gtk.Label(label="Commands — Chrome · Gmail · GitHub · Discord · X / Twitter · Windows", xalign=0)
         commands_label.set_tooltip_text("Accepted phrases:\n" + "\n".join(GRAMMAR))
         box.append(commands_label)
         vocabulary = Gtk.Expander(label="Accepted commands")
         phrases = Gtk.Label(label="\n".join(GRAMMAR), xalign=0, selectable=True)
         vocabulary.set_child(phrases)
         box.append(vocabulary)
+        learned = Gtk.Expander(label="Learned phrases")
+        self.learned_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        learned.set_child(self.learned_list)
+        box.append(learned)
+        self.refresh_aliases()
         box.append(Gtk.Label(label="Up to 30 seconds per recording", xalign=0))
         self.status = Gtk.Label(label="Loading local speech model…", xalign=0, wrap=True)
         self.status.set_selectable(True)
@@ -82,6 +92,36 @@ class Keety(Gtk.Application):
         progress.append(self.status)
         self.status.set_hexpand(True)
         box.append(progress)
+        self.suggestion_dialog = Gtk.Window(
+            title="Keety — Confirm command", application=self, transient_for=self.window,
+            modal=True, destroy_with_parent=True, resizable=False)
+        self.suggestion_dialog.set_default_size(560, 280)
+        self.suggestion_dialog.connect("close-request", self.close_suggestion)
+        keys = Gtk.EventControllerKey()
+        keys.connect("key-pressed", self.suggestion_key)
+        self.suggestion_dialog.add_controller(keys)
+        self.suggestion_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        for side in ["top", "bottom", "start", "end"]:
+            getattr(self.suggestion_box, "set_margin_" + side)(28)
+        self.suggestion_dialog.set_child(self.suggestion_box)
+        heading = Gtk.Label(label="Did you mean…?", xalign=0)
+        heading.add_css_class("title-1")
+        self.suggestion_box.append(heading)
+        self.suggestion_label = Gtk.Label(xalign=0, wrap=True)
+        self.suggestion_label.add_css_class("title-2")
+        self.suggestion_box.append(self.suggestion_label)
+        self.heard_label = Gtk.Label(xalign=0, wrap=True)
+        self.suggestion_box.append(self.heard_label)
+        confirmation = Gtk.Box(spacing=8)
+        self.confirm = Gtk.Button(label="Yes — run and remember")
+        self.confirm.add_css_class("suggested-action")
+        self.confirm.connect("clicked", self.accept_suggestion)
+        confirmation.append(self.confirm)
+        self.reject = Gtk.Button(label="No")
+        self.reject.connect("clicked", self.dismiss_suggestion)
+        confirmation.append(self.reject)
+        self.suggestion_box.append(confirmation)
+        self.suggestion_dialog.set_default_widget(self.reject)
         self.meter = LevelMeter()
         box.append(self.meter)
         self.level_label = Gtk.Label(label="Microphone idle · everything stays on this computer", xalign=0)
@@ -131,7 +171,7 @@ class Keety(Gtk.Application):
     def ready(self):
         self.spinner.stop()
         self.retry.set_sensitive(self.selected is not None)
-        self.status.set_text("Ready. Hold Super + R to speak.")
+        self.status.set_text(self.matcher.error or "Ready. Hold Super + R to speak.")
         if self.ptt_held:
             self.begin_ptt()
 
@@ -164,6 +204,7 @@ class Keety(Gtk.Application):
         self.select_recording()
 
     def select_recording(self, *_):
+        self.dismiss_suggestion()
         index = self.history.get_selected()
         self.selected = self.paths[index] if index < len(self.paths) else None
         text = "Your transcript will appear here and stay here after recording."
@@ -180,6 +221,8 @@ class Keety(Gtk.Application):
 
     def set_busy(self, value):
         self.busy = value
+        if value:
+            self.dismiss_suggestion()
         self.history.set_sensitive(not value)
         self.play.set_sensitive(not value and self.selected is not None)
         self.retry.set_sensitive(not value and self.selected is not None and self.model is not None)
@@ -283,7 +326,7 @@ class Keety(Gtk.Application):
             GLib.idle_add(self.finished, path, message)
             return
         if commands:
-            command = parse_command(text)
+            command = self.matcher.exact(text)
             if command:
                 GLib.idle_add(self.show_saved_transcript, path)
                 try:
@@ -291,12 +334,86 @@ class Keety(Gtk.Application):
                 except Exception as exc:
                     message += f" · Could not complete voice command: {exc}"
             else:
+                intent = self.matcher.suggest(text)
+                if intent:
+                    GLib.idle_add(self.offer_suggestion, path, message, text, intent)
+                    return
                 message += " · Unrecognized command — no action taken"
         GLib.idle_add(self.finished, path, message)
 
+    def offer_suggestion(self, path, message, text, intent):
+        self.finished(path, message + " · Waiting for command confirmation")
+        self.pending_suggestion = (path, text, intent)
+        self.suggestion_label.set_text(INTENTS[intent]["label"])
+        self.heard_label.set_text(f'Heard: “{text.strip()}”\nYes runs this command and remembers your phrase.')
+        self.window.present()
+        self.suggestion_dialog.present()
+        self.reject.grab_focus()
+
+    def dismiss_suggestion(self, *args):
+        self.pending_suggestion = None
+        self.suggestion_dialog.set_visible(False)
+        if args:
+            self.status.set_text("Suggestion dismissed. Hold Super + R to try again.")
+
+    def close_suggestion(self, *_):
+        self.dismiss_suggestion(True)
+        return True
+
+    def suggestion_key(self, _, keyval, keycode, state):
+        if keyval == Gdk.KEY_Escape:
+            self.dismiss_suggestion(True)
+            return True
+        return False
+
+    def accept_suggestion(self, *_):
+        if self.busy or self.pending_suggestion is None:
+            return
+        path, text, intent = self.pending_suggestion
+        try:
+            self.matcher.learn(text, intent)
+        except (OSError, ValueError) as exc:
+            self.heard_label.set_text(f"Could not remember phrase: {exc}. No command was run.")
+            return
+        self.refresh_aliases()
+        self.set_busy(True)
+        self.spinner.start()
+        self.status.set_text("Phrase remembered. Running command…")
+        threading.Thread(target=self.run_confirmed, args=(path, intent), daemon=True).start()
+
+    def run_confirmed(self, path, intent):
+        try:
+            message = "Phrase remembered · " + execute_command(intent)
+        except Exception as exc:
+            message = f"Phrase remembered · Could not complete voice command: {exc}"
+        GLib.idle_add(self.finished, path, message)
+
+    def refresh_aliases(self):
+        while child := self.learned_list.get_first_child():
+            self.learned_list.remove(child)
+        for phrase, intent in sorted(self.matcher.aliases.items()):
+            row = Gtk.Box(spacing=8)
+            row.append(Gtk.Label(label=f'{phrase} → {INTENTS[intent]["label"]}', xalign=0, wrap=True, hexpand=True))
+            forget = Gtk.Button(label="Forget")
+            forget.connect("clicked", self.forget_alias, phrase)
+            row.append(forget)
+            self.learned_list.append(row)
+        if not self.matcher.aliases:
+            self.learned_list.append(Gtk.Label(label="Confirmed phrases will appear here.", xalign=0))
+
+    def forget_alias(self, _, phrase):
+        if self.busy:
+            return
+        try:
+            self.matcher.forget(phrase)
+            self.refresh_aliases()
+            self.status.set_text("Learned phrase forgotten.")
+        except (OSError, ValueError) as exc:
+            self.status.set_text(f"Could not forget phrase: {exc}")
+
     def show_saved_transcript(self, path):
         self.refresh_history(path)
-        self.status.set_text("Transcript saved. Bringing up the browser…")
+        self.status.set_text("Transcript saved. Running command…")
 
     def finished(self, path, message):
         self.recorder = None
@@ -341,6 +458,7 @@ class Keety(Gtk.Application):
             return True
         if self.player and self.player.poll() is None:
             self.player.terminate()
+        self.suggestion_dialog.destroy()
         return False
 
 

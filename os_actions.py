@@ -6,15 +6,15 @@ import subprocess
 import time
 from browser_connection import connection
 
-from command_catalog import GRAMMAR, SITES
+from command_catalog import APPS, GRAMMAR, SITES
+from intent_matching import normalize
 
 BROWSER_CLASSES = {"chromium", "google-chrome", "google-chrome-stable", "chrome"}
 MAIN_MONITOR = "DP-1"
 
 
 def parse_command(text):
-    normalized = " ".join(text.lower().split()).strip(" .!?")
-    return GRAMMAR.get(normalized)
+    return GRAMMAR.get(normalize(text))
 
 
 def browser_window(clients):
@@ -77,8 +77,10 @@ def move_to_main_screen(window):
 
 
 def execute_command(command):
-    if command == "discord":
-        return present_discord()
+    if command in APPS:
+        return present_app(command)
+    if command.startswith("close:"):
+        return close_app(command.removeprefix("close:"))
     if command == "windows":
         return show_windows()
     if command.startswith("site:"):
@@ -109,34 +111,56 @@ def execute_command(command):
     raise RuntimeError("Launch requested, but no browser window appeared within 10 seconds")
 
 
-def discord_window(clients):
-    classes = {"discord", "Discord", "chrome-discord.com__channels_@me-Default"}
+def app_window(key, clients):
+    classes = APPS[key]["classes"]
     matches = [c for c in clients if c.get("class") in classes
+               and c.get("mapped", True)
                and re.fullmatch(r"0x[0-9a-fA-F]+", c.get("address", ""))]
     return min(matches, key=lambda c: c.get("focusHistoryID", 99999), default=None)
 
 
-def present_discord():
+def present_app(key):
+    app = APPS[key]
+    name = app["name"]
     main_monitor(json.loads(run(["hyprctl", "monitors", "-j"])))
-    window = discord_window(json.loads(run(["hyprctl", "clients", "-j"])))
+    window = app_window(key, json.loads(run(["hyprctl", "clients", "-j"])))
     if window:
         present_browser(window, fullscreen=True)
-        return "Brought Discord forward"
-    candidates = [Path.home() / ".local/share/applications/Discord.desktop",
-                  Path.home() / ".local/share/applications/discord.desktop",
-                  Path("/usr/share/applications/discord.desktop")]
+        return f"Brought {name} forward"
+    candidates = [directory / filename
+                  for directory in (Path.home() / ".local/share/applications", Path("/usr/share/applications"))
+                  for filename in app["desktop_files"]]
     desktop = next((p for p in candidates if p.is_file()), None)
     if desktop is None:
-        raise RuntimeError("No installed Discord application launcher found")
+        raise RuntimeError(f"No installed {name} application launcher found")
     run(["gio", "launch", str(desktop)])
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
-        window = discord_window(json.loads(run(["hyprctl", "clients", "-j"])))
+        window = app_window(key, json.loads(run(["hyprctl", "clients", "-j"])))
         if window:
             present_browser(window, fullscreen=True)
-            return "Opened Discord"
+            return f"Opened {name}"
         time.sleep(0.15)
-    raise RuntimeError("Launch requested, but no Discord window appeared within 15 seconds")
+    raise RuntimeError(f"Launch requested, but no {name} window appeared within 15 seconds")
+
+
+def close_app(key):
+    if key != "browser" and key not in APPS:
+        raise ValueError("Unsupported app to close")
+    name = "Chrome" if key == "browser" else APPS[key]["name"]
+    clients = json.loads(run(["hyprctl", "clients", "-j"]))
+    window = browser_window(clients) if key == "browser" else app_window(key, clients)
+    if window is None:
+        return f"No open {name} window"
+    address = window["address"]  # validated by the exact-class selector
+    run(["hyprctl", "dispatch", f'hl.dsp.window.close({{ window = "address:{address}" }})'])
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        clients = json.loads(run(["hyprctl", "clients", "-j"]))
+        if not any(c.get("address") == address and c.get("mapped", True) for c in clients):
+            return f"Closed {name} window"
+        time.sleep(0.1)
+    return f"Asked {name} to close; its window is still open. Check it for a confirmation."
 
 
 def show_windows():

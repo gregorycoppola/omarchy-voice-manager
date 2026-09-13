@@ -2,6 +2,16 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Open/bring up X or Twitter reuses the installed X app window, or launches it.
+- Close Discord, X/Twitter, or Chrome/Chromium sends a normal close request to
+  one matching window. Open and close have separate learnable intent IDs.
+- Incomplete single-word speech no longer produces a fuzzy command suggestion.
+
+- Group built-in phrases under stable intent IDs and display labels.
+- Close transcriptions open a prominent modal “Did you mean…?” dialog; Yes runs the fixed command and
+  remembers a local alias. No dismisses it. Learned phrases persist across
+  restarts and can be forgotten in the UI. No additional model or dependency.
+
 - “Bring up Discord” / “open Discord” reuse the existing app window or launch
   the installed Discord desktop entry, then show it fullscreen on DP-1.
 
@@ -20,7 +30,7 @@
   release to save and transcribe. The existing 30-second limit remains.
 - Removed the speech detector, its model/download manifest, continuous capture,
   utterance queue, and related UI and tests. Removed manual Record/Stop buttons.
-- Command mode is permanent. Unlisted phrases trigger no action.
+- Command mode is permanent. Suggestions require confirmation before acting.
 
 - Voice commands use an explicit phrase-to-action table.
 - “Open Chrome” / “bring up Chrome” and listed aliases launch or focus Chromium.

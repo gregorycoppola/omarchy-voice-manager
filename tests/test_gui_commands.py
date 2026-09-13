@@ -5,12 +5,17 @@ import unittest
 from unittest.mock import Mock, patch
 
 from gui import Keety
+from intent_matching import IntentMatcher
+import tempfile
 
 
 class CommandRoutingTests(unittest.TestCase):
     def route(self, text, enabled):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
         events = []
-        app = SimpleNamespace(model=object(), finished=Mock(), show_saved_transcript=Mock())
+        app = SimpleNamespace(model=object(), finished=Mock(), show_saved_transcript=Mock(),
+                              matcher=IntentMatcher(Path(directory.name) / "aliases.json"), offer_suggestion=Mock())
 
         def save(*_):
             events.append("saved")
@@ -31,6 +36,18 @@ class CommandRoutingTests(unittest.TestCase):
         self.assertEqual(events, ["saved", "browser"])
         app.show_saved_transcript.assert_called_once()
         self.assertIn("Brought the browser", app.finished.call_args.args[1])
+
+    def test_fuzzy_match_offers_without_execution_or_learning(self):
+        events, app = self.route("open dis cord", True)
+        self.assertEqual(events, ["saved"])
+        app.offer_suggestion.assert_called_once()
+        self.assertEqual(app.offer_suggestion.call_args.args[-1], "discord")
+        self.assertEqual(app.matcher.aliases, {})
+
+    def test_retry_does_not_offer_fuzzy_match(self):
+        events, app = self.route("open dis cord", False)
+        self.assertEqual(events, ["saved"])
+        app.offer_suggestion.assert_not_called()
 
     def test_dictation_and_retry_mode_never_execute(self):
         events, _ = self.route("Open Chrome.", False)

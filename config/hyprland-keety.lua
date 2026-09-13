@@ -7,3 +7,9 @@ o.window({ class = "^io\\.github\\.gregorycoppola\\.Keety$" }, {
   size = { 1100, 700 },
   center = true,
 })
+
+-- Keep confirmation compact and centered above the main Keety window.
+o.window({ class = "^io\\.github\\.gregorycoppola\\.Keety$", title = "^Keety — Confirm command$" }, {
+  size = { 560, 280 },
+  center = true,
+})

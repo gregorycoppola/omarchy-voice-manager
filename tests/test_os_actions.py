@@ -34,12 +34,77 @@ class CommandTests(unittest.TestCase):
             present.assert_called_once_with(window, fullscreen=True)
 
     def test_discord_ignores_browser_title_and_requires_main_monitor(self):
-        from os_actions import discord_window
-        self.assertIsNone(discord_window([{"class":"chromium", "title":"Discord", "address":"0x123"}]))
+        from os_actions import app_window
+        self.assertIsNone(app_window("discord", [{"class":"chromium", "title":"Discord", "address":"0x123"}]))
         with patch("os_actions.run", return_value="[]") as run:
             with self.assertRaisesRegex(RuntimeError, "not connected"):
                 execute_command("discord")
             self.assertEqual(run.call_count, 1)
+
+    def test_x_and_close_vocabulary(self):
+        for phrase in ["Open X!", "open twitter", "bring up x", "bring up Twitter"]:
+            self.assertEqual(parse_command(phrase), "x")
+        for phrase, intent in [("close x", "close:x"), ("Close Twitter!", "close:x"),
+                               ("close discord", "close:discord"), ("close chromium", "close:browser")]:
+            self.assertEqual(parse_command(phrase), intent)
+        for phrase in ["close everything", "do not close x", "close discord and chrome"]:
+            self.assertIsNone(parse_command(phrase))
+
+    def test_x_reuses_installed_app_not_browser_title(self):
+        clients = [{"class": "chromium", "title": "X", "address": "0x1"},
+                   {"class": "chrome-x.com__-Default", "address": "0x2"}]
+        with patch("os_actions.run", side_effect=[MONITORS, json.dumps(clients)]), \
+             patch("os_actions.present_browser") as present:
+            self.assertEqual(execute_command("x"), "Brought X (Twitter) forward")
+            present.assert_called_once_with(clients[1], fullscreen=True)
+
+    def test_x_launches_installed_desktop(self):
+        window = {"class": "chrome-x.com__-Default", "address": "0x2"}
+        with patch("os_actions.run", side_effect=[MONITORS, "[]", "ok", json.dumps([window])]) as run, \
+             patch("os_actions.Path.is_file", return_value=True), patch("os_actions.present_browser"):
+            self.assertEqual(execute_command("x"), "Opened X (Twitter)")
+            self.assertTrue(run.call_args_list[2].args[0][2].endswith("/X.desktop"))
+
+    def test_close_targets_one_recent_app_window_without_focus_or_launch(self):
+        clients = [{"class": "chromium", "title": "Discord", "address": "0x1", "focusHistoryID": 0},
+                   {"class": "discord", "address": "0x2", "focusHistoryID": 4},
+                   {"class": "discord", "address": "0x3", "focusHistoryID": 1}]
+        with patch("os_actions.run", side_effect=[json.dumps(clients), "ok", json.dumps(clients[:2])]) as run:
+            self.assertEqual(execute_command("close:discord"), "Closed Discord window")
+            self.assertEqual(run.call_args_list[1].args[0],
+                             ["hyprctl", "dispatch", 'hl.dsp.window.close({ window = "address:0x3" })'])
+            self.assertEqual(run.call_count, 3)
+
+    def test_close_x_supports_twitter_app_class(self):
+        for app_class in ["chrome-x.com__-Default", "chrome-twitter.com__-Default"]:
+            with patch("os_actions.run", side_effect=[json.dumps([{"class": app_class, "address": "0x2"}]), "ok", "[]"]):
+                self.assertEqual(execute_command("close:x"), "Closed X (Twitter) window")
+
+    def test_close_missing_or_invalid_target_never_closes_unrelated_window(self):
+        clients = [{"class": "chromium", "title": "Discord", "address": "0x1"},
+                   {"class": "discord", "address": '0x2"'},
+                   {"class": "discord", "address": "0x3", "mapped": False}]
+        with patch("os_actions.run", return_value=json.dumps(clients)) as run:
+            self.assertEqual(execute_command("close:discord"), "No open Discord window")
+            run.assert_called_once()
+        with patch("os_actions.run") as run:
+            with self.assertRaises(ValueError):
+                execute_command("close:arbitrary")
+            run.assert_not_called()
+
+    def test_close_chrome_does_not_close_webapps(self):
+        clients = [{"class": "chrome-x.com__-Default", "address": "0x1"},
+                   {"class": "chromium", "address": "0x2"}]
+        with patch("os_actions.run", side_effect=[json.dumps(clients), "ok", json.dumps(clients[:1])]) as run:
+            self.assertEqual(execute_command("close:browser"), "Closed Chrome window")
+            self.assertIn('address:0x2', run.call_args_list[1].args[0][2])
+
+    def test_close_leaves_app_confirmation_to_user(self):
+        clients = [{"class": "discord", "address": "0x2"}]
+        with patch("os_actions.run", side_effect=[json.dumps(clients), "ok"]) as run, \
+             patch("os_actions.time.monotonic", side_effect=[0, 3]):
+            self.assertIn("window is still open", execute_command("close:discord"))
+            self.assertEqual(run.call_count, 2)
 
     def test_window_phrases_are_exact_commands(self):
         for phrase in ["Show all windows.", " SHOW  ALL OPEN WINDOWS! ", "Show all open window."]:

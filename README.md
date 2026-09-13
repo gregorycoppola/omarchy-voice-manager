@@ -95,13 +95,24 @@ substantially more memory.
 **Command mode is permanent.**
 Hold Super + R throughout one allowed phrase, then release.
 The transcript and audio save first; a matching phrase then runs its fixed action.
-Only the accepted phrases below trigger actions. Other speech shows “Unrecognized
-command” and does nothing. Audio and transcripts remain saved for review.
-Retrying a saved transcript never executes a voice command.
+Built-in phrases and learned aliases run immediately on an exact normalized match.
+A close match opens a prominent modal **Did you mean…?** dialog with
+**Yes — run and remember** and **No**, bringing Keety forward. Escape or closing
+the dialog dismisses it too.
+Yes saves the heard phrase as an alias for that intent and runs the command.
+Next time that phrase is recognized, it works immediately. No dismisses the
+suggestion without saving or running anything. Unrelated or ambiguous speech
+shows “Unrecognized command.” Audio and transcripts remain saved for review.
+Retrying a saved transcript never executes a command or offers a suggestion.
 
-The entire grammar is the explicit `GRAMMAR` table in
+Stable intent IDs, display labels, and built-in phrases live in `INTENTS` in
 [command_catalog.py](command_catalog.py), beside the fixed website URL registry.
-Expand **Accepted commands** in Keety to see every accepted phrase.
+`GRAMMAR` is derived from those phrases. Expand **Accepted commands** for built-in
+phrases, or **Learned phrases** to review your aliases and **Forget** a mistake.
+Aliases persist in `~/.local/share/keety/aliases.json` (respecting `XDG_DATA_HOME`),
+using a versioned JSON format and private file permissions. They stay outside Git.
+This teaches the command matcher; it does not retrain the speech recognition model.
+Starting another recording, retrying, or selecting history dismisses a pending suggestion.
 
 | Allowed phrase | Action |
 | --- | --- |
@@ -116,12 +127,25 @@ Expand **Accepted commands** in Keety to see every accepted phrase.
 | bring up google chrome | Launch/focus Chromium and enter fullscreen |
 | open gmail / bring up gmail | Bring up Gmail |
 | open github / bring up github | Bring up GitHub |
+| open x / open twitter / bring up x / bring up twitter | Launch X’s installed app or focus its existing window |
+| close discord | Close the most recently used Discord app window |
+| close x / close twitter | Close the most recently used X/Twitter app window |
+| close chrome / close chromium / close google chrome | Close one normal Chrome/Chromium window, including its tabs |
 | open discord / bring up discord | Launch Discord if closed, otherwise focus its existing app window |
 | show all windows / show all open windows / show all open window | Show a searchable window list across all screens and workspaces; select a window to focus it, or press Escape to dismiss |
 
-Discord uses its installed desktop launcher (the Omarchy Discord web app on this
-machine). Its window is moved to DP-1 and made fullscreen. Matching uses the exact
-app class, so an ordinary browser tab titled Discord is not mistaken for the app.
+Discord and X use their installed desktop launchers (the Omarchy web apps on
+this machine). Opening moves their windows to DP-1 and makes them fullscreen.
+X and Twitter are synonyms for one intent. Exact app classes identify their
+windows; ordinary browser tabs titled Discord or X are not treated as app windows.
+
+Close commands send a normal window-close request to one matching window,
+preferring the most recently used match across workspaces. They do not focus,
+move, launch, or forcibly kill the app. If no match exists, Keety says so.
+An app may ask you to confirm closing; Keety leaves that dialog for you.
+Close commands work even without DP-1. “Close Chrome” closes the whole selected
+browser window and its tabs; it excludes the separate Discord and X app windows.
+Gmail/GitHub tab closing and arbitrary window-name closing are not included.
 
 The explicit spellings “g mail” and “git hub” are accepted too.
 
@@ -151,17 +175,20 @@ tab supports that connection. Closing Keety stops its connection process.
 A connection failure reports an error rather than opening duplicate fallback tabs.
 
 To add a website, add its fixed HTTPS URL and exact hostname to `SITES`, then
-list each accepted phrase explicitly in `GRAMMAR`. No wildcard domain command
+add its `site:<key>` intent and accepted phrases to `INTENTS`. No wildcard domain command
 is enabled. Tab-selection rules live in `browser_tabs.js`, using the documented
 [Chrome tabs](https://developer.chrome.com/docs/extensions/reference/api/tabs)
 and [windows](https://developer.chrome.com/docs/extensions/reference/api/windows) APIs.
 
-Matching only lowercases, collapses whitespace and removes surrounding
-sentence-ending `. ! ?` punctuation. Extra words, negations and unlisted phrases
-do not match. There is no fuzzy matching, LLM command interpretation, arbitrary
-shell execution, or chaining. ASR can still mishear speech; matching itself is
-deterministic. Website destinations are fixed in the registry; recognized speech
-cannot supply a URL or a browser argument.
+Exact matching lowercases, collapses whitespace and removes surrounding
+sentence-ending `. ! ?` punctuation. Fuzzy suggestions use Python's standard
+library text similarity, scoring built-in and learned phrases and grouping them
+by intent. A suggestion needs at least 0.72 similarity and a 0.06 lead over the
+next intent; ambiguous matches, explicit negation, single-word fragments, and long dictation are skipped.
+These are initial heuristics, not confidence probabilities; some mishearings may
+still produce no suggestion. Fuzzy matches always require a click before acting.
+No extra model or dependency is needed. Website destinations and OS actions remain
+fixed; speech cannot supply a URL, shell command, or browser argument.
 
 The OS adapter reads Hyprland's window list, focuses an exact browser class, or
 launches the installed browser desktop entry. It excludes Chromium-hosted web
@@ -198,6 +225,8 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 node --test tests/test_browser_tabs.cjs
+.venv/bin/python tests/learning_smoke.py
+.venv/bin/python tests/window_close_smoke.py
 # With the public sample downloaded as described in docs/first-run.md:
 .venv/bin/python tests/gui_smoke.py local/jfk.wav
 .venv/bin/python tests/gui_smoke.py local/jfk.wav --auto
