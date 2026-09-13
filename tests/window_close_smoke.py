@@ -8,7 +8,7 @@ import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import GLib, Gtk
 from command_catalog import APPS
-from os_actions import close_app, maximize_app, run
+from os_actions import close_app, maximize_app, move_other_screen, run
 import json
 
 app_id = 'io.github.gregorycoppola.Keety.CloseTest'
@@ -30,6 +30,14 @@ def close_test():
                 assert maximize_app('_close_test') == 'Maximized Keety test window'
                 client = next(c for c in json.loads(run(['hyprctl', 'clients', '-j'])) if c['address'] == address)
                 assert client['fullscreen'] == client['fullscreenClient'] == 1, client
+        if '--move' in sys.argv:
+            target = next(c for c in json.loads(run(['hyprctl','clients','-j'])) if c['class'] == app_id)
+            original_monitor = target['monitor']
+            for index in range(2):
+                move_other_screen(target)
+                moved = next(c for c in json.loads(run(['hyprctl','clients','-j'])) if c['address'] == target['address'])
+                assert (moved['monitor'] != original_monitor) == (index == 0), moved
+                assert moved['fullscreen'] == target['fullscreen'], moved
         result.append(close_app('_close_test'))
     except Exception as exc:
         result.append(exc)
@@ -56,4 +64,4 @@ app.run(['keety-close-test'])
 if worker:
     worker.join(timeout=15)
 assert result == ['Closed Keety test window'], result
-print('PASS: real compositor', 'fullscreen to maximized, repeated maximize, then close' if '--maximize' in sys.argv else 'close', 'on disposable test window')
+print('PASS: real compositor', 'move to other screen and back;' if '--move' in sys.argv else '', 'fullscreen to maximized, repeated maximize, then close' if '--maximize' in sys.argv else 'close', 'on disposable test window')

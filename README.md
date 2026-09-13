@@ -123,6 +123,7 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 
 | Allowed phrase | Action |
 | --- | --- |
+| move to other screen / move window to other screen | Move the window focused when recording started to the other screen |
 | open a new terminal / open a terminal / open terminal / open new terminal | Open a fresh default terminal window on DP-1 |
 | open chrome | Launch Chromium or focus an existing browser window |
 | bring up chrome | Launch/focus Chromium and maximize with tabs visible |
@@ -156,6 +157,13 @@ Maximize commands select one existing window, move it to DP-1 and focus it,
 then set maximized mode for both the compositor and app. Normal browser controls
 remain visible; this is different from fullscreen. Repeating the command keeps
 it maximized. If the app is closed, Keety reports that instead of launching it.
+
+“Move to other screen” and “move window to other screen” work for any captured
+window, including Chromium. The window moves to the other screen's active
+workspace and receives focus. With more than two screens, the destination is
+the next connected monitor in monitor-ID order. It reports an error if only one
+screen is available. Fuzzy confirmation keeps the original window as its target,
+even when the dialog takes focus. A closed or replaced window is never substituted.
 
 Terminal close commands close an idle shell prompt directly. If a program or job
 is running, they show a modal confirmation with the chosen window's title.
@@ -267,6 +275,7 @@ node --test tests/test_browser_tabs.cjs
 .venv/bin/python tests/terminal_activity_smoke.py
 .venv/bin/python tests/window_close_smoke.py
 .venv/bin/python tests/window_close_smoke.py --maximize
+.venv/bin/python tests/window_close_smoke.py --maximize --move
 # With the public sample downloaded as described in docs/first-run.md:
 .venv/bin/python tests/gui_smoke.py local/jfk.wav
 .venv/bin/python tests/gui_smoke.py local/jfk.wav --auto

@@ -16,7 +16,7 @@ from keety import load_model
 from recordings import new_recording, save_transcript
 from live_audio import read_growing_wav
 from level_meter import LevelMeter, pcm_level
-from os_actions import execute_command, terminal_context, terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS
+from os_actions import execute_command, capture_window_context, window_target, move_other_screen, terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS
 from settings import Settings
 from terminal_activity import terminal_has_jobs
 from command_catalog import GRAMMAR, INTENTS
@@ -310,7 +310,7 @@ class Keety(Gtk.Application):
         self.status.set_text("Audio saved. Transcribing locally…")
 
     def finish_recording(self, path, process):
-        context = terminal_context()
+        context = capture_window_context()
         try:
             _, error = process.communicate(timeout=45)
             # This installed pw-record returns 1 on a requested SIGINT stop, even
@@ -337,6 +337,17 @@ class Keety(Gtk.Application):
         if commands:
             command = self.matcher.exact(text)
             candidate = command or self.matcher.suggest(text)
+            if candidate == "move:other_screen":
+                try:
+                    target = window_target(context)
+                    if not command:
+                        GLib.idle_add(self.offer_suggestion, path, message, text, candidate, target)
+                        return
+                    message += " · " + move_other_screen(target)
+                except Exception as exc:
+                    message += f" · {exc}"
+                GLib.idle_add(self.finished, path, message)
+                return
             if candidate in TERMINAL_CLOSE_INTENTS:
                 try:
                     target = terminal_close_target(candidate, context)
@@ -362,9 +373,9 @@ class Keety(Gtk.Application):
                 message += " · Unrecognized command — no action taken"
         GLib.idle_add(self.finished, path, message)
 
-    def offer_suggestion(self, path, message, text, intent):
+    def offer_suggestion(self, path, message, text, intent, target=None):
         self.finished(path, message + " · Waiting for command confirmation")
-        self.pending_suggestion = (path, text, intent, None, True)
+        self.pending_suggestion = (path, text, intent, target, True)
         self.confirm_heading.set_text("Did you mean…?")
         self.confirm.set_label("Yes — run and remember")
         self.suggestion_label.set_text(INTENTS[intent]["label"])
@@ -430,7 +441,13 @@ class Keety(Gtk.Application):
     def run_confirmed(self, path, intent, target=None, learn=True):
         prefix = "Phrase remembered · " if learn else ""
         try:
-            message = prefix + (close_terminal(target) if target is not None else execute_command(intent))
+            if intent == "move:other_screen":
+                result = move_other_screen(target)
+            elif target is not None:
+                result = close_terminal(target)
+            else:
+                result = execute_command(intent)
+            message = prefix + result
         except Exception as exc:
             message = prefix + f"Could not complete voice command: {exc}"
         GLib.idle_add(self.finished, path, message)

@@ -2,6 +2,10 @@
 
 ## Unreleased — 0.2.0-dev
 
+- “Move to other screen” / “move window to other screen” move the window focused
+  when recording started to the other monitor's active workspace and follow it.
+  Fuzzy confirmations retain that target rather than moving the confirmation UI.
+
 - Idle terminal prompts close directly. Confirmation is needed only for running
   commands/jobs or an unknown process state, unless disabled in preferences.
 

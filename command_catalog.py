@@ -132,6 +132,16 @@ INTENTS = {
         "phrases": [
             "close this terminal"
         ]
+    },
+    "move:other_screen": {
+        "label": "Move window to the other screen",
+        "phrases": [
+            "move to other screen",
+            "move window to other screen",
+            "move to the other screen",
+            "move window to the other screen",
+            "move this window to the other screen"
+        ]
     }
 }
 

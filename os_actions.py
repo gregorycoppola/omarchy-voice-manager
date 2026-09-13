@@ -121,12 +121,43 @@ def execute_command(command):
     raise RuntimeError("Launch requested, but no browser window appeared within 10 seconds")
 
 
-def terminal_context():
+def capture_window_context():
     try:
         return {"active": json.loads(run(["hyprctl", "activewindow", "-j"])),
                 "clients": json.loads(run(["hyprctl", "clients", "-j"]))}
     except Exception:
         return None
+
+
+def window_target(context):
+    target = context.get("active", {}) if context else {}
+    if not target.get("mapped", True) or not re.fullmatch(r"0x[0-9a-fA-F]+", target.get("address", "")):
+        raise RuntimeError("No focused window was captured when recording started")
+    return dict(target)
+
+
+def move_other_screen(target):
+    target = window_target({"active": target})
+    clients = json.loads(run(["hyprctl", "clients", "-j"]))
+    current = next((c for c in clients if c.get("address") == target["address"]), None)
+    if current is None or any(current.get(k) != target.get(k) for k in ("pid", "class", "stableId")):
+        raise RuntimeError("That window closed or changed. No other window was moved.")
+    monitors = sorted((m for m in json.loads(run(["hyprctl", "monitors", "-j"]))
+                       if not m.get("disabled")), key=lambda m: m["id"])
+    source = next((i for i, m in enumerate(monitors) if m["id"] == current.get("monitor")), None)
+    if len(monitors) < 2 or source is None:
+        raise RuntimeError("No other connected screen is available")
+    destination = monitors[(source + 1) % len(monitors)]
+    workspace = destination.get("activeWorkspace", {}).get("id")
+    if type(workspace) is not int or workspace <= 0:
+        raise RuntimeError("The other screen has no usable active workspace")
+    address = target["address"]
+    run(["hyprctl", "dispatch", f'hl.dsp.window.move({{ window = "address:{address}", workspace = "{workspace}", follow = true }})'])
+    run(["hyprctl", "dispatch", f'hl.dsp.focus({{ window = "address:{address}" }})'])
+    moved = next((c for c in json.loads(run(["hyprctl", "clients", "-j"])) if c.get("address") == address), None)
+    if moved is None or moved.get("monitor") != destination["id"]:
+        raise RuntimeError("Could not confirm the window moved to the other screen")
+    return f"Moved window to {destination['name']}"
 
 
 def is_terminal(window):
