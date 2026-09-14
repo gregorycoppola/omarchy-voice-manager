@@ -50,7 +50,7 @@ class Expansion:
 SLOT = re.compile(r"<([a-z_]+)>")
 
 
-def compile_grammar(rules, vocabulary, schemas):
+def compile_grammar(rules, vocabulary, schemas, *, allow_ambiguous=False):
     """Validate and expand rules, rejecting conflicting phrase meanings."""
     for name, words in vocabulary.items():
         if not words or len({word.id for word in words}) != len(words):
@@ -95,7 +95,7 @@ def compile_grammar(rules, vocabulary, schemas):
                     if not phrase:
                         raise ValueError(f"Empty pattern in {rule.id}")
                     meaning = (intent, command)
-                    if phrase in phrases and phrases[phrase] != meaning:
+                    if not allow_ambiguous and phrase in phrases and phrases[phrase] != meaning:
                         raise ValueError(f"Conflicting phrase: {phrase}")
                     phrases[phrase] = meaning
                     expansions.append(Expansion(phrase, rule.id, pattern, tuple(sorted(ids.items())),

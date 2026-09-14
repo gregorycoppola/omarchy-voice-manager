@@ -60,6 +60,23 @@ with tempfile.TemporaryDirectory() as directory:
             app.forget_phrase(None, 'my mail')
             from intent_matching import IntentMatcher
             assert not IntentMatcher(path).aliases
+            from window_vocabulary import inject_windows
+            from unittest.mock import patch
+            context = {'clients': [{'class': 'foot', 'address': '0x123', 'pid': 123,
+                                     'stableId': 'test-window', 'title': 'Test task | demo'}]}
+            snapshot = inject_windows(context)
+            app.update_windows(snapshot, None)
+            app.stack.set_visible_child_name('windows')
+            assert len(app.windows_page.rows) == 1
+            with patch('explorer.live_windows', return_value=snapshot):
+                app.entry.set_text('focus demo terminal')
+                app.inspect()
+            assert app.last_result.intent.type == 'focus_window'
+            context['clients'][0]['title'] = 'Changed task | demo'
+            app.update_windows(inject_windows(context), None)
+            assert app.windows_page.rows[0].key.label == 'Changed task | demo'
+            app.update_windows(inject_windows(None), None)
+            assert not app.windows_page.rows
             assert 'gui' not in sys.modules
             assert 'os_actions' not in sys.modules
             assert 'keety' not in sys.modules
@@ -73,4 +90,4 @@ with tempfile.TemporaryDirectory() as directory:
     GLib.timeout_add(300, test)
     app.run(['explorer-smoke'])
     assert passed and not errors, errors
-    print('PASS: native catalog/parse inspection, recording history, settings, phrase removal, no runtime imports')
+    print('PASS: catalog/parse inspection, live window refresh, history, settings, phrase removal, no action imports')

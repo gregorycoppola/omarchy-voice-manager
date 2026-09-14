@@ -122,6 +122,8 @@ The native GTK explorer has these views:
   scores and rule evidence. Testing never executes actions or learns phrases.
 - **History:** saved recordings/transcripts, playback, copying, and transcription retry.
 - **Settings & phrases:** terminal-close preference and learned phrase removal.
+- **Live windows:** terminal names injected into `<window>`, their generated
+  commands, identities, and shared/ambiguous names; refreshed every two seconds.
 
 The explorer uses the same catalog and parser as voice commands, without loading
 the speech model or microphone. It reloads learned aliases for each inspection.
@@ -148,6 +150,28 @@ is distinct from an automatically learned alias, which maps one phrase to one
 concrete intent. Voice status now includes the parsed intent.
 
 ### Command behavior
+
+Named terminals are now a live vocabulary. Say **“focus keety,” “switch to the
+keety terminal,”** or **“focus the monitor replug bug.”** `WINDOW_RULES` defines
+`focus <window>`, `switch to <window>`, and `go to <window>`, with optional “the.”
+The rules expand across the terminal windows captured when recording starts.
+New/renamed/closed terminals are reflected on the next recording without
+restarting Keety. Explorer's command tester fetches a fresh list on each test.
+
+`window_vocabulary.py` extracts spoken forms from titles: task name, project
+name, combined title, and terminal/window qualifiers. Task/project titles also
+accept Codex qualifiers. It strips changing status prefixes and spinners; plain
+terminal titles containing a directory also contribute that directory's final
+name. This uses title conventions rather than reading terminal contents.
+
+Exact and fuzzy matches produce `focus_window(window=<captured identity>)`.
+Fuzzy matching checks both wording and the window name. Shared names remain
+ambiguous: use the task title if multiple terminals belong to the same project.
+A title can change after capture without changing the chosen target, but a
+closed/replaced window will not be substituted. Dynamic window matches are not
+saved as permanent aliases. This first live vocabulary covers terminal windows
+and focus commands; named-window close/move/maximize and custom nicknames are
+not included yet.
 
 **Command mode is permanent.**
 Hold Super + R throughout one allowed phrase, then release.

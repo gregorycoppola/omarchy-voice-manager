@@ -2,6 +2,11 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Inject live terminal names into reusable focus/switch/go-to grammar rules.
+  Task/project names and fuzzy variants resolve to captured window identities;
+  duplicate names remain ambiguous and closed/replaced windows are rejected.
+  Explorer adds a Live windows vocabulary view and live command previews.
+
 - Replace the everyday GTK voice window with a windowless runtime and an attached
   menu-bar popup. It shows microphone levels, recognized speech, and intent without
   joining the tiling layout or taking keyboard focus. Successful actions dismiss

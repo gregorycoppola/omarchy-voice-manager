@@ -22,6 +22,8 @@ from live_audio import read_growing_wav
 from os_actions import (capture_window_context, window_target, execute_command,
                         tile_open_windows, move_other_screen, maximize_current_window,
                         terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS)
+from os_actions import focus_named_window
+from window_vocabulary import inject_windows
 from push_to_talk import PushToTalk
 from recordings import new_recording, save_transcript
 from settings import Settings
@@ -206,15 +208,22 @@ class VoiceRuntime(Gio.Application):
         try:
             text, _ = save_transcript(self.model, path)
             matcher = IntentMatcher(self.data / 'aliases.json')
-            result = matcher.parse(text) if commands else None
+            windows = inject_windows(context) if commands else None
+            result = matcher.parse(text, windows.expansions) if commands else None
             GLib.idle_add(self.recognized, text, result)
             if not commands:
                 GLib.idle_add(self.complete, 'Ready', 'Transcript updated. No command was run.')
                 return
             command = result.command
             if not command:
-                GLib.idle_add(self.complete, 'Ready', 'Ambiguous command — no action taken.' if result.status == 'ambiguous'
+                choices = '; '.join(dict.fromkeys(c.label for c in result.candidates[:3]))
+                GLib.idle_add(self.complete, 'Ready', 'Ambiguous command — use a more specific name: ' + choices if result.status == 'ambiguous'
                               else 'Unrecognized command — no action taken.')
+                return
+            if result.intent.type == 'focus_window':
+                key = dict(result.intent.arguments)['window']
+                message = focus_named_window(windows.targets[key])
+                GLib.idle_add(self.complete, 'Ready', message)
                 return
             learn = result.method == 'fuzzy'
             target = None
@@ -237,7 +246,7 @@ class VoiceRuntime(Gio.Application):
 
     def recognized(self, text, result):
         self.state.update(transcript=text, intent=result.intent.to_dict() if result and result.intent else None,
-                          intent_label=INTENTS[result.command]['label'] if result and result.command else '')
+                          intent_label=result.selected.label if result and result.selected else '')
         self.publish()
 
     @staticmethod

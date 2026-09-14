@@ -7,12 +7,11 @@ import subprocess
 import time
 from browser_connection import connection
 
-from command_catalog import APPS, GRAMMAR, SITES
+from command_catalog import APPS, GRAMMAR, SITES, TERMINAL_CLASSES
 from intent_matching import normalize
 
 BROWSER_CLASSES = {"chromium", "google-chrome", "google-chrome-stable", "chrome"}
 MAIN_MONITOR = "DP-1"
-TERMINAL_CLASSES = {"foot", "footclient", "alacritty", "kitty", "org.wezfurlong.wezterm", "com.mitchellh.ghostty"}
 TERMINAL_CLOSE_INTENTS = {"close:terminal", "close:terminal_current"}
 
 
@@ -300,6 +299,19 @@ def close_terminal(target):
         raise RuntimeError("The terminal changed. No window was closed; try again.")
     run(["hyprctl", "dispatch", f'hl.dsp.window.close({{ window = "address:{target["address"]}" }})'])
     return "Asked the selected terminal to close. Respond to any confirmation it shows."
+
+
+def focus_named_window(target):
+    """Focus the captured terminal identity; a changing title is not identity."""
+    if not is_terminal(target) or not target.get('stableId') or not target.get('pid'):
+        raise ValueError('Invalid named window target')
+    clients = json.loads(run(['hyprctl', 'clients', '-j']))
+    current = next((c for c in clients if c.get('address') == target['address']), None)
+    if current is None or not is_terminal(current) or any(
+            current.get(key) != target.get(key) for key in ('pid', 'class', 'stableId')):
+        raise RuntimeError('That terminal closed or was replaced. Try the command again.')
+    focus(current)
+    return 'Focused ' + (target.get('voice_label') or 'terminal')
 
 
 def open_terminal():

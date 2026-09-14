@@ -4,6 +4,16 @@ import json
 
 from grammar_engine import Rule, Word, compile_grammar
 
+TERMINAL_CLASSES = {"foot", "footclient", "alacritty", "kitty", "org.wezfurlong.wezterm", "com.mitchellh.ghostty"}
+
+# Compiled against a fresh window vocabulary at recording start, not at import.
+WINDOW_RULES = (
+    Rule("focus_window", ("focus <window>", "focus the <window>",
+                          "switch to <window>", "switch to the <window>",
+                          "go to <window>", "go to the <window>"),
+         "focus_window", (("window", "$window"),), "focus-window:{window}", "Focus {window}"),
+)
+
 SITES = {
     "gmail": {"name": "Gmail", "url": "https://mail.google.com/", "host": "mail.google.com"},
     "github": {"name": "GitHub", "url": "https://github.com/", "host": "github.com"},

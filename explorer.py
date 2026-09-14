@@ -4,14 +4,16 @@ import os
 from pathlib import Path
 import sys
 import subprocess
+import threading
 
 import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gio, GLib, Gtk
 
-from command_catalog import EXPANSIONS, INTENTS, RULES, SCHEMAS, STRUCTURED_INTENTS, VOCABULARY
+from command_catalog import EXPANSIONS, INTENTS, RULES, SCHEMAS, STRUCTURED_INTENTS, VOCABULARY, WINDOW_RULES
 from intent_matching import IntentMatcher
 from settings import Settings
+from window_vocabulary import live_windows, inject_windows
 
 
 def label(text, style=None):
@@ -99,8 +101,8 @@ class CatalogPage(Gtk.Paned):
             self.list.select_row(visible[0] if visible else None)
 
 
-def render_rule(box, rule):
-    expansions = [e for e in EXPANSIONS if e.rule_id == rule.id]
+def render_rule(box, rule, available=EXPANSIONS):
+    expansions = [e for e in available if e.rule_id == rule.id]
     box.append(label(rule.id.replace('_', ' ').capitalize(), "title-1"))
     box.append(label(f"Scope: {rule.scope} · {len(expansions)} expansions · "
                      f"{len({e.intent for e in expansions})} meanings", "dim-label"))
@@ -154,6 +156,8 @@ class Explorer(Gtk.Application):
         self.window = None
         self.last_result = None
         self.player = None
+        self.window_snapshot = inject_windows(None)
+        self.windows_refreshing = False
         self.connect('shutdown', self.stop_playback)
 
     def do_activate(self):
@@ -168,8 +172,7 @@ class Explorer(Gtk.Application):
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         intro = column(spacing=6)
         intro.append(label("Explore the language", "title-1"))
-        intro.append(label(f"{len(RULES)} rules · {len(SCHEMAS)} intent types · "
-                           f"{len(STRUCTURED_INTENTS)} meanings · {len(EXPANSIONS)} expansions", "dim-label"))
+        intro.append(label(f"{len(RULES) + len(WINDOW_RULES)} rules · fixed vocabulary + live window names", "dim-label"))
         root.append(intro)
         self.stack = Gtk.Stack(vexpand=True, hexpand=True)
         switcher = Gtk.StackSwitcher(stack=self.stack, halign=Gtk.Align.CENTER)
@@ -177,8 +180,8 @@ class Explorer(Gtk.Application):
         root.append(self.stack)
         self.rules_page = CatalogPage([
             (rule.id.replace('_', ' ').capitalize(), rule.patterns[0], rule,
-             ' '.join(e.phrase for e in EXPANSIONS if e.rule_id == rule.id)) for rule in RULES
-        ], render_rule)
+             ' '.join(e.phrase for e in EXPANSIONS if e.rule_id == rule.id)) for rule in RULES + WINDOW_RULES
+        ], lambda box, rule: render_rule(box, rule, EXPANSIONS + self.window_snapshot.expansions))
         self.stack.add_titled(self.rules_page, "rules", "Grammar")
         self.vocabulary_page = CatalogPage([
             (word.label, f"<{name}>", (name, word), ' '.join(word.forms))
@@ -188,7 +191,7 @@ class Explorer(Gtk.Application):
         self.intents_page = CatalogPage([
             (name, f"{sum(i.type == name for i in STRUCTURED_INTENTS.values())} meanings", name,
              ' '.join(SCHEMAS[name])) for name in SCHEMAS
-        ], render_schema)
+        ] + [('focus_window', 'Live window binding', 'focus_window', 'window terminal codex')], self.render_intent_schema)
         self.stack.add_titled(self.intents_page, "intents", "Intents")
         playground = column()
         playground.append(label("Try a command", "title-1"))
@@ -206,6 +209,9 @@ class Explorer(Gtk.Application):
         self.result_box.append(label("Enter a phrase to inspect its meaning and matching evidence.", "dim-label"))
         playground.append(scroll(self.result_box))
         self.stack.add_titled(playground, "test", "Try a command")
+        self.windows_box = column(margin=0)
+        self.stack.add_titled(self.windows_box, 'windows', 'Live windows')
+        self.windows_box.append(label('Reading live terminal names…', 'dim-label'))
         self.history_box = column(margin=0)
         self.stack.add_titled(self.history_box, "history", "History")
         self.refresh_history()
@@ -215,6 +221,78 @@ class Explorer(Gtk.Application):
         self.window.set_child(root)
         self.window.set_focus(self.rules_page.search)
         self.window.present()
+        self.refresh_windows()
+        GLib.timeout_add_seconds(2, self.refresh_windows)
+
+    def refresh_windows(self):
+        if self.windows_refreshing:
+            return True
+        self.windows_refreshing = True
+        def read():
+            try:
+                GLib.idle_add(self.update_windows, live_windows(), None)
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+                GLib.idle_add(self.update_windows, inject_windows(None), str(exc))
+        threading.Thread(target=read, daemon=True).start()
+        return True
+
+    def update_windows(self, snapshot, error):
+        self.windows_refreshing = False
+        previous = self.window_snapshot
+        self.window_snapshot = snapshot
+        if previous.revision == snapshot.revision and hasattr(self, 'windows_page') and not error:
+            return
+        selected = self.windows_page.list.get_selected_row() if hasattr(self, 'windows_page') else None
+        selected_id = selected.key.id if selected else None
+        query = self.windows_page.search.get_text() if hasattr(self, 'windows_page') else ''
+        clear(self.windows_box)
+        note = column(margin=12)
+        note.append(label('Live <window> vocabulary', 'title-2'))
+        note.append(label(error or 'Names refresh every two seconds. Voice commands use the window list captured when recording starts.', 'dim-label'))
+        self.windows_box.append(note)
+        self.windows_page = CatalogPage([
+            (word.label, 'Terminal · ' + word.forms[0], word, ' '.join(word.forms)) for word in snapshot.words
+        ], self.render_live_window)
+        self.windows_box.append(self.windows_page)
+        self.windows_page.set_vexpand(True)
+        self.windows_page.search.set_text(query)
+        self.windows_page.filter_rows()
+        for row in self.windows_page.rows:
+            if row.key.id == selected_id and row.get_visible():
+                self.windows_page.list.select_row(row)
+        if not snapshot.words:
+            self.windows_page.details.append(label('No named terminal windows available.', 'dim-label'))
+        row = self.rules_page.list.get_selected_row()
+        if row and row.key in WINDOW_RULES:
+            self.rules_page.selected(self.rules_page.list, row)
+
+    def render_live_window(self, box, word):
+        target = self.window_snapshot.targets[word.id]
+        box.append(label(word.label, 'title-1'))
+        box.append(label(f"{target['class']} · Workspace {target.get('workspace', {}).get('name', '?')}", 'dim-label'))
+        box.append(label('Spoken names', 'title-3'))
+        box.append(label('\n'.join(word.forms)))
+        box.append(label('Grammar patterns', 'title-3'))
+        box.append(label('\n'.join(pattern for rule in WINDOW_RULES for pattern in rule.patterns), 'monospace'))
+        box.append(label('Generated phrases', 'title-3'))
+        expansions = [e for e in self.window_snapshot.expansions if ('window', word.id) in e.bindings]
+        box.append(label('\n'.join(e.phrase for e in expansions)))
+        if expansions:
+            box.append(label(json.dumps(expansions[0].intent.to_dict(), indent=2), 'monospace'))
+        duplicates = [name for name in word.forms if sum(name in other.forms for other in self.window_snapshot.words) > 1]
+        if duplicates:
+            box.append(label('Shared names — use a more specific title: ' + ', '.join(duplicates), 'dim-label'))
+
+    def render_intent_schema(self, box, name):
+        if name != 'focus_window':
+            render_schema(box, name)
+            return
+        box.append(label('focus_window', 'title-1'))
+        box.append(label('window: an identity from the captured live <window> vocabulary', 'monospace'))
+        box.append(label('The same window keeps its identity when its title changes. Closed or replaced windows cannot be targeted by an old match.', 'dim-label'))
+        for word in self.window_snapshot.words:
+            box.append(label(word.label, 'heading'))
+            box.append(label('focus_window(window=' + word.id + ')', 'monospace'))
 
     def stop_playback(self, *_):
         if self.player and self.player.poll() is None:
@@ -323,15 +401,23 @@ class Explorer(Gtk.Application):
     def inspect(self, *_):
         # Reload aliases on each request so the live voice app's new phrases appear.
         matcher = IntentMatcher(self.alias_path)
-        result = matcher.parse(self.entry.get_text())
+        window_error = None
+        try:
+            snapshot = live_windows()
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+            snapshot = inject_windows(None)
+            window_error = str(exc)
+        result = matcher.parse(self.entry.get_text(), snapshot.expansions)
         self.last_result = result
         clear(self.result_box)
         box = self.result_box
         if matcher.error:
             box.append(label(matcher.error, "error"))
+        if window_error:
+            box.append(label('Live windows unavailable: ' + window_error, 'dim-label'))
         box.append(label(result.status.capitalize(), "title-2"))
         if result.selected:
-            box.append(label(INTENTS[result.command]['label'], "title-3"))
+            box.append(label(result.selected.label, "title-3"))
             box.append(label(json.dumps(result.intent.to_dict(), indent=2), "monospace"))
             box.append(label(f"Match: {result.method} · Heard as: {result.selected.phrase}", "dim-label"))
         if result.reason:

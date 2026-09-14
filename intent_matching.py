@@ -17,14 +17,16 @@ class Candidate:
     phrase: str
     score: float
     source: str
+    label: str = ""
+    evidence: tuple = ()
 
     def to_dict(self):
-        return {"intent": self.intent.to_dict(), "matched_phrase": self.phrase,
+        return {"intent": self.intent.to_dict(), "label": self.label, "matched_phrase": self.phrase,
                 "similarity": round(self.score, 4), "source": self.source,
-                "rules": list(dict.fromkeys(e.rule_id for e in EXPANSIONS
+                "rules": list(dict.fromkeys(e.rule_id for e in self.evidence
                                              if e.phrase == self.phrase and e.intent == self.intent)),
                 "expansions": [{"rule": e.rule_id, "pattern": e.pattern, "bindings": dict(e.bindings)}
-                               for e in EXPANSIONS if e.phrase == self.phrase and e.intent == self.intent]}
+                               for e in self.evidence if e.phrase == self.phrase and e.intent == self.intent]}
 
 
 @dataclass(frozen=True)
@@ -79,25 +81,48 @@ class IntentMatcher:
         result = self.parse(text)
         return result.command if result.method == "fuzzy" else None
 
-    def parse(self, text):
-        """Inspect a command without executing it or learning from the preview."""
+    def parse(self, text, extra_expansions=()):
+        """Parse one snapshot, retaining competing dynamic slot bindings."""
         phrase = normalize(text)
-        exact = self.exact(text)
+        expansions = EXPANSIONS + tuple(extra_expansions)
+        entries = []
+        for wording, command in (self.aliases | GRAMMAR).items():
+            intent = STRUCTURED_INTENTS[command]
+            evidence = tuple(e for e in expansions if e.phrase == wording and e.intent == intent)
+            entries.append(Candidate(command, intent, wording, 1.0,
+                "grammar" if wording in GRAMMAR else "alias", INTENTS.get(command, {}).get('label', command), evidence))
+        for expansion in extra_expansions:
+            entries.append(Candidate(expansion.command, expansion.intent, expansion.phrase, 1.0,
+                                     'window', expansion.label, (expansion,)))
+        exact = {candidate.intent: candidate for candidate in entries if candidate.phrase == phrase}
+        if len(exact) > 1:
+            return ParseResult(text, 'ambiguous', candidates=tuple(exact.values()),
+                               reason='This phrase names more than one meaning. Use a more specific window title.')
         if exact:
-            source = "grammar" if phrase in GRAMMAR else "alias"
-            candidate = Candidate(exact, STRUCTURED_INTENTS[exact], phrase, 1.0, source)
-            return ParseResult(text, "matched", "exact" if source == "grammar" else "alias",
-                               candidate, (candidate,))
-        # Avoid proposing actions for explicit negation or long dictation.
+            candidate = next(iter(exact.values()))
+            method = 'alias' if candidate.source == 'alias' else 'exact'
+            return ParseResult(text, 'matched', method, candidate, (candidate,))
+        # Keep the existing guards, allowing longer named-window titles when the
+        # entire command matched exactly above.
         if not 2 <= len(phrase.split()) <= 8 or set(phrase.replace("’", "'").split()) & {"no", "not", "never", "don't", "dont", "cancel"}:
             return ParseResult(text, "unrecognized", reason="Fuzzy matching skipped: negation or phrase length.")
         scores = {}
-        for wording, command in (self.aliases | GRAMMAR).items():
-            intent = STRUCTURED_INTENTS[command]
-            score = SequenceMatcher(None, phrase, wording).ratio()
-            if intent not in scores or score > scores[intent].score:
-                scores[intent] = Candidate(command, intent, wording, score,
-                                          "grammar" if wording in GRAMMAR else "alias")
+        for candidate in entries:
+            score = SequenceMatcher(None, phrase, candidate.phrase).ratio()
+            if candidate.source == 'window':
+                # Score both the frame and slot, including fuzzy frames. An
+                # alternate article/frame must not bypass the name check.
+                prefix = candidate.evidence[0].pattern.split('<window>')[0]
+                count = len(prefix.split())
+                tokens = phrase.split()
+                heard_prefix = ' '.join(tokens[:count])
+                heard_name = ' '.join(tokens[count:])
+                name = candidate.phrase[len(prefix):]
+                score = min(score, SequenceMatcher(None, heard_prefix, prefix.strip()).ratio(),
+                            SequenceMatcher(None, heard_name, name).ratio())
+            if candidate.intent not in scores or score > scores[candidate.intent].score:
+                scores[candidate.intent] = Candidate(candidate.command, candidate.intent,
+                    candidate.phrase, score, candidate.source, candidate.label, candidate.evidence)
         ranked = tuple(sorted(scores.values(), key=lambda c: c.score, reverse=True))
         if not ranked or ranked[0].score < .72:
             return ParseResult(text, "unrecognized", candidates=ranked[:5], reason="No candidate reaches 0.72 similarity.")
