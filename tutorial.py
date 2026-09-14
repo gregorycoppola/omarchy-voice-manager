@@ -18,7 +18,7 @@ LESSONS = (
       ('tile all browsers', 'Tile browser windows and hide everything else.'),
       ('tile all apps', 'Tile non-terminal apps and hide terminals.'),
       ('tile all windows', 'Bring hidden windows back and tile everything together.')),
-     '“Apps” means everything except terminals. Say “tile all apps” exactly. Other workspaces are left alone.'),
+     '“Apps” means everything except terminals. Say “tile all apps” or “tile the apps” exactly. Other workspaces are left alone.'),
     ('Hide and restore', 'Put windows away without closing them',
      'Hide commands put windows out of view while their programs keep running. They do not run the tiling step '
      'or restore windows you already hid.',

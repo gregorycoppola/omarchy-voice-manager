@@ -134,7 +134,7 @@ RULES = (
          (("workspace", "current"), ("category", "apps")), "apps:hide", "Hide all non-terminal apps"),
     Rule("hide_current_window", ("hide this window",), "hide_window",
          (("selection", "current"),), "window:hide", "Hide this window"),
-    Rule("tile_apps", ("tile all apps",),
+    Rule("tile_apps", ("tile all apps", "tile the apps"),
          "tile_apps", (("workspace", "current"),), "apps:tile",
          "Tile non-terminal apps and minimize terminals"),
 )

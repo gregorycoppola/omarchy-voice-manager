@@ -127,7 +127,7 @@ class TileWorkflowTests(unittest.TestCase):
     def test_category_phrases_route(self):
         for category in ('browsers', 'apps'):
             command = category + ':tile'
-            phrases = ('tile all apps',) if category == 'apps' else ('tile all browsers', 'tile all the browsers', 'tile browsers')
+            phrases = ('tile all apps', 'tile the apps') if category == 'apps' else ('tile all browsers', 'tile all the browsers', 'tile browsers')
             for phrase in phrases:
                 self.assertEqual(parse_command(phrase), command)
             context = {'active': WINDOW, 'clients': [WINDOW]}
@@ -144,7 +144,8 @@ class TileWorkflowTests(unittest.TestCase):
             matcher = IntentMatcher(path)
             self.assertIsNone(matcher.error)
             self.assertEqual(matcher.parse('Tile all apps!').command, 'apps:tile')
-            for phrase in ('tile all the apps', 'tile apps', 'tile the apps', 'tile all applications',
+            self.assertEqual(matcher.parse('Tile the apps!').command, 'apps:tile')
+            for phrase in ('tile all the apps', 'tile apps', 'tile all applications',
                            'tile applications', 'tile all that', 'tell the app', 'pile all apps',
                            'tile o apps', 'tile all terminals', 'tile all the terminals', 'tile l terminal'):
                 self.assertNotEqual(matcher.exact(phrase), 'apps:tile', phrase)

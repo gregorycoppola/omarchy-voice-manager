@@ -513,7 +513,7 @@ Skipper and other workspaces are excluded. If no matching windows remain, nothin
 is hidden. Hidden windows stay open in a dedicated special workspace associated
 with their original workspace. The `tile_terminals`, `tile_browsers`, and
 `tile_apps` intents are available in the command catalog and Explorer.
-The apps command accepts only **“tile all apps”** (ignoring case and punctuation);
+The apps command accepts only **“tile all apps”** or **“tile the apps”** (ignoring case and punctuation);
 fuzzy matching and learned aliases are disabled for that intent.
 
 **“Hide all terminals”** hides visible terminals; **“hide all apps”** hides

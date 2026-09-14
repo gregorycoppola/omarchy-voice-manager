@@ -93,7 +93,8 @@ BarWidget {
         anchors.fill: parent
         bar: root.bar
         text: root.barText
-        active: root.opened || root.working || root.state === "Confirm"
+        active: root.opened || root.working || root.state === "Confirm" || root.state === "Error"
+        activeColor: root.state === "Recording" ? "#a6da95" : root.state === "Error" ? Color.urgent : foreground
         tooltipText: "Hold Super + R to talk · " + root.state
         onPressed: function(b) { root.togglePanel() }
     }
