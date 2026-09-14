@@ -349,8 +349,12 @@ class Keety(Gtk.Application):
             GLib.idle_add(self.finished, path, message)
             return
         if commands:
-            command = self.matcher.exact(text)
-            candidate = command or self.matcher.suggest(text)
+            interpretation = self.matcher.parse(text)
+            command = interpretation.command if interpretation.method in {"exact", "alias"} else None
+            candidate = interpretation.command
+            if interpretation.intent:
+                arguments = ", ".join(f"{key}={value}" for key, value in interpretation.intent.arguments)
+                message += f" · Intent: {interpretation.intent.type}({arguments})"
             if candidate and not command:
                 message += f" · Matched: {INTENTS[candidate]['label']}"
                 try:

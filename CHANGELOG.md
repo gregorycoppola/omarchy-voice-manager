@@ -2,6 +2,15 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Add a separate native **Keety Explorer** app for browsing grammar rules,
+  vocabulary, structured intent schemas/instances, and testing command parses
+  with fuzzy candidate evidence. The explorer does not run actions or load speech.
+- Generate accepted phrases from shared grammar patterns and typed vocabulary.
+  Voice parsing now returns structured intents while retaining existing action
+  IDs, learned aliases, and all previous phrases. Browser patterns apply to all
+  Chrome/Chromium name variants; different slot values remain distinct fuzzy
+  candidates.
+
 - Keety now starts in the background with an Omarchy top-bar status button.
   Click for history/settings; closing the window hides it without stopping
   push-to-talk. An explicit Quit button stops Keety.

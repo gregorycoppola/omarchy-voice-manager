@@ -3,6 +3,9 @@
 Current release: **0.1.0**. This checkout includes **0.2.0-dev** voice-command
 work. See [the changelog](CHANGELOG.md).
 
+Planned direction: [structured intents, grammars, contexts, and separate voice
+and management apps](docs/intents-and-app-split-plan.md).
+
 A local speech-to-text app in development for an M2 MacBook Pro running ARM
 Linux / Omarchy. It has a native GTK4 window with hold-to-talk recording, a live microphone
 amplitude display, saved recordings,
@@ -99,6 +102,46 @@ substantially more memory.
 
 ## Deterministic voice commands (0.2.0-dev)
 
+### Grammar and intent explorer
+
+Open **Keety Explorer** from the application launcher, run `keety-explorer`,
+or run `./launch-explorer.sh` from this checkout. `python install_desktop.py`
+installs both Keety and the separate explorer launcher.
+
+The native GTK explorer has four views:
+
+- **Grammar:** reusable patterns, their bindings, and every generated phrase.
+- **Vocabulary:** canonical slot values, spoken forms, and rules using them.
+- **Intents:** typed argument schemas and concrete structured meanings.
+- **Try a command:** exact, learned-alias, and fuzzy parsing with candidate
+  scores and rule evidence. Testing never executes actions or learns phrases.
+
+The explorer uses the same catalog and parser as voice commands, without loading
+the speech model or microphone. It reloads learned aliases for each inspection.
+This first version is a read-only explorer: edit grammar definitions in
+`command_catalog.py` and restart the apps to load changes. Context scopes,
+grammar editing in the GUI, and paired intent history are later work in
+[the plan](docs/intents-and-app-split-plan.md).
+
+`RULES`, `VOCABULARY`, and `SCHEMAS` are the authored language definitions.
+For example, `open <destination>` and `bring up <destination>` expand across
+Gmail/GitHub and their spoken forms. Both emit a structured meaning such as
+`{"type": "open_destination", "arguments": {"destination": "gmail"}}` (serialized
+with `schema_version: 1`). Adding a pattern applies to every value of its
+non-terminal; adding a vocabulary value applies to every rule using that slot.
+Shared browser patterns now also accept “launch Chromium,” “focus Google
+Chrome,” and the other combinations of existing browser names and patterns.
+
+`grammar_engine.py` validates bindings and allowed argument values and rejects
+conflicting phrases. It derives `EXPANSIONS`, `GRAMMAR`, and the compatibility
+`INTENTS` view. Existing execution IDs and saved aliases remain supported.
+Fuzzy candidates are grouped by the complete meaning, including destination and
+targeting arguments, so different destinations still compete. A shared pattern
+is distinct from an automatically learned alias, which maps one phrase to one
+concrete intent. Voice status now includes the parsed intent.
+
+### Command behavior
+
 **Command mode is permanent.**
 Hold Super + R throughout one allowed phrase, then release.
 The transcript and audio save first; a matching phrase then runs its fixed action.
@@ -109,9 +152,9 @@ there is no “Did you mean” prompt. Learned phrases can be removed with **For
 Unrelated or ambiguous speech shows “Unrecognized command.” Audio and transcripts
 remain saved for review. Retrying a saved transcript never executes or learns a command.
 
-Stable intent IDs, display labels, and built-in phrases live in `INTENTS` in
+Stable intent IDs, display labels, and built-in phrases are generated into `INTENTS` in
 [command_catalog.py](command_catalog.py), beside the fixed website URL registry.
-`GRAMMAR` is derived from those phrases. Expand **Accepted commands** for built-in
+`GRAMMAR` is generated from the same rules. Expand **Accepted commands** for built-in
 phrases, or **Learned phrases** to review your aliases and **Forget** a mistake.
 Aliases persist in `~/.local/share/keety/aliases.json` (respecting `XDG_DATA_HOME`),
 using a versioned JSON format and private file permissions. They stay outside Git.
@@ -214,8 +257,10 @@ Keety keeps a connection open after the first website command; an extension cont
 tab supports that connection. Closing Keety stops its connection process.
 A connection failure reports an error rather than opening duplicate fallback tabs.
 
-To add a website, add its fixed HTTPS URL and exact hostname to `SITES`, then
-add its `site:<key>` intent and accepted phrases to `INTENTS`. No wildcard domain command
+To add a website, add its fixed HTTPS URL, display name, and exact hostname to
+`SITES`. The destination vocabulary and schema include it automatically; all
+destination rules generate its phrases and `site:<key>` execution ID. Add any
+extra spoken forms in `DESTINATION_FORMS`. No wildcard domain command
 is enabled. Tab-selection rules live in `browser_tabs.js`, using the documented
 [Chrome tabs](https://developer.chrome.com/docs/extensions/reference/api/tabs)
 and [windows](https://developer.chrome.com/docs/extensions/reference/api/windows) APIs.
@@ -267,6 +312,7 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 .venv/bin/python -m unittest discover -s tests -v
 node --test tests/test_browser_tabs.cjs
 .venv/bin/python tests/learning_smoke.py
+.venv/bin/python tests/explorer_smoke.py
 .venv/bin/python tests/bar_mode_smoke.py
 .venv/bin/python tests/terminal_confirmation_smoke.py
 .venv/bin/python tests/terminal_activity_smoke.py

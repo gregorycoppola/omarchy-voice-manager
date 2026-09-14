@@ -1,15 +1,54 @@
 """Exact intent aliases and confidence-filtered fuzzy matching; no extra model."""
 from difflib import SequenceMatcher
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
 import tempfile
 
-from command_catalog import GRAMMAR, INTENTS
+from command_catalog import GRAMMAR, INTENTS, EXPANSIONS, STRUCTURED_INTENTS, GRAMMAR_REVISION
+from grammar_engine import Intent, normalize
 
 
-def normalize(text):
-    return " ".join(text.lower().split()).strip(" .!?")
+@dataclass(frozen=True)
+class Candidate:
+    command: str
+    intent: Intent
+    phrase: str
+    score: float
+    source: str
+
+    def to_dict(self):
+        return {"intent": self.intent.to_dict(), "matched_phrase": self.phrase,
+                "similarity": round(self.score, 4), "source": self.source,
+                "rules": list(dict.fromkeys(e.rule_id for e in EXPANSIONS
+                                             if e.phrase == self.phrase and e.intent == self.intent)),
+                "expansions": [{"rule": e.rule_id, "pattern": e.pattern, "bindings": dict(e.bindings)}
+                               for e in EXPANSIONS if e.phrase == self.phrase and e.intent == self.intent]}
+
+
+@dataclass(frozen=True)
+class ParseResult:
+    text: str
+    status: str
+    method: str | None = None
+    selected: Candidate | None = None
+    candidates: tuple[Candidate, ...] = ()
+    reason: str | None = None
+
+    @property
+    def intent(self):
+        return self.selected.intent if self.selected else None
+
+    @property
+    def command(self):
+        return self.selected.command if self.selected else None
+
+    def to_dict(self):
+        return {"text": self.text, "normalized": normalize(self.text), "status": self.status,
+                "grammar_revision": GRAMMAR_REVISION,
+                "method": self.method, "intent": self.intent.to_dict() if self.intent else None,
+                "reason": self.reason, "candidates": [c.to_dict() for c in self.candidates]}
 
 
 class IntentMatcher:
@@ -37,22 +76,34 @@ class IntentMatcher:
         return GRAMMAR.get(phrase) or self.aliases.get(phrase)
 
     def suggest(self, text):
+        result = self.parse(text)
+        return result.command if result.method == "fuzzy" else None
+
+    def parse(self, text):
+        """Inspect a command without executing it or learning from the preview."""
         phrase = normalize(text)
-        if not phrase or self.exact(phrase):
-            return None
+        exact = self.exact(text)
+        if exact:
+            source = "grammar" if phrase in GRAMMAR else "alias"
+            candidate = Candidate(exact, STRUCTURED_INTENTS[exact], phrase, 1.0, source)
+            return ParseResult(text, "matched", "exact" if source == "grammar" else "alias",
+                               candidate, (candidate,))
         # Avoid proposing actions for explicit negation or long dictation.
         if not 2 <= len(phrase.split()) <= 8 or set(phrase.replace("’", "'").split()) & {"no", "not", "never", "don't", "dont", "cancel"}:
-            return None
+            return ParseResult(text, "unrecognized", reason="Fuzzy matching skipped: negation or phrase length.")
         scores = {}
-        for candidate, intent in (GRAMMAR | self.aliases).items():
-            score = SequenceMatcher(None, phrase, candidate).ratio()
-            scores[intent] = max(scores.get(intent, 0), score)
-        ranked = sorted(scores, key=lambda intent: scores[intent], reverse=True)
-        best = ranked[0]
-        # Different phrases for the same intent are grouped before checking ambiguity.
-        if scores[best] < .72 or (len(ranked) > 1 and scores[best] - scores[ranked[1]] < .06):
-            return None
-        return best
+        for wording, command in (self.aliases | GRAMMAR).items():
+            intent = STRUCTURED_INTENTS[command]
+            score = SequenceMatcher(None, phrase, wording).ratio()
+            if intent not in scores or score > scores[intent].score:
+                scores[intent] = Candidate(command, intent, wording, score,
+                                          "grammar" if wording in GRAMMAR else "alias")
+        ranked = tuple(sorted(scores.values(), key=lambda c: c.score, reverse=True))
+        if not ranked or ranked[0].score < .72:
+            return ParseResult(text, "unrecognized", candidates=ranked[:5], reason="No candidate reaches 0.72 similarity.")
+        if len(ranked) > 1 and ranked[0].score - ranked[1].score < .06:
+            return ParseResult(text, "ambiguous", candidates=ranked[:5], reason="Competing meanings are less than 0.06 apart.")
+        return ParseResult(text, "matched", "fuzzy", ranked[0], ranked[:5])
 
     def _save(self, aliases):
         if self.error:
