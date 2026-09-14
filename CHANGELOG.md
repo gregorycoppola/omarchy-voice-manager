@@ -5,7 +5,10 @@
 - Rename the app and bar plugin to Skipper. Add a root Omarchy plugin manifest,
   portable widget defaults, explicit runtime setup/removal, and single-monitor
   support. Runtime dependencies and speech-model downloads live outside plugin
-  checkouts. Marketplace submission awaits license selection and owner review.
+  checkouts. Marketplace submission awaits owner review.
+
+- License Skipper's original code under GPL-3.0-only and document the separate
+  licenses of the bundled test protocol and downloaded speech model.
 
 - Add exact-only hide commands for terminals, non-terminal apps, and the current
   window. Restore the original workspace when tiling from a revealed hidden window.

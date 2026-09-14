@@ -17,7 +17,8 @@ SKIPPER_MAIN_MONITOR can select a particular output.
 
 Remaining before marketplace submission:
 
-- Choose and add a license.
+- GPL-3.0-only is recorded in LICENSE, README, and both plugin manifests;
+  third-party notices preserve the separate model and test-protocol licenses.
 - Review the owner statements and completed submission in
   [marketplace-submission.md](marketplace-submission.md).
 - Push the completed release and obtain explicit approval to file the submission.

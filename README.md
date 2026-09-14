@@ -1,5 +1,11 @@
 # Skipper
 
+Copyright (C) 2026 Greg Coppola. Skipper's original code is licensed under
+**GNU GPL version 3 only** (`GPL-3.0-only`). You may redistribute and modify it
+under those terms. It is provided without warranty, including any implied
+warranty of merchantability or fitness for a particular purpose. See [LICENSE](LICENSE)
+and [third-party notices](THIRD_PARTY_NOTICES.md).
+
 Current release: **0.1.0**. This checkout includes **0.2.0-dev** voice-command
 work. See [the changelog](CHANGELOG.md).
 

@@ -17,5 +17,6 @@
     "category": "Utilities",
     "allowMultiple": false,
     "defaultSection": "right"
-  }
+  },
+  "license": "GPL-3.0-only"
 }
