@@ -418,6 +418,20 @@ Run the command again after opening or closing windows to rearrange the grid.
 Keety is excluded. Other workspaces stay as they are; repeating the command keeps
 the windows tiled.
 
+Say **“tile all the terminals”**, **“tile all terminals”**, or **“tile terminals”**
+to tile only terminals on that workspace and hide the other apps. **“Tile all
+browsers”** shows browser windows and hides everything else; **“tile all apps”**
+shows all non-terminal apps and hides terminals. **“Tile all windows”** brings
+the hidden windows back and tiles everything together. These commands include
+windows hidden by an earlier tiling command on the same workspace, so you can
+switch between terminals, browsers, apps, and everything repeatedly.
+Keety and other workspaces are excluded. If no matching windows remain, nothing
+is hidden. Hidden windows stay open in a dedicated special workspace associated
+with their original workspace. The `tile_terminals`, `tile_browsers`, and
+`tile_apps` intents are available in the command catalog and Explorer.
+The apps command accepts only **“tile all apps”** (ignoring case and punctuation);
+fuzzy matching and learned aliases are disabled for that intent.
+
 ### Menu-bar runtime
 
 `launch.sh` starts `runtime.py`, a windowless `Gio.Application` retaining the

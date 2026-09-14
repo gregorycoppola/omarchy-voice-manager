@@ -17,7 +17,7 @@ from keety import load_model
 from recordings import new_recording, save_transcript
 from live_audio import read_growing_wav
 from level_meter import LevelMeter, pcm_level
-from os_actions import execute_command, capture_window_context, window_target, tile_open_windows, move_other_screen, maximize_current_window, terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS
+from os_actions import execute_command, capture_window_context, window_target, tile_open_windows, tile_terminals, tile_browsers, tile_apps, move_other_screen, maximize_current_window, terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS
 from settings import Settings
 from terminal_activity import terminal_has_jobs
 from command_catalog import GRAMMAR, INTENTS
@@ -364,9 +364,11 @@ class Keety(Gtk.Application):
                 except (OSError, ValueError) as exc:
                     message += f" · Could not remember phrase: {exc}"
                 command = candidate
-            if candidate == "windows:tile":
+            if candidate in {"windows:tile", "terminals:tile", "browsers:tile", "apps:tile"}:
                 try:
-                    message += " · " + tile_open_windows(context)
+                    action = {"windows:tile": tile_open_windows, "terminals:tile": tile_terminals,
+                              "browsers:tile": tile_browsers, "apps:tile": tile_apps}[candidate]
+                    message += " · " + action(context)
                 except Exception as exc:
                     message += f" · {exc}"
                 GLib.idle_add(self.finished, path, message)

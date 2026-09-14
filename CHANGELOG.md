@@ -2,6 +2,13 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Add terminal, browser, and non-terminal app tiling views. Restore hidden
+  windows with “tile all windows”; restrict “tile all apps” to exact matching.
+
+- Launch desktop apps without capturing inherited output pipes. Confirm success
+  from the app window appearing, preventing false launcher timeouts after Chrome,
+  Discord, or X has already opened.
+
 - Accept “focus on <window>” and “focus on the <window>” across live terminal names.
 
 - Arrange the destination workspace after moving a window: maximize a lone

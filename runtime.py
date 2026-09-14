@@ -20,7 +20,7 @@ from intent_matching import IntentMatcher
 from keety import load_model
 from live_audio import read_growing_wav
 from os_actions import (capture_window_context, window_target, execute_command,
-                        tile_open_windows, move_other_screen, maximize_current_window,
+                        tile_open_windows, tile_terminals, tile_browsers, tile_apps, move_other_screen, maximize_current_window,
                         terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS)
 from os_actions import focus_named_window, move_app_other_screen
 from window_vocabulary import inject_windows
@@ -259,6 +259,8 @@ class VoiceRuntime(Gio.Application):
             return move_app_other_screen(command.split(':', 1)[1], context)
         if command == 'windows:tile':
             return tile_open_windows(context)
+        if command in {'terminals:tile', 'browsers:tile', 'apps:tile'}:
+            return {'terminals:tile': tile_terminals, 'browsers:tile': tile_browsers, 'apps:tile': tile_apps}[command](context)
         if command in ('move:other_screen', 'maximize:current_window'):
             action = move_other_screen if command == 'move:other_screen' else maximize_current_window
             return action(window_target(context))

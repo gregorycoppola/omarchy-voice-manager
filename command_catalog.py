@@ -6,6 +6,9 @@ from grammar_engine import Rule, Word, compile_grammar
 
 TERMINAL_CLASSES = {"foot", "footclient", "alacritty", "kitty", "org.wezfurlong.wezterm", "com.mitchellh.ghostty"}
 
+# These commands accept authored phrases only, never fuzzy or learned wording.
+EXACT_ONLY_COMMANDS = {"apps:tile"}
+
 # Compiled against a fresh window vocabulary at recording start, not at import.
 MOVE_PATTERNS = tuple(f'move {article}<window> to {other}{screen}'
                       for article in ('', 'the ')
@@ -75,6 +78,9 @@ SCHEMAS = {
                          "selection": ("most_recent",), "monitor": ("other",)},
     "show_windows": {},
     "tile_windows": {"workspace": ("current",)},
+    "tile_terminals": {"workspace": ("current",)},
+    "tile_browsers": {"workspace": ("current",)},
+    "tile_apps": {"workspace": ("current",)},
 }
 
 RULES = (
@@ -112,6 +118,17 @@ RULES = (
          "show_windows", (), "windows", "Show all open windows"),
     Rule("tile_windows", ("tile open windows", "tile all open windows", "tile windows", "tile all windows"),
          "tile_windows", (("workspace", "current"),), "windows:tile", "Tile open windows"),
+    Rule("tile_terminals", ("tile all the terminals", "tile all terminals", "tile terminals",
+                            "tile the terminals", "tile open terminals", "tile all open terminals"),
+         "tile_terminals", (("workspace", "current"),), "terminals:tile",
+         "Tile terminals and minimize other windows"),
+    Rule("tile_browsers", ("tile all browsers", "tile all the browsers", "tile browsers",
+                           "tile the browsers", "tile open browsers", "tile all browser windows"),
+         "tile_browsers", (("workspace", "current"),), "browsers:tile",
+         "Tile browsers and minimize other windows"),
+    Rule("tile_apps", ("tile all apps",),
+         "tile_apps", (("workspace", "current"),), "apps:tile",
+         "Tile non-terminal apps and minimize terminals"),
 )
 
 EXPANSIONS = compile_grammar(RULES, VOCABULARY, SCHEMAS)

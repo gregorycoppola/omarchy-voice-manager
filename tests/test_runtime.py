@@ -42,6 +42,21 @@ class RuntimeTests(unittest.TestCase):
             self.transcribe(text, commands).assert_not_called()
             self.assertFalse((self.data / 'aliases.json').exists())
 
+    def test_failed_action_releases_busy_and_accepts_the_next_recording(self):
+        with patch('runtime.save_transcript', return_value=('open chrome', {})), \
+             patch.object(self.app, 'execute', side_effect=RuntimeError('Launcher failed')):
+            self.app.transcribe(self.data / 'test.wav', {}, True)
+        self.assertEqual(self.app.state['state'], 'Error')
+        self.assertFalse(self.app.busy)
+        self.assertIsNone(self.app.recorder)
+        with patch('runtime.capture_window_context', return_value={}), \
+             patch.object(self.app, 'focused_monitor', return_value='DP-1'), \
+             patch('runtime.subprocess.Popen'), patch('runtime.threading.Thread'), \
+             patch('runtime.GLib.timeout_add'):
+            self.app.press()
+        self.assertEqual(self.app.state['state'], 'Recording')
+        self.assertTrue(self.app.busy)
+
     def test_confirmation_retains_target_and_rejects_stale_approval(self):
         target = {'class': 'foot', 'address': '0x123', 'pid': 1, 'title': 'Busy terminal'}
         context = {'active': target}

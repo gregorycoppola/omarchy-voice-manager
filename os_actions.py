@@ -4,6 +4,7 @@ import math
 from pathlib import Path
 import re
 import subprocess
+import threading
 import time
 from browser_connection import connection
 
@@ -31,6 +32,16 @@ def run(argv):
     if result.returncode:
         raise RuntimeError((result.stderr or result.stdout).strip() or f"{argv[0]} failed")
     return result.stdout
+
+
+def launch_desktop(desktop):
+    # A launched app can inherit gio's output handles and keep them open for
+    # its entire lifetime. Never wait for captured output to reach EOF here.
+    process = subprocess.Popen(['gio', 'launch', str(desktop)],
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, start_new_session=True)
+    threading.Thread(target=process.wait, daemon=True).start()
+    return process
 
 
 def focus(window):
@@ -102,13 +113,15 @@ def execute_command(command):
     desktop = next((p for p in candidates if p.is_file()), None)
     if not desktop:
         raise RuntimeError("No installed Chrome/Chromium application launcher found")
-    run(["gio", "launch", str(desktop)])
+    launcher = launch_desktop(desktop)
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         window = browser_window(json.loads(run(["hyprctl", "clients", "-j"])))
         if window:
             present_browser(window, fullscreen)
             return "Opened the browser maximized" if fullscreen else "Opened the browser"
+        if launcher.poll() not in (None, 0):
+            raise RuntimeError('Chrome launcher failed before a browser window appeared')
         time.sleep(0.15)
     raise RuntimeError("Launch requested, but no browser window appeared within 10 seconds")
 
@@ -151,28 +164,61 @@ def equal_grid(count, monitor):
             for i in range(count)]
 
 
-def tile_open_windows(context):
+def tile_terminals(context):
+    return tile_open_windows(context, category='terminals')
+
+
+def tile_browsers(context):
+    return tile_open_windows(context, category='browsers')
+
+
+def tile_apps(context):
+    return tile_open_windows(context, category='apps')
+
+
+def tile_open_windows(context, *, category='windows'):
+    selectors = {
+        'windows': lambda c: True,
+        'terminals': is_terminal,
+        'browsers': lambda c: c.get('class', '').lower() in BROWSER_CLASSES | {'firefox', 'org.mozilla.firefox', 'brave-browser', 'brave', 'vivaldi-stable', 'microsoft-edge'},
+        'apps': lambda c: not is_terminal(c),
+    }
+    if category not in selectors:
+        raise ValueError('Unsupported tiling category')
+    selected = selectors[category]
     workspace = (context or {}).get("active", {}).get("workspace", {}).get("id")
     if type(workspace) is not int:
         raise RuntimeError("Could not identify the workspace when recording started")
+    if category != 'windows' and workspace <= 0:
+        raise RuntimeError("Tile app categories from a regular workspace, not a special workspace")
+    hidden_workspace = f'special:keety-tile-{workspace}'
+
+    def belongs(window):
+        return (window.get('workspace', {}).get('id') == workspace
+                or window.get('workspace', {}).get('name') == hidden_workspace)
+
     targets = [c for c in context.get("clients", [])
-               if c.get("workspace", {}).get("id") == workspace
+               if belongs(c)
                and c.get("mapped", True)
                and c.get("class") != "io.github.gregorycoppola.Keety"
                and c.get("initialClass") != "io.github.gregorycoppola.Keety"
                and re.fullmatch(r"0x[0-9a-fA-F]+", c.get("address", ""))]
+    others = [c for c in targets if not selected(c)
+              and c.get('workspace', {}).get('id') == workspace]
+    targets = [c for c in targets if selected(c)]
+    empty_message = f"No open {category} to tile on this workspace"
     if not targets:
-        return "No open windows to tile on this workspace"
+        return empty_message
     clients = json.loads(run(["hyprctl", "clients", "-j"]))
     live = {c["address"]: c for c in clients}
     valid = [t for t in targets if t["address"] in live
              and live[t["address"]].get("mapped", True)
-             and live[t["address"]].get("workspace", {}).get("id") == workspace
+             and belongs(live[t["address"]])
              and all(live[t["address"]].get(k) == t.get(k) for k in ("pid", "class", "stableId"))]
     skipped = len(targets) - len(valid)
     if not valid:
-        return f"No open windows to tile on this workspace · Skipped {skipped} closed, moved, or changed windows"
-    monitor_id = live[valid[0]["address"]].get("monitor")
+        return f"{empty_message} · Skipped {skipped} closed, moved, or changed windows"
+    monitor_id = context["active"].get("monitor", live[valid[0]["address"]].get("monitor"))
     monitor = next((m for m in json.loads(run(["hyprctl", "monitors", "-j"]))
                     if m["id"] == monitor_id and not m.get("disabled")), None)
     if monitor is None:
@@ -186,10 +232,12 @@ def tile_open_windows(context):
         current = next((c for c in json.loads(run(["hyprctl", "clients", "-j"]))
                         if c.get("address") == address), None)
         if (current is None or not current.get("mapped", True)
-                or current.get("workspace", {}).get("id") != workspace
+                or not belongs(current)
                 or any(current.get(k) != target.get(k) for k in ("pid", "class", "stableId"))):
             skipped += 1
             continue
+        if current.get('workspace', {}).get('name') == hidden_workspace:
+            run(['hyprctl', 'dispatch', f'hl.dsp.window.move({{ workspace = "{workspace}", follow = false, window = "address:{address}" }})'])
         run(["hyprctl", "dispatch", 'hl.dsp.window.fullscreen_state({ internal = 0, client = 0, '
              f'action = "set", window = "address:{address}" }})'])
         if len(current.get("grouped", [])) > 1:
@@ -200,7 +248,9 @@ def tile_open_windows(context):
         for attempt in range(10):
             updated = next((c for c in json.loads(run(["hyprctl", "clients", "-j"]))
                             if c.get("address") == address), None)
-            if (updated is not None and updated.get("fullscreen") == 0
+            if (updated is not None and updated.get("workspace", {}).get("id") == workspace
+                    and all(updated.get(k) == target.get(k) for k in ("pid", "class", "stableId"))
+                    and updated.get("fullscreen") == 0
                     and updated.get("fullscreenClient") == 0
                     and all(abs(a - b) <= 2 for a, b in zip(updated.get("at", []) + updated.get("size", []), (x, y, width, height)))
                     and len(updated.get("at", []) + updated.get("size", [])) == 4):
@@ -209,7 +259,34 @@ def tile_open_windows(context):
         else:
             raise RuntimeError(f"Tiled {tiled} windows; could not confirm an equal tile for another window (it may have a minimum size)")
         tiled += 1
-    message = f"Tiled {tiled} windows" if tiled else "No open windows to tile on this workspace"
+    message = f"Tiled {tiled} {category}" if tiled else empty_message
+    if category != 'windows' and tiled:
+        minimized = 0
+        for target in others:
+            address = target['address']
+            current = next((c for c in json.loads(run(['hyprctl', 'clients', '-j']))
+                            if c.get('address') == address), None)
+            if (current is None or not current.get('mapped', True)
+                    or current.get('workspace', {}).get('id') != workspace
+                    or any(current.get(k) != target.get(k) for k in ('pid', 'class', 'stableId'))):
+                skipped += 1
+                continue
+            if len(current.get('grouped', [])) > 1:
+                run(['hyprctl', 'dispatch', f'hl.dsp.window.move({{ out_of_group = true, window = "address:{address}" }})'])
+            run(['hyprctl', 'dispatch', f'hl.dsp.window.move({{ workspace = "{hidden_workspace}", follow = false, window = "address:{address}" }})'])
+            updated = next((c for c in json.loads(run(['hyprctl', 'clients', '-j']))
+                            if c.get('address') == address), None)
+            if (updated is None or updated.get('workspace', {}).get('name') != hidden_workspace
+                    or any(updated.get(k) != target.get(k) for k in ('pid', 'class', 'stableId'))):
+                raise RuntimeError(f'{message}; could not confirm minimization of another window')
+            minimized += 1
+        # Hide the holding workspace if a window picker made it visible.
+        if minimized:
+            for screen in json.loads(run(['hyprctl', 'monitors', '-j'])):
+                if screen.get('specialWorkspace', {}).get('name') == hidden_workspace:
+                    run(['hyprctl', 'dispatch', f'hl.dsp.workspace.toggle_special("keety-tile-{workspace}")'])
+                    break
+        message += f' · Minimized {minimized} other windows (tile all windows to restore)'
     if skipped:
         message += f" · Skipped {skipped} closed, moved, or changed windows"
     return message
@@ -377,13 +454,15 @@ def present_app(key):
     desktop = next((p for p in candidates if p.is_file()), None)
     if desktop is None:
         raise RuntimeError(f"No installed {name} application launcher found")
-    run(["gio", "launch", str(desktop)])
+    launcher = launch_desktop(desktop)
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
         window = app_window(key, json.loads(run(["hyprctl", "clients", "-j"])))
         if window:
             present_browser(window, fullscreen=True)
             return f"Opened {name}"
+        if launcher.poll() not in (None, 0):
+            raise RuntimeError(f'{name} launcher failed before an app window appeared')
         time.sleep(0.15)
     raise RuntimeError(f"Launch requested, but no {name} window appeared within 15 seconds")
 

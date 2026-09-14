@@ -26,11 +26,12 @@ class CommandTests(unittest.TestCase):
 
     def test_discord_launches_installed_desktop_then_focuses(self):
         window = {"class": "discord", "address": "0x123"}
-        with patch("os_actions.run", side_effect=[MONITORS, "[]", "ok", json.dumps([window])]) as run, \
+        with patch("os_actions.run", side_effect=[MONITORS, "[]", json.dumps([window])]) as run, \
+             patch("os_actions.launch_desktop") as launch, \
              patch("os_actions.Path.is_file", return_value=True), \
              patch("os_actions.present_browser") as present:
             self.assertEqual(execute_command("discord"), "Opened Discord")
-            self.assertEqual(run.call_args_list[2].args[0][:2], ["gio", "launch"])
+            self.assertTrue(str(launch.call_args.args[0]).lower().endswith('/discord.desktop'))
             present.assert_called_once_with(window, fullscreen=True)
 
     def test_discord_ignores_browser_title_and_requires_main_monitor(self):
@@ -60,10 +61,11 @@ class CommandTests(unittest.TestCase):
 
     def test_x_launches_installed_desktop(self):
         window = {"class": "chrome-x.com__-Default", "address": "0x2"}
-        with patch("os_actions.run", side_effect=[MONITORS, "[]", "ok", json.dumps([window])]) as run, \
+        with patch("os_actions.run", side_effect=[MONITORS, "[]", json.dumps([window])]) as run, \
+             patch("os_actions.launch_desktop") as launch, \
              patch("os_actions.Path.is_file", return_value=True), patch("os_actions.present_browser"):
             self.assertEqual(execute_command("x"), "Opened X (Twitter)")
-            self.assertTrue(run.call_args_list[2].args[0][2].endswith("/X.desktop"))
+            self.assertTrue(str(launch.call_args.args[0]).endswith('/X.desktop'))
 
     def test_close_targets_one_recent_app_window_without_focus_or_launch(self):
         clients = [{"class": "chromium", "title": "Discord", "address": "0x1", "focusHistoryID": 0},

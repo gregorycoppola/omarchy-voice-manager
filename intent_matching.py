@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 import tempfile
 
-from command_catalog import GRAMMAR, INTENTS, EXPANSIONS, STRUCTURED_INTENTS, GRAMMAR_REVISION
+from command_catalog import GRAMMAR, INTENTS, EXPANSIONS, STRUCTURED_INTENTS, GRAMMAR_REVISION, EXACT_ONLY_COMMANDS
 from grammar_engine import Intent, normalize
 
 
@@ -68,7 +68,8 @@ class IntentMatcher:
                     raise ValueError("Invalid phrase or intent in alias file")
                 if phrase in GRAMMAR and GRAMMAR[phrase] != intent:
                     raise ValueError("Alias conflicts with a built-in command")
-            self.aliases = data["aliases"]
+            self.aliases = {phrase: command for phrase, command in data["aliases"].items()
+                            if command not in EXACT_ONLY_COMMANDS}
         except FileNotFoundError:
             pass
         except (OSError, ValueError) as exc:
@@ -114,6 +115,8 @@ class IntentMatcher:
         # recent terminal just because its name is absent or poorly recognized.
         named_close = re.fullmatch(r'close (?:the )?.+ (?:terminal|window|codex)', phrase)
         for candidate in entries:
+            if candidate.command in EXACT_ONLY_COMMANDS:
+                continue
             if named_close and candidate.intent.type != 'close_named_window':
                 continue
             if named_move and candidate.intent.type not in ('move_named_window', 'move_application'):
@@ -173,6 +176,8 @@ class IntentMatcher:
         phrase = normalize(text)
         if not phrase or intent not in INTENTS:
             raise ValueError("Unknown intent or empty phrase")
+        if intent in EXACT_ONLY_COMMANDS:
+            raise ValueError("This command accepts only its built-in phrase")
         existing = self.exact(phrase)
         if existing and existing != intent:
             raise ValueError("Phrase already belongs to another intent")

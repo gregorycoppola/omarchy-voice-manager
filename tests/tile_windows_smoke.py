@@ -4,11 +4,12 @@ from pathlib import Path
 import sys
 import threading
 import time
+from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import gi
 gi.require_version('Gtk','4.0')
 from gi.repository import GLib, Gtk
-from os_actions import run, tile_open_windows
+from os_actions import run, tile_open_windows, tile_terminals, tile_apps
 
 APP_ID = 'io.github.gregorycoppola.Keety.TileTest'
 app = Gtk.Application(application_id=APP_ID)
@@ -49,11 +50,33 @@ def test():
             for b in tiled[i+1:]:
                 assert (a['at'][0]+a['size'][0] <= b['at'][0] or b['at'][0]+b['size'][0] <= a['at'][0]
                         or a['at'][1]+a['size'][1] <= b['at'][1] or b['at'][1]+b['size'][1] <= a['at'][1]), tiled
+        # Classify two disposable windows as terminals to exercise real
+        # compositor hide/restore dispatches without touching real terminals.
+        terminal_addresses = {c['address'] for c in tiled[:2]}
+        with patch('os_actions.is_terminal', side_effect=lambda c: c['address'] in terminal_addresses):
+            for action, count in [(tile_terminals, 2), (tile_apps, 2), (tile_open_windows, 4)]:
+                targets = [c for c in json.loads(run(['hyprctl', 'clients', '-j'])) if c['class'] == APP_ID]
+                active = next(c for c in targets if c['workspace']['id'] == workspace)
+                print(f'Checking {action.__name__}', flush=True)
+                action({'active': active, 'clients': targets + keety})
+                time.sleep(.3)
+                targets = [c for c in json.loads(run(['hyprctl', 'clients', '-j'])) if c['class'] == APP_ID]
+                visible = [c for c in targets if c['workspace']['id'] == workspace]
+                assert len(visible) == count, targets
+                assert all(abs(c['size'][axis] - visible[0]['size'][axis]) <= 2
+                           for c in visible for axis in (0, 1)), visible
+                if action == tile_terminals:
+                    assert {c['address'] for c in visible} == terminal_addresses
+                elif action == tile_apps:
+                    assert not terminal_addresses.intersection(c['address'] for c in visible)
+                for c in targets:
+                    assert c['workspace']['id'] == workspace or c['workspace']['name'] == f'special:keety-tile-{workspace}'
+        after = json.loads(run(['hyprctl', 'clients', '-j']))
         for before in keety:
             current = next(c for c in after if c['address']==before['address'])
             for key in ['at','size','floating','fullscreen','fullscreenClient','workspace','monitor']:
                 assert current[key] == before[key], (key,before,current)
-        result.append('PASS: four disposable windows in equal 2x2 grid without overlap, repeated command, Keety unchanged')
+        result.append('PASS: four disposable windows in equal 2x2 grid without overlap, repeated command, terminal/app views and restore-all, Keety unchanged')
     except Exception as exc:
         result.append(exc)
     finally:
