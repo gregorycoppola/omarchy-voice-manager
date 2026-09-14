@@ -4,7 +4,8 @@ This is a very primitive voice-control prototype for Linux / Omarchy. I'm using
 it because it actually saves me some time, and I'm sharing it because it already
 works well enough to be useful to me. Think of it as a rough v0: better than
 having no voice controls, with plenty of room for a more sophisticated design.
-Recognition and matching still get things wrong. This is an experiment I'm
+One could imagine it being way fancier, but this is just a practical start.
+This is an experiment I'm
 using and improving, not a polished or thoroughly tested product.
 
 ## How it actually works
