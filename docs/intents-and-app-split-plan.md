@@ -50,8 +50,9 @@ continues to work across those combinations.
   operation and a top-bar status button. Clicking opens the large controls UI.
 
 Build on these foundations and preserve existing action semantics during the
-first migration. In particular, “open chrome” and “bring up chrome” currently
-have different presentation behavior; a common grammar must not erase that.
+first migration. The original “open chrome”/“bring up chrome” presentation distinction was
+subsequently unified at the user’s request: all opened apps are maximized and
+explicitly raised above the grid. Existing execution IDs remain compatible.
 
 ## Language model
 

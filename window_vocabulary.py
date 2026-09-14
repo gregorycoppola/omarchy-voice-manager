@@ -28,6 +28,12 @@ def window_names(title):
     if len(pieces) == 1 and '/' in pieces[0]:
         names.append(spoken(pieces[0].rstrip('/').rsplit('/', 1)[-1]))
     forms = []
+    # Spoken task prefixes remain competing names when several windows share
+    # them. Require a window noun for these short forms.
+    task_tokens = spoken(pieces[0]).split()
+    for count in range(1, len(task_tokens)):
+        prefix = ' '.join(task_tokens[:count])
+        forms.extend(f'{prefix} {noun}' for noun in ('terminal', 'window', 'codex'))
     for name in dict.fromkeys(names):
         if not name or len(name) > 180:
             continue
@@ -67,7 +73,9 @@ def inject_windows(context):
         words.append(Word(key, label, forms))
     # Identical project names are deliberately retained as competing meanings.
     expansions = compile_grammar(WINDOW_RULES, {'window': tuple(words)},
-        {'focus_window': {'window': tuple(targets)}}, allow_ambiguous=True) if words else ()
+        {rule.intent_type: {name: tuple(targets) if value == '$window' else (value,)
+                           for name, value in rule.arguments}
+         for rule in WINDOW_RULES}, allow_ambiguous=True) if words else ()
     revision = hashlib.sha256(json.dumps([(w.id, w.forms) for w in words]).encode()).hexdigest()[:16]
     return WindowVocabulary(tuple(words), expansions, targets, revision)
 

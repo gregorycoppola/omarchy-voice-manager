@@ -22,7 +22,7 @@ from live_audio import read_growing_wav
 from os_actions import (capture_window_context, window_target, execute_command,
                         tile_open_windows, move_other_screen, maximize_current_window,
                         terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS)
-from os_actions import focus_named_window
+from os_actions import focus_named_window, move_app_other_screen
 from window_vocabulary import inject_windows
 from push_to_talk import PushToTalk
 from recordings import new_recording, save_transcript
@@ -220,15 +220,18 @@ class VoiceRuntime(Gio.Application):
                 GLib.idle_add(self.complete, 'Ready', 'Ambiguous command — use a more specific name: ' + choices if result.status == 'ambiguous'
                               else 'Unrecognized command — no action taken.')
                 return
-            if result.intent.type == 'focus_window':
+            if result.intent.type in ('focus_window', 'move_named_window'):
                 key = dict(result.intent.arguments)['window']
-                message = focus_named_window(windows.targets[key])
+                action = focus_named_window if result.intent.type == 'focus_window' else move_other_screen
+                message = action(windows.targets[key])
                 GLib.idle_add(self.complete, 'Ready', message)
                 return
-            learn = result.method == 'fuzzy'
-            target = None
-            if command in TERMINAL_CLOSE_INTENTS:
-                target = terminal_close_target(command, context)
+            named_close = result.intent.type == 'close_named_window'
+            learn = result.method == 'fuzzy' and not named_close
+            target = windows.targets[dict(result.intent.arguments)['window']] if named_close else None
+            if named_close or command in TERMINAL_CLOSE_INTENTS:
+                if not named_close:
+                    target = terminal_close_target(command, context)
                 settings = Settings(self.data / 'settings.json')
                 if settings.confirm_terminal_close and terminal_has_jobs(target) is not False:
                     GLib.idle_add(self.offer_confirmation, command, target, text, learn)
@@ -251,6 +254,8 @@ class VoiceRuntime(Gio.Application):
 
     @staticmethod
     def execute(command, context=None, target=None):
+        if command.startswith('move-app:'):
+            return move_app_other_screen(command.split(':', 1)[1], context)
         if command == 'windows:tile':
             return tile_open_windows(context)
         if command in ('move:other_screen', 'maximize:current_window'):

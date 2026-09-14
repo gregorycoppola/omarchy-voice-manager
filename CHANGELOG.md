@@ -2,6 +2,25 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Add “move <window/app> to the other screen/monitor” for live terminal names
+  and Chrome, Discord, X/Twitter. Support short task prefixes such as “explain
+  terminal.” Preserve captured identity, reject duplicate/unknown names, and
+  score fuzzy slot names separately from surrounding words.
+
+- Add shared “focus” and “switch to” patterns for Discord and X/Twitter,
+  reusing the existing app window and maximizing it at the front, or launching
+  it when closed, consistently with Chrome. Named terminal focus also explicitly
+  raises the selected window above overlapping windows, preserving its size.
+
+- Unify open/bring-up and maximize presentation: float, maximize, explicitly
+  raise, then focus the selected window. This applies to browsers, web apps,
+  and new terminals, preventing windows from opening behind the floating grid.
+
+- Add `close <window>` using the live terminal vocabulary, including fuzzy task
+  names such as “close the patch monitor terminal.” Preserve running-program
+  confirmations and captured-window identity; reject unknown/ambiguous names
+  without falling back to the most recent terminal or learning ephemeral aliases.
+
 - Inject live terminal names into reusable focus/switch/go-to grammar rules.
   Task/project names and fuzzy variants resolve to captured window identities;
   duplicate names remain ambiguous and closed/replaced windows are rejected.

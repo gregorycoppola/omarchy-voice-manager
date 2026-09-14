@@ -7,11 +7,20 @@ from grammar_engine import Rule, Word, compile_grammar
 TERMINAL_CLASSES = {"foot", "footclient", "alacritty", "kitty", "org.wezfurlong.wezterm", "com.mitchellh.ghostty"}
 
 # Compiled against a fresh window vocabulary at recording start, not at import.
+MOVE_PATTERNS = tuple(f'move {article}<window> to {other}{screen}'
+                      for article in ('', 'the ')
+                      for other in ('other ', 'the other ') for screen in ('screen', 'monitor'))
+
 WINDOW_RULES = (
     Rule("focus_window", ("focus <window>", "focus the <window>",
                           "switch to <window>", "switch to the <window>",
                           "go to <window>", "go to the <window>"),
          "focus_window", (("window", "$window"),), "focus-window:{window}", "Focus {window}"),
+    Rule("close_named_window", ("close <window>", "close the <window>"),
+         "close_named_window", (("window", "$window"),), "close-window:{window}", "Close {window}"),
+    Rule("move_named_window", MOVE_PATTERNS, "move_named_window",
+         (("window", "$window"), ("monitor", "other")),
+         "move-window:{window}", "Move {window} to the other screen"),
 )
 
 SITES = {
@@ -58,6 +67,8 @@ SCHEMAS = {
                         "selection": ("most_recent", "current"),
                         "monitor": ("main", "current")},
     "move_window": {"selection": ("current",), "monitor": ("other",)},
+    "move_application": {"application": ("browser", "discord", "x"),
+                         "selection": ("most_recent",), "monitor": ("other",)},
     "show_windows": {},
     "tile_windows": {"workspace": ("current",)},
 }
@@ -66,15 +77,18 @@ RULES = (
     Rule("open_destination", ("open <destination>", "bring up <destination>"),
          "open_destination", (("destination", "$destination"),), "site:{destination}", "Open {destination}"),
     Rule("open_browser", ("open <browser>", "launch <browser>", "focus <browser>", "switch to <browser>"),
-         "open_application", (("application", "$browser"), ("presentation", "normal")), "browser", "Open Chrome"),
+         "open_application", (("application", "$browser"), ("presentation", "maximized")), "browser", "Open Chrome"),
     Rule("present_browser", ("bring up <browser>",), "open_application",
          (("application", "$browser"), ("presentation", "maximized")),
          "browser_fullscreen", "Bring up Chrome with tabs visible"),
-    Rule("open_app", ("open <app>", "bring up <app>"), "open_application",
-         (("application", "$app"), ("presentation", "fullscreen")), "{app}", "Open {app}"),
+    Rule("open_app", ("open <app>", "bring up <app>", "focus <app>", "switch to <app>"), "open_application",
+         (("application", "$app"), ("presentation", "maximized")), "{app}", "Open {app}"),
     Rule("close_app", ("close <window_app>",), "close_window",
          (("application", "$window_app"), ("selection", "most_recent")),
          "close:{window_app}", "Close {window_app} window"),
+    Rule("move_app", tuple(p.replace('<window>', '<window_app>') for p in MOVE_PATTERNS),
+         "move_application", (("application", "$window_app"), ("selection", "most_recent"), ("monitor", "other")),
+         "move-app:{window_app}", "Move {window_app} to the other screen"),
     Rule("maximize_app", ("maximize <window_app>",), "maximize_window",
          (("application", "$window_app"), ("selection", "most_recent"), ("monitor", "main")),
          "maximize:{window_app}", "Maximize {window_app} window"),

@@ -84,8 +84,10 @@ class WindowVocabularyTests(unittest.TestCase):
     def test_target_revalidated_before_focus_and_title_changes_are_allowed(self):
         target = self.windows.targets[self.windows.words[0].id]
         changed_title = terminal(title='Different status and title')
-        with patch('os_actions.run', return_value=json.dumps([changed_title])), patch('os_actions.focus') as focus:
+        with patch('os_actions.run', return_value=json.dumps([changed_title])) as run, patch('os_actions.focus') as focus:
             focus_named_window(target)
+            self.assertEqual(run.call_args_list[1].args[0], ['hyprctl', 'dispatch',
+                f'hl.dsp.window.alter_zorder({{ mode = "top", window = "address:{target["address"]}" }})'])
             focus.assert_called_once_with(changed_title)
         for clients in ([], [terminal(stable='replacement')], [terminal(pid=999)]):
             with patch('os_actions.run', return_value=json.dumps(clients)), patch('os_actions.focus') as focus:
@@ -110,3 +112,70 @@ class WindowVocabularyTests(unittest.TestCase):
     def test_plain_terminal_path_is_a_spoken_name(self):
         _, forms = window_names('greg@machine: ~/Projects/keety')
         self.assertIn('keety terminal', forms)
+
+    def test_close_uses_same_names_including_shortened_title(self):
+        for phrase in ('close the patch monitor terminal', 'close patch monitor replug bug',
+                       'close projects', 'close the projects codex'):
+            result = self.matcher.parse(phrase, self.windows.expansions)
+            self.assertEqual(result.intent.type, 'close_named_window')
+            key = dict(result.intent.arguments)['window']
+            self.assertEqual(self.windows.targets[key]['stableId'], 'b')
+
+    def test_unknown_or_duplicate_close_names_do_not_fall_back_to_recent_terminal(self):
+        for expansions in (self.windows.expansions, ()):
+            result = self.matcher.parse('close the nonexistent terminal', expansions)
+            self.assertIsNone(result.command)
+        windows = inject_windows({'clients': [terminal(), terminal('b', 'Fix audio | keety', '0x2', 20)]})
+        result = self.matcher.parse('close the keety terminal', windows.expansions)
+        self.assertEqual(result.status, 'ambiguous')
+        self.assertIsNone(result.command)
+        self.assertEqual(self.matcher.parse('close terminal', windows.expansions).command, 'close:terminal')
+
+    def test_named_close_confirmation_preserves_target_and_never_learns(self):
+        app = VoiceRuntime(self.data, self.data / 'status.json')
+        app.model = object()
+        with patch('runtime.save_transcript', return_value=('close the patch monitor terminal', {})), \
+             patch('runtime.terminal_has_jobs', return_value=True), \
+             patch('runtime.terminal_close_target') as recent, \
+             patch('runtime.close_terminal') as close, \
+             patch('runtime.GLib.idle_add', side_effect=lambda fn,*args: fn(*args)):
+            app.transcribe(self.data / 'test.wav', self.context, True)
+            self.assertEqual(app.state['state'], 'Confirm')
+            pending = app.pending
+            self.assertEqual(pending[2]['stableId'], 'b')
+            self.assertFalse(pending[4])
+            close.assert_not_called()
+            recent.assert_not_called()
+            with patch('runtime.threading.Thread'):
+                app.confirm(pending[0])
+            close.return_value = 'Closed selected terminal'
+            app.run_confirmed(pending)
+            close.assert_called_once_with(pending[2])
+        self.assertFalse((self.data / 'aliases.json').exists())
+
+    def test_named_close_idle_and_disabled_warning_use_captured_target(self):
+        from settings import Settings
+        for confirm, jobs in ((True, False), (False, True)):
+            Settings(self.data / 'settings.json').set_confirm_terminal_close(confirm)
+            app = VoiceRuntime(self.data, self.data / 'status.json')
+            app.model = object()
+            with patch('runtime.save_transcript', return_value=('close the patch monitor terminal', {})), \
+                 patch('runtime.terminal_has_jobs', return_value=jobs), \
+                 patch('runtime.close_terminal', return_value='Closed') as close, \
+                 patch('runtime.GLib.idle_add', side_effect=lambda fn,*args: fn(*args)):
+                app.transcribe(self.data / 'test.wav', self.context, True)
+                self.assertEqual(close.call_args.args[0]['stableId'], 'b')
+                self.assertIsNone(app.pending)
+                self.assertEqual(app.state['state'], 'Ready')
+            self.assertFalse((self.data / 'aliases.json').exists())
+
+    def test_replaced_named_target_is_rejected_after_approval(self):
+        app = VoiceRuntime(self.data, self.data / 'status.json')
+        target = self.windows.targets[self.windows.words[1].id]
+        pending = ('token', 'close-window:' + self.windows.words[1].id, target, 'close projects', False)
+        replacement = terminal('replacement', 'Same title', '0x2', 20)
+        with patch('os_actions.run', return_value=json.dumps([replacement])) as run, \
+             patch('runtime.GLib.idle_add', side_effect=lambda fn,*args: fn(*args)):
+            app.run_confirmed(pending)
+        run.assert_called_once_with(['hyprctl', 'clients', '-j'])
+        self.assertEqual(app.state['state'], 'Error')

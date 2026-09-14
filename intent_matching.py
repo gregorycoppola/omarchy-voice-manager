@@ -3,6 +3,7 @@ from difflib import SequenceMatcher
 from dataclasses import dataclass
 import json
 import os
+import re
 from pathlib import Path
 import tempfile
 
@@ -104,22 +105,42 @@ class IntentMatcher:
             return ParseResult(text, 'matched', method, candidate, (candidate,))
         # Keep the existing guards, allowing longer named-window titles when the
         # entire command matched exactly above.
-        if not 2 <= len(phrase.split()) <= 8 or set(phrase.replace("’", "'").split()) & {"no", "not", "never", "don't", "dont", "cancel"}:
+        move_match = re.fullmatch(r'move (.+) to (?:the )?other \w+', phrase)
+        named_move = move_match and move_match[1] not in ('window', 'the window', 'this window')
+        if not 2 <= len(phrase.split()) <= (16 if named_move else 8) or set(phrase.replace("’", "'").split()) & {"no", "not", "never", "don't", "dont", "cancel"}:
             return ParseResult(text, "unrecognized", reason="Fuzzy matching skipped: negation or phrase length.")
         scores = {}
+        # A named terminal request must never degrade into closing the most
+        # recent terminal just because its name is absent or poorly recognized.
+        named_close = re.fullmatch(r'close (?:the )?.+ (?:terminal|window|codex)', phrase)
         for candidate in entries:
+            if named_close and candidate.intent.type != 'close_named_window':
+                continue
+            if named_move and candidate.intent.type not in ('move_named_window', 'move_application'):
+                continue
             score = SequenceMatcher(None, phrase, candidate.phrase).ratio()
-            if candidate.source == 'window':
+            if candidate.source == 'window' or candidate.intent.type == 'move_application':
+                if not candidate.evidence:
+                    continue
                 # Score both the frame and slot, including fuzzy frames. An
                 # alternate article/frame must not bypass the name check.
-                prefix = candidate.evidence[0].pattern.split('<window>')[0]
+                slot = '<window>' if candidate.source == 'window' else '<window_app>'
+                prefix, suffix = candidate.evidence[0].pattern.split(slot)
                 count = len(prefix.split())
                 tokens = phrase.split()
                 heard_prefix = ' '.join(tokens[:count])
-                heard_name = ' '.join(tokens[count:])
-                name = candidate.phrase[len(prefix):]
+                end = len(tokens) - len(suffix.split()) if suffix else len(tokens)
+                heard_name = ' '.join(tokens[count:end])
+                name = candidate.phrase[len(prefix):len(candidate.phrase) - len(suffix) if suffix else None]
                 score = min(score, SequenceMatcher(None, heard_prefix, prefix.strip()).ratio(),
                             SequenceMatcher(None, heard_name, name).ratio())
+                if suffix:
+                    score = min(score, SequenceMatcher(None, ' '.join(tokens[end:]), suffix.strip()).ratio())
+                if candidate.source == 'window':
+                    # Shared window nouns must not make an unrelated short
+                    # title look like a strong name match.
+                    core = lambda value: re.sub(r'\s+(terminal|window|codex)$', '', value)
+                    score = min(score, SequenceMatcher(None, core(heard_name), core(name)).ratio())
             if candidate.intent not in scores or score > scores[candidate.intent].score:
                 scores[candidate.intent] = Candidate(candidate.command, candidate.intent,
                     candidate.phrase, score, candidate.source, candidate.label, candidate.evidence)

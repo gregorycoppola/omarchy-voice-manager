@@ -44,18 +44,10 @@ def focus(window):
 
 
 def present_browser(window, fullscreen):
+    # Retain the legacy argument for existing callers/aliases. All opening
+    # paths now share the same maximized, explicitly raised presentation.
     move_to_main_screen(window)
-    focus(window)
-    normal_browser = browser_window([window]) is not None
-    if fullscreen or (normal_browser and (window.get("fullscreen", 0) >= 2 or window.get("fullscreenClient", 0) >= 2)):
-        # Normal browsers keep their tabs/address bar; standalone apps can fill the screen.
-        state = 1 if normal_browser else 2
-        address = window["address"]
-        run(["hyprctl", "dispatch", f'hl.dsp.window.fullscreen_state({{ internal = {state}, client = {state}, '
-             f'action = "set", window = "address:{address}" }})'])
-        active = json.loads(run(["hyprctl", "activewindow", "-j"]))
-        if active.get("address") != address or active.get("fullscreen") != state or active.get("fullscreenClient") != state:
-            raise RuntimeError("Window focused, but its display mode was not confirmed")
+    maximize_foreground(window)
 
 
 def main_monitor(monitors):
@@ -223,22 +215,30 @@ def tile_open_windows(context):
     return message
 
 
-def maximize_current_window(target):
-    target = window_target({"active": target or {}})
-    clients = json.loads(run(["hyprctl", "clients", "-j"]))
-    current = next((c for c in clients if c.get("address") == target["address"]), None)
-    if current is None or any(current.get(k) != target.get(k) for k in ("pid", "class", "stableId")):
-        raise RuntimeError("That window closed or changed. No other window was maximized.")
-    address = target["address"]
+def maximize_foreground(target):
+    target = window_target({'active': target or {}})
+    clients = json.loads(run(['hyprctl', 'clients', '-j']))
+    current = next((c for c in clients if c.get('address') == target['address']), None)
+    if current is None or any(current.get(k) != target.get(k) for k in ('pid', 'class', 'stableId')):
+        raise RuntimeError('That window closed or changed. No other window was maximized.')
+    address = current['address']
+    # Join the floating layer before maximizing: Keety's grid consists of
+    # floating windows that can otherwise cover even a focused tiled window.
+    run(['hyprctl', 'dispatch', f'hl.dsp.window.fullscreen_state({{ internal = 0, client = 0, action = "set", window = "address:{address}" }})'])
+    run(['hyprctl', 'dispatch', f'hl.dsp.window.float({{ action = "on", window = "address:{address}" }})'])
+    run(['hyprctl', 'dispatch', f'hl.dsp.window.fullscreen_state({{ internal = 1, client = 1, action = "set", window = "address:{address}" }})'])
+    run(['hyprctl', 'dispatch', f'hl.dsp.window.alter_zorder({{ mode = "top", window = "address:{address}" }})'])
     focus(current)
-    run(["hyprctl", "dispatch", 'hl.dsp.window.fullscreen_state({ internal = 1, client = 1, '
-         f'action = "set", window = "address:{address}" }})'])
-    maximized = next((c for c in json.loads(run(["hyprctl", "clients", "-j"]))
-                      if c.get("address") == address), None)
-    if (maximized is None or maximized.get("fullscreen") != 1
-            or maximized.get("fullscreenClient") != 1 or maximized.get("monitor") != current.get("monitor")):
-        raise RuntimeError("Could not confirm the window was maximized on its current screen")
-    return "Maximized this window"
+    active = json.loads(run(['hyprctl', 'activewindow', '-j']))
+    if (active.get('address') != address or active.get('fullscreen') != 1
+            or active.get('fullscreenClient') != 1 or not active.get('floating')
+            or active.get('monitor') != current.get('monitor')):
+        raise RuntimeError('Could not confirm the window was maximized at the front')
+
+
+def maximize_current_window(target):
+    maximize_foreground(target)
+    return 'Maximized this window'
 
 
 def move_other_screen(target):
@@ -303,13 +303,16 @@ def close_terminal(target):
 
 def focus_named_window(target):
     """Focus the captured terminal identity; a changing title is not identity."""
-    if not is_terminal(target) or not target.get('stableId') or not target.get('pid'):
+    if (not is_terminal(target) or not target.get('stableId') or not target.get('pid')
+            or not re.fullmatch(r'0x[0-9a-fA-F]+', target.get('address', ''))):
         raise ValueError('Invalid named window target')
     clients = json.loads(run(['hyprctl', 'clients', '-j']))
     current = next((c for c in clients if c.get('address') == target['address']), None)
     if current is None or not is_terminal(current) or any(
             current.get(key) != target.get(key) for key in ('pid', 'class', 'stableId')):
         raise RuntimeError('That terminal closed or was replaced. Try the command again.')
+    run(['hyprctl', 'dispatch',
+         f'hl.dsp.window.alter_zorder({{ mode = "top", window = "address:{current["address"]}" }})'])
     focus(current)
     return 'Focused ' + (target.get('voice_label') or 'terminal')
 
@@ -329,10 +332,14 @@ def open_terminal():
                        and re.fullmatch(r"0x[0-9a-fA-F]+", c.get("address", ""))), None)
         if window:
             move_to_main_screen(window)
-            focus(window)
+            present_new_terminal(window)
             return "Opened a new terminal"
         time.sleep(0.1)
     raise RuntimeError("Launch requested, but no new terminal window appeared within 10 seconds")
+
+
+def present_new_terminal(target):
+    maximize_foreground(target)
 
 
 def app_window(key, clients):
@@ -368,6 +375,16 @@ def present_app(key):
     raise RuntimeError(f"Launch requested, but no {name} window appeared within 15 seconds")
 
 
+def move_app_other_screen(key, context):
+    if key != 'browser' and key not in APPS:
+        raise ValueError('Unsupported app to move')
+    clients = (context or {}).get('clients', [])
+    target = browser_window(clients) if key == 'browser' else app_window(key, clients)
+    if target is None:
+        raise RuntimeError('No open window found for ' + ('Chrome' if key == 'browser' else APPS[key]['name']))
+    return move_other_screen(target)
+
+
 def maximize_app(key):
     if key != "browser" and key not in APPS:
         raise ValueError("Unsupported app to maximize")
@@ -377,15 +394,7 @@ def maximize_app(key):
     if window is None:
         return f"No open {name} window"
     move_to_main_screen(window)
-    focus(window)
-    address = window["address"]
-    # Set both compositor and client to maximized, including when leaving fullscreen.
-    run(["hyprctl", "dispatch", 'hl.dsp.window.fullscreen_state({ internal = 1, client = 1, '
-         f'action = "set", window = "address:{address}" }})'])
-    clients = json.loads(run(["hyprctl", "clients", "-j"]))
-    maximized = next((c for c in clients if c.get("address") == address), None)
-    if maximized is None or maximized.get("fullscreen") != 1 or maximized.get("fullscreenClient") != 1:
-        raise RuntimeError(f"Could not confirm that {name} was maximized")
+    maximize_foreground(window)
     return f"Maximized {name} window"
 
 

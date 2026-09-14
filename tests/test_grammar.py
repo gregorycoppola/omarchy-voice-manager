@@ -63,10 +63,10 @@ class GrammarTests(unittest.TestCase):
 
     def test_structured_intents_preserve_target_and_presentation_distinctions(self):
         for first, second in [('close terminal', 'close this terminal'),
-                              ('open chrome', 'bring up chrome'),
                               ('maximize chrome', 'maximize this window'),
                               ('open gmail', 'open github')]:
             self.assertNotEqual(self.matcher.parse(first).intent, self.matcher.parse(second).intent)
+        self.assertEqual(self.matcher.parse('open chrome').intent, self.matcher.parse('bring up chrome').intent)
         self.assertEqual(self.matcher.parse('open g mail').intent, self.matcher.parse('bring up gmail').intent)
 
     def test_every_generated_phrase_parses_to_its_bound_meaning(self):
@@ -91,3 +91,16 @@ class GrammarTests(unittest.TestCase):
         for prefix in ('open', 'launch', 'focus', 'switch to'):
             for name in ('chrome', 'chromium', 'google chrome'):
                 self.assertEqual(GRAMMAR[f'{prefix} {name}'], 'browser')
+
+    def test_focus_apps_reuses_open_intent_with_fuzzy_names(self):
+        for name in ('discord', 'x', 'twitter'):
+            expected = self.matcher.parse(f'open {name}').intent
+            for prefix in ('focus', 'switch to'):
+                with self.subTest(name=name, prefix=prefix):
+                    result = self.matcher.parse(f'{prefix} {name}')
+                    self.assertEqual(result.method, 'exact')
+                    self.assertEqual(result.intent, expected)
+        for phrase, app in [('focus discrod', 'discord'), ('switch to twiter', 'x')]:
+            result = self.matcher.parse(phrase)
+            self.assertEqual(result.method, 'fuzzy')
+            self.assertEqual(result.intent, STRUCTURED_INTENTS[app])

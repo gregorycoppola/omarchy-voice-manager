@@ -118,14 +118,11 @@ class CommandTests(unittest.TestCase):
     def test_maximize_sets_one_exact_window_and_both_states(self):
         for key, app_class in [("browser", "chromium"), ("discord", "discord"), ("x", "chrome-x.com__-Default")]:
             window = {"class": app_class, "address": "0x2", "fullscreen": 2}
-            verified = dict(window, fullscreen=1, fullscreenClient=1)
-            with patch("os_actions.run", side_effect=[json.dumps([window]), "ok", json.dumps([verified])]) as run, \
-                 patch("os_actions.move_to_main_screen") as move, patch("os_actions.focus") as focus:
+            with patch("os_actions.run", return_value=json.dumps([window])), \
+                 patch("os_actions.move_to_main_screen") as move, patch("os_actions.maximize_foreground") as present:
                 self.assertIn("Maximized", execute_command("maximize:" + key))
                 move.assert_called_once_with(window)
-                focus.assert_called_once_with(window)
-                self.assertEqual(run.call_args_list[1].args[0], ["hyprctl", "dispatch",
-                    'hl.dsp.window.fullscreen_state({ internal = 1, client = 1, action = "set", window = "address:0x2" })'])
+                present.assert_called_once_with(window)
 
     def test_maximize_missing_window_does_not_launch(self):
         with patch("os_actions.run", return_value="[]") as run:
@@ -137,9 +134,10 @@ class CommandTests(unittest.TestCase):
             run.assert_not_called()
 
     def test_maximize_reports_failed_confirmation(self):
-        window = {"class": "chromium", "address": "0x2", "fullscreen": 2, "fullscreenClient": 2}
-        with patch("os_actions.run", side_effect=[json.dumps([window]), "ok", json.dumps([window])]), \
-             patch("os_actions.move_to_main_screen"), patch("os_actions.focus"):
+        window = {"class": "chromium", "address": "0x2"}
+        with patch("os_actions.run", return_value=json.dumps([window])), \
+             patch("os_actions.move_to_main_screen"), \
+             patch("os_actions.maximize_foreground", side_effect=RuntimeError("Could not confirm")):
             with self.assertRaisesRegex(RuntimeError, "confirm"):
                 execute_command("maximize:browser")
 
@@ -153,11 +151,11 @@ class CommandTests(unittest.TestCase):
         new = {"class": "foot", "address": "0x2"}
         unrelated = {"class": "chromium", "address": "0x3"}
         with patch("os_actions.run", side_effect=[MONITORS, json.dumps([old]), "ok", json.dumps([old, unrelated, new])]) as run, \
-             patch("os_actions.move_to_main_screen") as move, patch("os_actions.focus") as focus:
+             patch("os_actions.move_to_main_screen") as move, patch("os_actions.present_new_terminal") as present:
             self.assertEqual(execute_command("terminal:new"), "Opened a new terminal")
             self.assertEqual(run.call_args_list[2].args[0], ["hyprctl", "dispatch", 'hl.dsp.exec_cmd("omarchy launch terminal")'])
             move.assert_called_once_with(new)
-            focus.assert_called_once_with(new)
+            present.assert_called_once_with(new)
 
     def test_terminal_missing_monitor_does_not_launch(self):
         with patch("os_actions.run", return_value="[]") as run:
@@ -220,29 +218,27 @@ class CommandTests(unittest.TestCase):
             self.assertIsNone(parse_command(phrase))
 
     def test_browser_maximizes_with_tabs_instead_of_fullscreen(self):
-        for current_state in (0, 1, 2):
-            responses = [MONITORS, json.dumps([{"class": "chromium", "address": "0x123", "fullscreen": current_state}]),
-                         'ok', '{"address":"0x123"}', 'ok', '{"address":"0x123","fullscreen":1,"fullscreenClient":1}']
-            with patch("os_actions.run", side_effect=responses) as run, patch("os_actions.move_to_main_screen") as move:
-                self.assertEqual(execute_command("browser_fullscreen"), "Brought the browser maximized")
-                move.assert_called_once()
-                self.assertIn("internal = 1, client = 1", run.call_args_list[4].args[0][2])
+        for command in ('browser', 'browser_fullscreen'):
+            window = {"class": "chromium", "address": "0x123"}
+            with patch("os_actions.run", side_effect=[MONITORS, json.dumps([window])]), \
+                 patch("os_actions.move_to_main_screen") as move, patch("os_actions.maximize_foreground") as present:
+                execute_command(command)
+                move.assert_called_once_with(window)
+                present.assert_called_once_with(window)
 
     def test_open_browser_restores_tabs_from_fullscreen(self):
         from os_actions import present_browser
         window = {"class": "chromium", "address": "0x123", "fullscreen": 2}
-        with patch("os_actions.move_to_main_screen"), patch("os_actions.focus"), \
-             patch("os_actions.run", side_effect=["ok", '{"address":"0x123","fullscreen":1,"fullscreenClient":1}']) as run:
+        with patch("os_actions.move_to_main_screen"), patch("os_actions.maximize_foreground") as present:
             present_browser(window, fullscreen=False)
-            self.assertIn("internal = 1, client = 1", run.call_args_list[0].args[0][2])
+            present.assert_called_once_with(window)
 
-    def test_standalone_apps_still_use_fullscreen(self):
+    def test_standalone_apps_use_same_foreground_policy(self):
         from os_actions import present_browser
         window = {"class": "discord", "address": "0x123"}
-        with patch("os_actions.move_to_main_screen"), patch("os_actions.focus"), \
-             patch("os_actions.run", side_effect=["ok", '{"address":"0x123","fullscreen":2,"fullscreenClient":2}']) as run:
+        with patch("os_actions.move_to_main_screen"), patch("os_actions.maximize_foreground") as present:
             present_browser(window, fullscreen=True)
-            self.assertIn("internal = 2, client = 2", run.call_args_list[0].args[0][2])
+            present.assert_called_once_with(window)
 
     def test_dictation_is_not_executed(self):
         for text in ["Don't open Chrome", "I said open Chrome", "open chrome; rm -rf /",
@@ -257,11 +253,12 @@ class CommandTests(unittest.TestCase):
             {"class": "chromium", "address": '0x123\"'}]))
 
     def test_focuses_existing_browser_without_launching(self):
-        responses = [MONITORS, '[{"class":"chromium","address":"0x123"}]', 'ok', '{"address":"0x123"}']
-        with patch("os_actions.run", side_effect=responses) as run, patch("os_actions.move_to_main_screen"):
+        responses = [MONITORS, '[{"class":"chromium","address":"0x123"}]']
+        with patch("os_actions.run", side_effect=responses) as run, patch("os_actions.move_to_main_screen"), \
+             patch("os_actions.maximize_foreground") as present:
             self.assertEqual(execute_command("browser"), "Brought the browser forward")
-            self.assertEqual(run.call_count, 4)
-            self.assertFalse(any(c.args[0][0] == "gio" for c in run.call_args_list))
+            self.assertEqual(run.call_count, 2)
+            present.assert_called_once()
 
     def test_targets_external_active_workspace(self):
         with patch("os_actions.run", side_effect=[MONITORS, 'ok', '[{"address":"0x123","monitor":1}]']) as run:

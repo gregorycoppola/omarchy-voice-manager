@@ -152,8 +152,10 @@ concrete intent. Voice status now includes the parsed intent.
 ### Command behavior
 
 Named terminals are now a live vocabulary. Say **“focus keety,” “switch to the
-keety terminal,”** or **“focus the monitor replug bug.”** `WINDOW_RULES` defines
-`focus <window>`, `switch to <window>`, and `go to <window>`, with optional “the.”
+keety terminal,” “focus the monitor replug bug,”** or **“close the patch monitor
+terminal.”** `WINDOW_RULES` defines `focus <window>`, `switch to <window>`,
+`go to <window>`, `close <window>`, and `move <window> to the other screen`,
+with optional “the.” Move also accepts “other monitor.”
 The rules expand across the terminal windows captured when recording starts.
 New/renamed/closed terminals are reflected on the next recording without
 restarting Keety. Explorer's command tester fetches a fresh list on each test.
@@ -162,16 +164,23 @@ restarting Keety. Explorer's command tester fetches a fresh list on each test.
 name, combined title, and terminal/window qualifiers. Task/project titles also
 accept Codex qualifiers. It strips changing status prefixes and spinners; plain
 terminal titles containing a directory also contribute that directory's final
-name. This uses title conventions rather than reading terminal contents.
+name. Short task prefixes with a terminal/window/Codex qualifier work too,
+such as “explain terminal” for “Explain Omarchy plugins.” Duplicate prefixes
+remain ambiguous. This uses title conventions rather than reading terminal contents.
 
 Exact and fuzzy matches produce `focus_window(window=<captured identity>)`.
 Fuzzy matching checks both wording and the window name. Shared names remain
 ambiguous: use the task title if multiple terminals belong to the same project.
 A title can change after capture without changing the chosen target, but a
 closed/replaced window will not be substituted. Dynamic window matches are not
-saved as permanent aliases. This first live vocabulary covers terminal windows
-and focus commands; named-window close/move/maximize and custom nicknames are
-not included yet.
+saved as permanent aliases. Named close commands produce
+`close_named_window(window=<captured identity>)` and use the existing terminal
+running-program confirmation preference. Approval remains bound to the captured
+window; a closed/replaced window is never substituted. Unmatched named-terminal
+close requests do not fall back to closing the most recent terminal.
+Named move produces `move_named_window(window=<captured identity>, monitor=other)`.
+This live vocabulary covers terminal focus, close, and move; named-window
+maximize and custom nicknames are not included yet.
 
 **Command mode is permanent.**
 Hold Super + R throughout one allowed phrase, then release.
@@ -195,6 +204,8 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 | Allowed phrase | Action |
 | --- | --- |
 | move to other screen / move window to other screen | Move the window focused when recording started to the other screen |
+| move the explain terminal to the other screen / move patch monitor terminal to the other screen | Move the named terminal captured when recording started |
+| move chrome to the other screen / move twitter to the other screen | Move the most recently focused matching app window; also supports Chromium, Google Chrome, X, and Discord |
 | open a new terminal / open a terminal / open terminal / open new terminal | Open a fresh default terminal window on DP-1 |
 | open chrome | Launch Chromium or focus an existing browser window |
 | bring up chrome | Launch/focus Chromium and maximize with tabs visible |
@@ -207,7 +218,7 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 | bring up google chrome | Launch/focus Chromium and maximize with tabs visible |
 | open gmail / bring up gmail | Bring up Gmail |
 | open github / bring up github | Bring up GitHub |
-| open x / open twitter / bring up x / bring up twitter | Launch X’s installed app or focus its existing window |
+| open x / bring up x / focus x / switch to twitter | Launch X’s installed app or maximize and focus its existing window; x and twitter work with every prefix |
 | maximize chrome / maximize chromium / maximize google chrome | Maximize the most recently used normal browser window |
 | maximize discord | Maximize Discord’s app window |
 | maximize x / maximize twitter | Maximize X/Twitter’s app window |
@@ -216,11 +227,17 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 | close discord | Close the most recently used Discord app window |
 | close x / close twitter | Close the most recently used X/Twitter app window |
 | close chrome / close chromium / close google chrome | Close one normal Chrome/Chromium window, including its tabs |
-| open discord / bring up discord | Launch Discord if closed, otherwise focus its existing app window |
+| open discord / bring up discord / focus discord / switch to discord | Launch Discord if closed, otherwise maximize and focus its existing app window |
 | show all windows / show all open windows / show all open window | Show a searchable window list across all screens and workspaces; select a window to focus it, or press Escape to dismiss |
 
+All Keety open/bring-up commands now use the same presentation policy: move the
+selected or newly created window to DP-1, maximize it with normal controls visible,
+explicitly raise it above the floating grid, and focus it. This includes browsers,
+Gmail/GitHub browser windows, Discord, X, and new terminals. Say **“tile open
+windows”** afterward to include the new window in the equal grid.
+
 Discord and X use their installed desktop launchers (the Omarchy web apps on
-this machine). Opening moves their windows to DP-1 and makes them fullscreen.
+this machine).
 X and Twitter are synonyms for one intent. Exact app classes identify their
 windows; ordinary browser tabs titled Discord or X are not treated as app windows.
 
@@ -234,6 +251,11 @@ window, including Chromium. The window moves to the other screen's active
 workspace and receives focus. With more than two screens, the destination is
 the next connected monitor in monitor-ID order. It reports an error if only one
 screen is available. Fuzzy matches keep the original captured window as their target. A closed or replaced window is never substituted.
+
+Named moves use the same behavior, relative to the selected window's current
+screen. App moves select from the recording's captured windows and report an
+error if the app is closed. They do not launch it. Unknown names never fall back
+to moving the focused window.
 
 Terminal close commands close an idle shell prompt directly. If a program or job
 is running, they show a confirmation in the bar popup with the chosen window's title.
