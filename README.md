@@ -7,28 +7,6 @@ having no voice controls, with plenty of room for a more sophisticated design.
 Recognition and matching still get things wrong. This is an experiment I'm
 using and improving, not a polished or thoroughly tested product.
 
-Copyright (C) 2026 Greg Coppola. Skipper's original code is licensed under
-**GNU GPL version 3 only** (`GPL-3.0-only`). You may redistribute and modify it
-under those terms. It is provided without warranty, including any implied
-warranty of merchantability or fitness for a particular purpose. See [LICENSE](LICENSE)
-and [third-party notices](THIRD_PARTY_NOTICES.md).
-
-Current release: **0.1.0**. This checkout includes **0.2.0-dev** voice-command
-work. See [the changelog](CHANGELOG.md).
-
-Planned direction: [structured intents, grammars, contexts, and separate voice
-and management apps](docs/intents-and-app-split-plan.md).
-
-A local voice-command app for an M2 MacBook Pro running ARM Linux / Omarchy.
-Skipper lives in the menu bar: hold-to-talk opens a compact popup with microphone
-levels, recognized words, and the parsed intent. A windowless background process
-handles speech and actions. **Skipper Explorer** is the separate native app for
-language inspection, recording history, learned phrases, and settings.
-
-Uses NVIDIA Parakeet TDT 0.6B v3 through a community INT8 ONNX conversion and
-`onnx-asr`. Inference runs on the CPU. No NVIDIA GPU, cloud transcription,
-PyTorch, system package updates, or macOS frameworks are required.
-
 ## How it actually works
 
 The algorithm is deliberately simple:
@@ -77,6 +55,30 @@ are updated, and no LLM decides what to do with each command. The system does
 not learn general language rules from your corrections. It is much simpler
 than what one could build, but a few useful commands and remembered corrections
 already save me enough effort to keep using it.
+
+## About this checkout
+
+Copyright (C) 2026 Greg Coppola. Skipper's original code is licensed under
+**GNU GPL version 3 only** (`GPL-3.0-only`). You may redistribute and modify it
+under those terms. It is provided without warranty, including any implied
+warranty of merchantability or fitness for a particular purpose. See [LICENSE](LICENSE)
+and [third-party notices](THIRD_PARTY_NOTICES.md).
+
+Current release: **0.1.0**. This checkout includes **0.2.0-dev** voice-command
+work. See [the changelog](CHANGELOG.md).
+
+Planned direction: [structured intents, grammars, contexts, and separate voice
+and management apps](docs/intents-and-app-split-plan.md).
+
+A local voice-command app for an M2 MacBook Pro running ARM Linux / Omarchy.
+Skipper lives in the menu bar: hold-to-talk opens a compact popup with microphone
+levels, recognized words, and the parsed intent. A windowless background process
+handles speech and actions. **Skipper Explorer** is the separate native app for
+language inspection, recording history, learned phrases, and settings.
+
+Uses NVIDIA Parakeet TDT 0.6B v3 through a community INT8 ONNX conversion and
+`onnx-asr`. Inference runs on the CPU. No NVIDIA GPU, cloud transcription,
+PyTorch, system package updates, or macOS frameworks are required.
 
 ## Install as an Omarchy plugin
 
