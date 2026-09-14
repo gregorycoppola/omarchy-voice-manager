@@ -67,9 +67,6 @@ and [third-party notices](THIRD_PARTY_NOTICES.md).
 Current release: **0.1.0**. This checkout includes **0.2.0-dev** voice-command
 work. See [the changelog](CHANGELOG.md).
 
-Planned direction: [structured intents, grammars, contexts, and separate voice
-and management apps](docs/intents-and-app-split-plan.md).
-
 A local voice-command app for an M2 MacBook Pro running ARM Linux / Omarchy.
 Skipper lives in the menu bar: hold-to-talk opens a compact popup with microphone
 levels, recognized words, and the parsed intent. A windowless background process
