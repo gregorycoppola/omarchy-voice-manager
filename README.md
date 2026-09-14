@@ -1,5 +1,12 @@
 # Skipper
 
+This is a very primitive voice-control prototype for Linux / Omarchy. I'm using
+it because it actually saves me some time, and I'm sharing it because it already
+works well enough to be useful to me. Think of it as a rough v0: better than
+having no voice controls, with plenty of room for a more sophisticated design.
+Recognition and matching still get things wrong. This is an experiment I'm
+using and improving, not a polished or thoroughly tested product.
+
 Copyright (C) 2026 Greg Coppola. Skipper's original code is licensed under
 **GNU GPL version 3 only** (`GPL-3.0-only`). You may redistribute and modify it
 under those terms. It is provided without warranty, including any implied
@@ -21,6 +28,55 @@ language inspection, recording history, learned phrases, and settings.
 Uses NVIDIA Parakeet TDT 0.6B v3 through a community INT8 ONNX conversion and
 `onnx-asr`. Inference runs on the CPU. No NVIDIA GPU, cloud transcription,
 PyTorch, system package updates, or macOS frameworks are required.
+
+## How it actually works
+
+The algorithm is deliberately simple:
+
+1. **Record a short command.** Hold the speaking shortcut, say something, and
+   release it. Skipper saves the audio and captures which window you were using.
+2. **Turn the audio into words.** A local Parakeet speech-recognition model
+   produces a transcript. Those are the words the model heard, which might
+   differ from what you said.
+3. **Look for a correction you previously saved.** If the same recognized
+   phrase comes up again, Skipper uses the full intent you chose for it.
+   Matching ignores capitalization, extra whitespace, and trailing sentence
+   punctuation. It does not recognize your voice or compare audio recordings.
+4. **Otherwise, match the words to the command catalog.** Try exact built-in
+   phrases and automatically learned aliases first. If there is no exact match,
+   score eligible phrases using Python's `difflib.SequenceMatcher`, keep the
+   best score for each distinct intent, and compare the winners. A fuzzy match
+   needs a score of at least 0.72 and a lead of at least 0.06 over the next intent.
+   Weak or ambiguous matches do nothing. Some commands have stricter matching
+   rules. These scores measure text similarity, not certainty about your meaning.
+5. **Run the selected action and keep a record.** An intent includes an operation
+   and its arguments, such as `tile_apps(workspace=current)`. Skipper calls the
+   corresponding implemented action, checks its target, and logs the result.
+   Existing confirmation rules still apply. Eligible fuzzy matches are also
+   remembered as phrase aliases; user corrections remain a separate layer.
+
+When it gets something wrong, **History** lets you connect three things:
+
+| What was heard | Words you meant | Full intended action |
+| --- | --- | --- |
+| “Towel apps.” | “tile the apps” | `tile_apps(workspace=current)` — tile non-terminal apps and hide terminals |
+
+You can play the recording, edit the middle column, select the action in the
+third column, and click **Save correction**. **Match these words** can suggest
+an intent from your edited words, but you make the final choice. Saving records
+the mapping; it does not execute the action or change the original transcript.
+
+The next time the model produces “Towel apps,” that saved phrase maps directly
+to your chosen intent. The edited words are kept as your explanation of what
+you meant; they are not reparsed to choose a different action on each use.
+Different mishearings need their own corrections. You can edit or remove a
+mapping, and its changes are kept in a local audit history.
+
+That is the personalization: a small, editable lookup table. No model weights
+are updated, and no LLM decides what to do with each command. The system does
+not learn general language rules from your corrections. It is much simpler
+than what one could build, but a few useful commands and remembered corrections
+already save me enough effort to keep using it.
 
 ## Install as an Omarchy plugin
 
