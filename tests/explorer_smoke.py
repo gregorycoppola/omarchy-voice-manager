@@ -43,6 +43,23 @@ with tempfile.TemporaryDirectory() as directory:
             assert app.last_result.method == 'alias'
             assert dict(app.last_result.intent.arguments) == {'destination': 'gmail'}
             assert len(list(Path(directory).iterdir())) == 1
+            recordings = Path(directory) / 'recordings'
+            recordings.mkdir()
+            (recordings / 'example.wav').touch()
+            (recordings / 'example.txt').write_text('Open Gmail.')
+            app.refresh_history()
+            app.stack.set_visible_child_name('history')
+            assert len(app.recordings_page.rows) == 1
+            assert app.recordings_page.details.get_first_child().get_next_sibling().get_text() == 'Open Gmail.'
+            app.stack.set_visible_child_name('settings')
+            app.refresh_preferences()
+            toggle = app.preferences_box.get_first_child().get_next_sibling()
+            toggle.set_active(False)
+            from settings import Settings
+            assert Settings(Path(directory) / 'settings.json').confirm_terminal_close is False
+            app.forget_phrase(None, 'my mail')
+            from intent_matching import IntentMatcher
+            assert not IntentMatcher(path).aliases
             assert 'gui' not in sys.modules
             assert 'os_actions' not in sys.modules
             assert 'keety' not in sys.modules
@@ -56,4 +73,4 @@ with tempfile.TemporaryDirectory() as directory:
     GLib.timeout_add(300, test)
     app.run(['explorer-smoke'])
     assert passed and not errors, errors
-    print('PASS: native catalog browsing/filtering, exact/fuzzy/alias inspection, no runtime imports')
+    print('PASS: native catalog/parse inspection, recording history, settings, phrase removal, no runtime imports')

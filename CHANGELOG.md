@@ -2,6 +2,14 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Replace the everyday GTK voice window with a windowless runtime and an attached
+  menu-bar popup. It shows microphone levels, recognized speech, and intent without
+  joining the tiling layout or taking keyboard focus. Successful actions dismiss
+  the popup immediately; the latest intent name stays to the left of Keety in the bar.
+- Move recording history, playback/retry, terminal-close settings, and learned
+  phrase removal into Explorer. Terminal-close confirmations appear in the bar
+  popup and bind approval to a unique request and captured window.
+
 - Add a separate native **Keety Explorer** app for browsing grammar rules,
   vocabulary, structured intent schemas/instances, and testing command parses
   with fuzzy candidate evidence. The explorer does not run actions or load speech.

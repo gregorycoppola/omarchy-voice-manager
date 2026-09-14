@@ -8,8 +8,10 @@ intent instances, reusable finite grammars, generated expansions, shared
 exact/fuzzy parsing, and a separately launchable native GTK explorer. Existing
 voice dispatch still uses compatibility action IDs. The explorer browses rules,
 vocabulary, schemas, and parse evidence; it does not yet edit grammar or inspect
-paired history. Runtime extraction, contextual scopes, durable interaction
-history, and the compact voice popover remain work below.
+paired history. Contextual scopes and durable interaction history remain work
+below. The compact bar popover and windowless runtime are
+now implemented, with recording history/settings in Explorer. Paired intent
+history and grammar editing are still pending.
 
 ## Product direction
 

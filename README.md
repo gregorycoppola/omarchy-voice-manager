@@ -6,10 +6,11 @@ work. See [the changelog](CHANGELOG.md).
 Planned direction: [structured intents, grammars, contexts, and separate voice
 and management apps](docs/intents-and-app-split-plan.md).
 
-A local speech-to-text app in development for an M2 MacBook Pro running ARM
-Linux / Omarchy. It has a native GTK4 window with hold-to-talk recording, a live microphone
-amplitude display, saved recordings,
-transcript history, playback and Copy text, plus a command-line interface.
+A local voice-command app for an M2 MacBook Pro running ARM Linux / Omarchy.
+Keety lives in the menu bar: hold-to-talk opens a compact popup with microphone
+levels, recognized words, and the parsed intent. A windowless background process
+handles speech and actions. **Keety Explorer** is the separate native app for
+language inspection, recording history, learned phrases, and settings.
 
 Uses NVIDIA Parakeet TDT 0.6B v3 through a community INT8 ONNX conversion and
 `onnx-asr`. Inference runs on the CPU. No NVIDIA GPU, cloud transcription,
@@ -39,43 +40,47 @@ files are SHA-256 verified. Model files occupy about 639 MiB and stay in ignored
 
 ## Use
 
-Launch **Keety** from the application launcher, run `keety` in a terminal on
-this installation, or run `./launch.sh` from the checkout.
+Launch **Keety** from the application launcher, run `keety`, or use
+`./launch.sh`. Install the menu-bar widget and login launcher with
+`.venv/bin/python install_bar.py` (the installer backs up existing user config).
 
-**Hold Super/Command + R to speak; release either key to transcribe.** Keety
-must be open and ready, but another app can have keyboard focus. The amplitude
-bars show recording activity; the completed transcript stays visible and an
-exact command match runs automatically. Takes are limited to 30 seconds.
-Pressing the chord starts recording immediately, with no hold threshold.
-A quick tap makes only a short take; it never toggles recording on. Releasing R or Super stops the
-recording immediately through a raw keyboard event, even if focus changes.
-While held, the shortcut renews a short recording lease every 200 ms. If the
-release message is lost or Hyprland reloads, recording stops within about 700 ms
-of the last renewal. A late renewal cannot restart it. Wait for transcription to
-finish before holding the shortcut for another take.
+**Hold Super/Command + R to speak; release either key to transcribe.** A compact
+popup opens from the Keety bar indicator on the focused monitor. It shows actual
+microphone amplitude, then the recognized words and parsed intent. It does not
+join the tiling layout or grab keyboard focus. Recognition completes after
+release; words do not stream during recording.
 
-The shortcut is installed on this machine in `~/.config/hypr/keety-ptt.lua`,
-loaded by `~/.config/hypr/bindings.lua`. Source:
-[config/hyprland-keety-ptt.lua](config/hyprland-keety-ptt.lua).
-The binding uses physical XKB codes for R (27) and left/right Super (133/134).
-Changing the chord requires updating both the binding and its tracked keycodes
-after checking for conflicts, then running `hyprctl reload` and `hyprctl configerrors`.
-The shortcut is a separate Hyprland configuration; the desktop installer does
-not install it. It sends typed D-Bus actions through `gapplication`.
+After a successful action the popup closes **immediately**. The latest readable
+intent name stays to the **left of “Keety”** in the menu bar until another intent replaces it.
+Unrecognized commands remain visible for 2.5 seconds and errors for six seconds.
+Terminal-close confirmations stay in the popup until answered or superseded by
+a new recording. Click the bar indicator to inspect the latest result manually;
+click it again or use × to dismiss. **Explorer** opens the separate management
+app. **Quit** finishes any current work and stops the runtime; **Start Keety**
+restarts it.
 
-The microphone records only while you hold Super + R, up to 30 seconds.
-Release either key to stop, save the audio, transcribe it, and run an exact
-command match. Pauses in your speech do not end the recording.
-The scrolling bars show microphone amplitude. There is no live text preview.
-A spinner indicates transcription; the model stays loaded until the
-window closes. Audio (`.wav`),
-transcripts (`.txt`), and timing metadata (`.json`) are saved in
-`~/.local/share/keety/recordings/` (or under `XDG_DATA_HOME` when set).
-The transcript stays visible and the history is restored when reopening Keety.
-Use **Play recording**, **Copy text**, **Transcribe again**, or **Open folder**.
-The GUI retains audio even if transcription fails, so it can be retried.
-Closing during a take stops and finishes saving it; close again afterward.
-There is no automatic deletion; files remain until you delete them from the folder.
+There is no main desktop window. Closing Explorer does not stop recording or
+commands. `./launch.sh --show` requests the voice popup from an existing runtime.
+The previous GTK voice window remains in `gui.py` for development checks only.
+
+Takes are limited to 30 seconds. A quick tap never toggles recording on. Releasing
+R or either Super key stops capture even if focus changes. The shortcut renews a
+200 ms recording lease; a lost release or compositor reload stops capture within
+about 700 ms. Late renewals cannot restart it. Wait for transcription/action
+completion before another take.
+
+The installed shortcut is `~/.config/hypr/keety-ptt.lua`, loaded by
+`~/.config/hypr/bindings.lua`; its source is
+[config/hyprland-keety-ptt.lua](config/hyprland-keety-ptt.lua). It uses physical XKB
+codes for R (27) and left/right Super (133/134), sending typed D-Bus actions to
+the runtime. The desktop/bar installers do not install that shortcut.
+
+Audio (`.wav`), transcripts (`.txt`), and timing metadata (`.json`) are saved in
+`~/.local/share/keety/recordings/` (respecting `XDG_DATA_HOME`). Explorer's
+**History** offers playback, Copy text, Transcribe again, and Open folder. Retry
+requires a ready Keety runtime and never executes or learns a command. Audio is
+retained if transcription fails. Files remain until you delete them; nothing is
+automatically pasted into another application.
 
 For the command-line interface:
 
@@ -95,7 +100,7 @@ the program has no audio upload code. Transcripts print to stdout, and timing
 and Linux peak process RAM measurements print to stderr. Nothing is pasted into
 another application automatically.
 
-The CLI reloads the model on each invocation; the GUI keeps it loaded.
+The CLI reloads the model on each invocation; the background runtime keeps it loaded.
 INT8 can affect accuracy; test your own voice and technical terms.
 This prototype limits clips to 30 seconds because longer inputs can consume
 substantially more memory.
@@ -108,17 +113,19 @@ Open **Keety Explorer** from the application launcher, run `keety-explorer`,
 or run `./launch-explorer.sh` from this checkout. `python install_desktop.py`
 installs both Keety and the separate explorer launcher.
 
-The native GTK explorer has four views:
+The native GTK explorer has these views:
 
 - **Grammar:** reusable patterns, their bindings, and every generated phrase.
 - **Vocabulary:** canonical slot values, spoken forms, and rules using them.
 - **Intents:** typed argument schemas and concrete structured meanings.
 - **Try a command:** exact, learned-alias, and fuzzy parsing with candidate
   scores and rule evidence. Testing never executes actions or learns phrases.
+- **History:** saved recordings/transcripts, playback, copying, and transcription retry.
+- **Settings & phrases:** terminal-close preference and learned phrase removal.
 
 The explorer uses the same catalog and parser as voice commands, without loading
 the speech model or microphone. It reloads learned aliases for each inspection.
-This first version is a read-only explorer: edit grammar definitions in
+Grammar browsing is read-only: edit grammar definitions in
 `command_catalog.py` and restart the apps to load changes. Context scopes,
 grammar editing in the GUI, and paired intent history are later work in
 [the plan](docs/intents-and-app-split-plan.md).
@@ -154,8 +161,8 @@ remain saved for review. Retrying a saved transcript never executes or learns a 
 
 Stable intent IDs, display labels, and built-in phrases are generated into `INTENTS` in
 [command_catalog.py](command_catalog.py), beside the fixed website URL registry.
-`GRAMMAR` is generated from the same rules. Expand **Accepted commands** for built-in
-phrases, or **Learned phrases** to review your aliases and **Forget** a mistake.
+`GRAMMAR` is generated from the same rules. Browse **Grammar** in Explorer for
+built-in phrases, or **Settings & phrases** to review aliases and **Forget** a mistake.
 Aliases persist in `~/.local/share/keety/aliases.json` (respecting `XDG_DATA_HOME`),
 using a versioned JSON format and private file permissions. They stay outside Git.
 This teaches the command matcher; it does not retrain the speech recognition model.
@@ -205,13 +212,13 @@ the next connected monitor in monitor-ID order. It reports an error if only one
 screen is available. Fuzzy matches keep the original captured window as their target. A closed or replaced window is never substituted.
 
 Terminal close commands close an idle shell prompt directly. If a program or job
-is running, they show a modal confirmation with the chosen window's title.
-The target is captured when recording starts, so the confirmation dialog taking
-focus cannot change which terminal gets closed. “Close this terminal” does
+is running, they show a confirmation in the bar popup with the chosen window's title.
+The target is captured when recording starts and remains fixed while the
+confirmation is pending. “Close this terminal” does
 nothing if the focused window was not a terminal. “Close terminal” chooses the
 most recently used terminal across screens/workspaces. Only that window is closed.
 
-**Confirm before closing a terminal with running programs** defaults on. Turn it off in Keety to skip
+**Confirm before closing a terminal with running programs** defaults on. Turn it off in Explorer’s **Settings & phrases** to skip
 confirmation for terminal-close commands; the choice persists locally in
 `~/.local/share/keety/settings.json` (respecting `XDG_DATA_HOME`). Fuzzy matches follow the same running-program warning setting. Keety inspects the terminal's process tree and foreground process group. A lone
 interactive shell with no live child jobs is treated as idle; foreground commands,
@@ -282,16 +289,13 @@ apps such as Discord. On this installation, “Chrome” maps to Chromium.
 
 ### Two-screen layout on this MacBook
 
-Keety opens as a pinned floating window on the laptop panel, **eDP-1**. It stays
-visible across that screen's workspaces. Its voice commands move the controlled
-browser to the active workspace on the external screen, **DP-1**, before focusing
-or fullscreening it. If DP-1 is absent, commands report that it is disconnected.
-They do not redirect controlled apps onto the laptop panel.
+The voice popup belongs to the bar on the monitor focused when recording starts.
+It occupies no workspace or tile. Voice actions retain their existing display
+policies: controlled browser/app commands target **DP-1**, current-window maximize
+stays on its current screen, and move-to-other-screen selects another monitor.
 
-The installed user rule is `~/.config/hypr/keety.lua`, loaded by
-`~/.config/hypr/hyprland.lua`. Its source is [config/hyprland-keety.lua](config/hyprland-keety.lua).
-Display names are deliberately specific to this machine. This rule does not
-change the experimental display driver or monitor modes.
+The old GTK-window rule in [config/hyprland-keety.lua](config/hyprland-keety.lua)
+only applies to the development window; the runtime creates no such window.
 
 ## Model provenance
 
@@ -313,6 +317,8 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 node --test tests/test_browser_tabs.cjs
 .venv/bin/python tests/learning_smoke.py
 .venv/bin/python tests/explorer_smoke.py
+.venv/bin/python tests/runtime_smoke.py
+.venv/bin/python tests/bar_popup_smoke.py
 .venv/bin/python tests/bar_mode_smoke.py
 .venv/bin/python tests/terminal_confirmation_smoke.py
 .venv/bin/python tests/terminal_activity_smoke.py
@@ -362,18 +368,17 @@ Run the command again after opening or closing windows to rearrange the grid.
 Keety is excluded. Other workspaces stay as they are; repeating the command keeps
 the windows tiled.
 
-### Top-bar mode
+### Menu-bar runtime
 
-`./launch.sh` starts Keety in the background with no mapped app window. Hold
-Super + R as usual. The top-bar **Keety** button shows loading, ready, recording,
-working, or confirmation status; hover for the latest result. Click it to open
-history/settings. Closing that window hides it while voice commands keep working.
-Use **Quit Keety** inside the window to stop the app. Terminal job warnings still
-open their own dialog. `./launch.sh --show` opens the controls directly.
+`launch.sh` starts `runtime.py`, a windowless `Gio.Application` retaining the
+existing application ID and push-to-talk D-Bus actions. The user-owned
+`config/keety-bar` widget renders a passive attached popup. Runtime state lives
+privately under `XDG_RUNTIME_DIR`, including transcript, intent, amplitude samples,
+and a per-confirmation token. Stale or repeated confirmation tokens cannot act on
+a later command. The widget detects a stopped/unresponsive runtime.
 
-Install the user-owned Omarchy widget and login launcher with
-`.venv/bin/python install_bar.py`. It backs up `~/.config/omarchy/shell.json`,
-installs `config/keety-bar` under `~/.config/omarchy/plugins/greg.keety`, and adds a
-user autostart entry. No packaged Omarchy files are changed. Status lives privately
-under `XDG_RUNTIME_DIR` and expires in the widget if the app stops responding.
-For foreground development/tests, run `.venv/bin/python gui.py` directly.
+`install_bar.py` installs the widget under `~/.config/omarchy/plugins/greg.keety`,
+updates the user shell layout, and installs a login launcher. Existing plugin
+files and shell config are backed up. Packaged Omarchy files are unchanged.
+Plugin changes normally reload automatically; `omarchy restart shell` can apply
+a change if this shell version retains the previous component in its cache.

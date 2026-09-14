@@ -3,13 +3,15 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 
 import gi
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk
+from gi.repository import Gio, GLib, Gtk
 
 from command_catalog import EXPANSIONS, INTENTS, RULES, SCHEMAS, STRUCTURED_INTENTS, VOCABULARY
 from intent_matching import IntentMatcher
+from settings import Settings
 
 
 def label(text, style=None):
@@ -151,6 +153,8 @@ class Explorer(Gtk.Application):
         self.alias_path = Path(alias_path) if alias_path else data / "keety/aliases.json"
         self.window = None
         self.last_result = None
+        self.player = None
+        self.connect('shutdown', self.stop_playback)
 
     def do_activate(self):
         if self.window:
@@ -202,9 +206,119 @@ class Explorer(Gtk.Application):
         self.result_box.append(label("Enter a phrase to inspect its meaning and matching evidence.", "dim-label"))
         playground.append(scroll(self.result_box))
         self.stack.add_titled(playground, "test", "Try a command")
+        self.history_box = column(margin=0)
+        self.stack.add_titled(self.history_box, "history", "History")
+        self.refresh_history()
+        self.preferences_box = column()
+        self.stack.add_titled(scroll(self.preferences_box), "settings", "Settings & phrases")
+        self.refresh_preferences()
         self.window.set_child(root)
         self.window.set_focus(self.rules_page.search)
         self.window.present()
+
+    def stop_playback(self, *_):
+        if self.player and self.player.poll() is None:
+            self.player.terminate()
+
+    def refresh_history(self, *_):
+        clear(self.history_box)
+        toolbar = column(margin=12)
+        refresh = Gtk.Button(label='Refresh recordings', halign=Gtk.Align.START)
+        refresh.connect('clicked', self.refresh_history)
+        toolbar.append(refresh)
+        self.history_box.append(toolbar)
+        paths = sorted((self.alias_path.parent / 'recordings').glob('*.wav'), reverse=True)
+        self.recordings_page = CatalogPage([
+            (path.stem.replace('_', ' '), 'Recording', path, path.stem) for path in paths
+        ], self.render_recording)
+        self.recordings_page.set_vexpand(True)
+        if not paths:
+            self.recordings_page.details.append(label('No recordings yet', 'title-2'))
+        self.history_box.append(self.recordings_page)
+
+    def render_recording(self, box, path):
+        box.append(label(path.stem.replace('_', ' '), 'title-2'))
+        try:
+            text = path.with_suffix('.txt').read_text() if path.with_suffix('.txt').exists() else ''
+        except OSError as exc:
+            text = f'Could not read transcript: {exc}'
+        box.append(label(text or 'Audio saved; no transcript yet.'))
+        box.append(label('Saved transcript. Original intent history is not recorded yet.', 'dim-label'))
+        buttons = Gtk.Box(spacing=8)
+        feedback = label('', 'dim-label')
+        for title, callback in (
+            ('Play', lambda *_: self.play_recording(path, feedback)),
+            ('Copy text', lambda *_: self.window.get_clipboard().set(text)),
+            ('Transcribe again', lambda *_: self.retry_recording(path, feedback)),
+            ('Open folder', lambda *_: Gio.AppInfo.launch_default_for_uri(path.parent.as_uri(), None)),
+        ):
+            button = Gtk.Button(label=title)
+            button.connect('clicked', callback)
+            buttons.append(button)
+        box.append(buttons)
+        box.append(feedback)
+
+    def play_recording(self, path, feedback):
+        self.stop_playback()
+        try:
+            self.player = subprocess.Popen(['pw-play', str(path)])
+            feedback.set_text('Playing recording.')
+        except OSError as exc:
+            feedback.set_text(f'Could not play: {exc}')
+
+    def retry_recording(self, path, feedback):
+        try:
+            result = subprocess.run(['gapplication', 'action', 'io.github.gregorycoppola.Keety',
+                                     'retry', GLib.Variant('s', path.stem).print_(False)],
+                                    capture_output=True, text=True, timeout=3)
+            feedback.set_text('Requested transcription. Keety must be ready; refresh after it finishes.'
+                              if result.returncode == 0 else 'Start Keety from the bar, then retry.')
+        except (OSError, subprocess.SubprocessError) as exc:
+            feedback.set_text(f'Could not request transcription: {exc}')
+
+    def refresh_preferences(self, *_):
+        box = self.preferences_box
+        clear(box)
+        box.append(label('Voice settings', 'title-1'))
+        settings = Settings(self.alias_path.parent / 'settings.json')
+        feedback = label(settings.error or '', 'dim-label')
+        toggle = Gtk.CheckButton(label='Confirm before closing a terminal with running programs')
+        toggle.set_active(settings.confirm_terminal_close)
+        def changed(button):
+            try:
+                settings.set_confirm_terminal_close(button.get_active())
+                feedback.set_text('Saved. Applies to the next voice command.')
+            except (OSError, ValueError) as exc:
+                feedback.set_text(str(exc))
+        toggle.connect('toggled', changed)
+        toggle.set_sensitive(not bool(settings.error))
+        box.append(toggle)
+        box.append(feedback)
+        box.append(label('Learned phrases', 'title-2'))
+        refresh = Gtk.Button(label='Refresh phrases', halign=Gtk.Align.START)
+        refresh.connect('clicked', self.refresh_preferences)
+        box.append(refresh)
+        matcher = IntentMatcher(self.alias_path)
+        if matcher.error:
+            box.append(label(matcher.error, 'error'))
+        for phrase, command in sorted(matcher.aliases.items()):
+            row = Gtk.Box(spacing=12)
+            description = label(f'{phrase} → {INTENTS[command]["label"]}')
+            description.set_hexpand(True)
+            row.append(description)
+            forget = Gtk.Button(label='Forget')
+            forget.connect('clicked', self.forget_phrase, phrase)
+            row.append(forget)
+            box.append(row)
+        if not matcher.aliases:
+            box.append(label('Automatically learned phrases will appear here.', 'dim-label'))
+
+    def forget_phrase(self, _, phrase):
+        try:
+            IntentMatcher(self.alias_path).forget(phrase)
+            self.refresh_preferences()
+        except (OSError, ValueError) as exc:
+            self.preferences_box.append(label(str(exc), 'error'))
 
     def inspect(self, *_):
         # Reload aliases on each request so the live voice app's new phrases appear.
