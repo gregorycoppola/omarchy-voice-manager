@@ -220,9 +220,10 @@ class VoiceRuntime(Gio.Application):
                 GLib.idle_add(self.complete, 'Ready', 'Ambiguous command — use a more specific name: ' + choices if result.status == 'ambiguous'
                               else 'Unrecognized command — no action taken.')
                 return
-            if result.intent.type in ('focus_window', 'move_named_window'):
+            if result.intent.type in ('focus_window', 'move_named_window', 'maximize_named_window'):
                 key = dict(result.intent.arguments)['window']
-                action = focus_named_window if result.intent.type == 'focus_window' else move_other_screen
+                action = {'focus_window': focus_named_window, 'move_named_window': move_other_screen,
+                          'maximize_named_window': maximize_current_window}[result.intent.type]
                 message = action(windows.targets[key])
                 GLib.idle_add(self.complete, 'Ready', message)
                 return

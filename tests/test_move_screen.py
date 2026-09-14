@@ -28,11 +28,41 @@ class MoveScreenTests(unittest.TestCase):
     def test_moves_both_directions_to_active_workspace(self):
         for source, dest in [(0,1),(1,0)]:
             current = dict(TARGET, monitor=source)
-            responses = [json.dumps([current]), json.dumps(MONITORS), 'ok', 'ok', json.dumps([dict(current, monitor=dest)])]
-            with patch('os_actions.run', side_effect=responses) as run:
+            moved = dict(current, monitor=dest, workspace={'id': dest+1})
+            responses = [json.dumps([current]), json.dumps(MONITORS), 'ok', 'ok', json.dumps([moved])]
+            with patch('os_actions.run', side_effect=responses) as run, \
+                 patch('os_actions.maximize_foreground') as maximize, patch('os_actions.tile_open_windows') as tile:
                 self.assertEqual(move_other_screen(TARGET), 'Moved window to '+MONITORS[dest]['name'])
+                maximize.assert_called_once_with(moved)
+                tile.assert_not_called()
                 self.assertEqual(run.call_args_list[2].args[0], ['hyprctl','dispatch',
                     f'hl.dsp.window.move({{ window = "address:0x1", workspace = "{dest+1}", follow = true }})'])
+
+    def test_occupied_destination_retiles_only_its_workspace_and_focuses_arrival(self):
+        moved = dict(TARGET, monitor=1, workspace={'id': 2})
+        neighbor = dict(moved, address='0x2', stableId='two')
+        elsewhere = dict(TARGET, address='0x3', workspace={'id': 1})
+        hidden_workspace = dict(neighbor, address='0x4', workspace={'id': 9})
+        unmapped = dict(neighbor, address='0x5', mapped=False)
+        keety = dict(neighbor, address='0x6', **{'class': 'io.github.gregorycoppola.Keety'})
+        clients = [moved, neighbor, elsewhere, hidden_workspace, unmapped, keety]
+        with patch('os_actions.run', side_effect=[json.dumps([TARGET]), json.dumps(MONITORS), 'ok', 'ok', json.dumps(clients)]), \
+             patch('os_actions.maximize_foreground') as maximize, \
+             patch('os_actions.tile_open_windows', return_value='Tiled 2 windows') as tile, \
+             patch('os_actions.focus') as focus:
+            move_other_screen(TARGET)
+            tile.assert_called_once_with({'active': moved, 'clients': [moved, neighbor]})
+            maximize.assert_not_called()
+            focus.assert_called_once_with(moved)
+
+    def test_replaced_arrival_is_not_arranged(self):
+        moved = dict(TARGET, monitor=1, workspace={'id': 2}, stableId='replacement')
+        with patch('os_actions.run', side_effect=[json.dumps([TARGET]), json.dumps(MONITORS), 'ok', 'ok', json.dumps([moved])]), \
+             patch('os_actions.maximize_foreground') as maximize, patch('os_actions.tile_open_windows') as tile:
+            with self.assertRaisesRegex(RuntimeError, 'Could not confirm'):
+                move_other_screen(TARGET)
+            maximize.assert_not_called()
+            tile.assert_not_called()
 
     def test_single_screen_never_dispatches(self):
         with patch('os_actions.run', side_effect=[json.dumps([TARGET]), json.dumps(MONITORS[:1])]) as run:

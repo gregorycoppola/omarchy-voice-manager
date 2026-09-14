@@ -9,10 +9,11 @@ TERMINAL_CLASSES = {"foot", "footclient", "alacritty", "kitty", "org.wezfurlong.
 # Compiled against a fresh window vocabulary at recording start, not at import.
 MOVE_PATTERNS = tuple(f'move {article}<window> to {other}{screen}'
                       for article in ('', 'the ')
-                      for other in ('other ', 'the other ') for screen in ('screen', 'monitor'))
+                      for other in ('other ', 'the other ') for screen in ('screen', 'monitor', 'window'))
 
 WINDOW_RULES = (
     Rule("focus_window", ("focus <window>", "focus the <window>",
+                          "focus on <window>", "focus on the <window>",
                           "switch to <window>", "switch to the <window>",
                           "go to <window>", "go to the <window>"),
          "focus_window", (("window", "$window"),), "focus-window:{window}", "Focus {window}"),
@@ -21,6 +22,9 @@ WINDOW_RULES = (
     Rule("move_named_window", MOVE_PATTERNS, "move_named_window",
          (("window", "$window"), ("monitor", "other")),
          "move-window:{window}", "Move {window} to the other screen"),
+    Rule("maximize_named_window", ("maximize <window>", "maximize the <window>"),
+         "maximize_named_window", (("window", "$window"), ("monitor", "current")),
+         "maximize-window:{window}", "Maximize {window}"),
 )
 
 SITES = {
@@ -90,7 +94,7 @@ RULES = (
          "move_application", (("application", "$window_app"), ("selection", "most_recent"), ("monitor", "other")),
          "move-app:{window_app}", "Move {window_app} to the other screen"),
     Rule("maximize_app", ("maximize <window_app>",), "maximize_window",
-         (("application", "$window_app"), ("selection", "most_recent"), ("monitor", "main")),
+         (("application", "$window_app"), ("selection", "most_recent"), ("monitor", "current")),
          "maximize:{window_app}", "Maximize {window_app} window"),
     Rule("create_terminal", ("open a new terminal", "open a terminal", "open terminal", "open new terminal"),
          "create_terminal", (), "terminal:new", "Open a new terminal"),

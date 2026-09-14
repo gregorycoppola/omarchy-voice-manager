@@ -292,11 +292,14 @@ class Explorer(Gtk.Application):
         box.append(label('window: an identity from the captured live <window> vocabulary', 'monospace'))
         if name == 'move_named_window':
             box.append(label('monitor: other (relative to the target window)', 'monospace'))
+        if name == 'maximize_named_window':
+            box.append(label('monitor: current (keep the target window on its screen)', 'monospace'))
         box.append(label('The same window keeps its identity when its title changes. Closed or replaced windows cannot be targeted by an old match.', 'dim-label'))
         for word in self.window_snapshot.words:
             box.append(label(word.label, 'heading'))
             box.append(label(name + '(window=' + word.id +
-                             (', monitor=other' if name == 'move_named_window' else '') + ')', 'monospace'))
+                             (', monitor=other' if name == 'move_named_window' else
+                              ', monitor=current' if name == 'maximize_named_window' else '') + ')', 'monospace'))
 
     def stop_playback(self, *_):
         if self.player and self.player.poll() is None:

@@ -19,6 +19,17 @@ def terminal(stable='a', title='⠋ Define intent grammars | keety', address='0x
 
 
 class WindowVocabularyTests(unittest.TestCase):
+    def test_focus_on_uses_live_names_and_rejects_duplicate_vim_terminals(self):
+        windows = inject_windows({'clients': [terminal(title='Vim | project')]})
+        for phrase in ('focus on vim terminal', 'focus on the vim terminal'):
+            result = IntentMatcher(Path('/nonexistent/keety-test-aliases.json')).parse(phrase, windows.expansions)
+            self.assertEqual(result.intent.type, 'focus_window')
+            self.assertEqual(windows.targets[dict(result.intent.arguments)['window']]['stableId'], 'a')
+        duplicate = inject_windows({'clients': [terminal(title='Vim | project'),
+                                               terminal('b', 'Vim | other', '0x2', 20)]})
+        result = IntentMatcher(Path('/nonexistent/keety-test-aliases.json')).parse('focus on the vim terminal', duplicate.expansions)
+        self.assertEqual(result.status, 'ambiguous')
+
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)

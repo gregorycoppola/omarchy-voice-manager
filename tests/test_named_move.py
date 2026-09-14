@@ -47,6 +47,24 @@ class NamedMoveTests(unittest.TestCase):
             self.assertEqual(dict(result.intent.arguments),
                              {'application': app, 'selection': 'most_recent', 'monitor': 'other'})
 
+    def test_other_window_wording_and_maximize_current_monitor(self):
+        self.assertEqual(self.matcher.parse('move chrome to the other window').command, 'move-app:browser')
+        for name in ('chrome', 'twitter', 'discord'):
+            self.assertEqual(dict(self.matcher.parse('maximize ' + name).intent.arguments)['monitor'], 'current')
+        result = self.matcher.parse('maximize the explain terminal', self.windows.expansions)
+        self.assertEqual(result.intent.type, 'maximize_named_window')
+        self.assertEqual(dict(result.intent.arguments)['monitor'], 'current')
+        app = VoiceRuntime(self.data, self.data / 'status.json')
+        app.model = object()
+        with patch('runtime.save_transcript', return_value=('maximize the explain terminal', {})), \
+             patch('runtime.maximize_current_window', return_value='Maximized') as maximize, \
+             patch('runtime.GLib.idle_add', side_effect=lambda fn, *args: fn(*args)), \
+             patch.object(app, 'execute') as execute:
+            app.transcribe(self.data / 'test.wav', self.context, True)
+        self.assertEqual(maximize.call_args.args[0]['address'], self.explain['address'])
+        execute.assert_not_called()
+        self.assertFalse(self.matcher.path.exists())
+
     def test_unknown_names_never_move_current_window(self):
         for expansions in (self.windows.expansions, ()):
             for name in ('nonexistent terminal', 'nonexistent', 'unrelated app'):

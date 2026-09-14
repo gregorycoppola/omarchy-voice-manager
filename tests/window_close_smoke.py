@@ -46,7 +46,8 @@ def close_test():
                 move_other_screen(target)
                 moved = next(c for c in json.loads(run(['hyprctl','clients','-j'])) if c['address'] == target['address'])
                 assert (moved['monitor'] != original_monitor) == (index == 0), moved
-                assert moved['fullscreen'] == target['fullscreen'], moved
+                assert moved['fullscreen'] in (0, 1), moved
+                assert moved['fullscreenClient'] == moved['fullscreen'], moved
         result.append(close_app('_close_test'))
     except Exception as exc:
         result.append(exc)

@@ -179,8 +179,9 @@ running-program confirmation preference. Approval remains bound to the captured
 window; a closed/replaced window is never substituted. Unmatched named-terminal
 close requests do not fall back to closing the most recent terminal.
 Named move produces `move_named_window(window=<captured identity>, monitor=other)`.
-This live vocabulary covers terminal focus, close, and move; named-window
-maximize and custom nicknames are not included yet.
+This live vocabulary covers terminal focus, close, move, and maximize.
+“Maximize the explain terminal” produces a captured-window intent with
+`monitor=current`. Custom nicknames are not included yet.
 
 **Command mode is permanent.**
 Hold Super + R throughout one allowed phrase, then release.
@@ -241,21 +242,23 @@ this machine).
 X and Twitter are synonyms for one intent. Exact app classes identify their
 windows; ordinary browser tabs titled Discord or X are not treated as app windows.
 
-Maximize commands select one existing window, move it to DP-1 and focus it,
+Maximize commands select one existing window, keep it on its current screen and focus it,
 then set maximized mode for both the compositor and app. Normal browser controls
 remain visible; this is different from fullscreen. Repeating the command keeps
 it maximized. If the app is closed, Keety reports that instead of launching it.
 
 “Move to other screen” and “move window to other screen” work for any captured
 window, including Chromium. The window moves to the other screen's active
-workspace and receives focus. With more than two screens, the destination is
+workspace and receives focus. If it is the only window there, it is maximized;
+otherwise the destination workspace's windows are arranged in an equal grid.
+With more than two screens, the destination is
 the next connected monitor in monitor-ID order. It reports an error if only one
 screen is available. Fuzzy matches keep the original captured window as their target. A closed or replaced window is never substituted.
 
 Named moves use the same behavior, relative to the selected window's current
 screen. App moves select from the recording's captured windows and report an
 error if the app is closed. They do not launch it. Unknown names never fall back
-to moving the focused window.
+to moving the focused window. “Other window” is also accepted as “other screen.”
 
 Terminal close commands close an idle shell prompt directly. If a program or job
 is running, they show a confirmation in the bar popup with the chosen window's title.
@@ -337,8 +340,9 @@ apps such as Discord. On this installation, “Chrome” maps to Chromium.
 
 The voice popup belongs to the bar on the monitor focused when recording starts.
 It occupies no workspace or tile. Voice actions retain their existing display
-policies: controlled browser/app commands target **DP-1**, current-window maximize
-stays on its current screen, and move-to-other-screen selects another monitor.
+policies: open/focus app commands target **DP-1**, all maximize commands
+stay on the target's current screen, and move-to-other-screen selects another
+monitor and arranges the destination workspace.
 
 The old GTK-window rule in [config/hyprland-keety.lua](config/hyprland-keety.lua)
 only applies to the development window; the runtime creates no such window.

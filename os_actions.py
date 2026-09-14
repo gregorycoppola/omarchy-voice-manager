@@ -259,9 +259,22 @@ def move_other_screen(target):
     address = target["address"]
     run(["hyprctl", "dispatch", f'hl.dsp.window.move({{ window = "address:{address}", workspace = "{workspace}", follow = true }})'])
     run(["hyprctl", "dispatch", f'hl.dsp.focus({{ window = "address:{address}" }})'])
-    moved = next((c for c in json.loads(run(["hyprctl", "clients", "-j"])) if c.get("address") == address), None)
-    if moved is None or moved.get("monitor") != destination["id"]:
+    clients = json.loads(run(["hyprctl", "clients", "-j"]))
+    moved = next((c for c in clients if c.get("address") == address), None)
+    if (moved is None or moved.get("monitor") != destination["id"]
+            or moved.get('workspace', {}).get('id') != workspace
+            or any(moved.get(k) != target.get(k) for k in ('pid', 'class', 'stableId'))):
         raise RuntimeError("Could not confirm the window moved to the other screen")
+    neighbors = [c for c in clients if c.get('monitor') == destination['id']
+                 and c.get('workspace', {}).get('id') == workspace and c.get('mapped', True)
+                 and c.get('class') != 'io.github.gregorycoppola.Keety'
+                 and c.get('initialClass') != 'io.github.gregorycoppola.Keety'
+                 and re.fullmatch(r'0x[0-9a-fA-F]+', c.get('address', ''))]
+    if len(neighbors) == 1:
+        maximize_foreground(moved)
+    else:
+        tile_open_windows({'active': moved, 'clients': neighbors})
+        focus(moved)
     return f"Moved window to {destination['name']}"
 
 
@@ -393,7 +406,6 @@ def maximize_app(key):
     window = browser_window(clients) if key == "browser" else app_window(key, clients)
     if window is None:
         return f"No open {name} window"
-    move_to_main_screen(window)
     maximize_foreground(window)
     return f"Maximized {name} window"
 

@@ -2,6 +2,13 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Accept “focus on <window>” and “focus on the <window>” across live terminal names.
+
+- Arrange the destination workspace after moving a window: maximize a lone
+  window, or retile all destination windows into the equal grid. Maximize app
+  commands now stay on the target's current screen. Add named-terminal maximize
+  and accept “other window” as a screen synonym in named move commands.
+
 - Add “move <window/app> to the other screen/monitor” for live terminal names
   and Chrome, Discord, X/Twitter. Support short task prefixes such as “explain
   terminal.” Preserve captured identity, reject duplicate/unknown names, and

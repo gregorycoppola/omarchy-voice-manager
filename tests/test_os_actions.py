@@ -121,7 +121,7 @@ class CommandTests(unittest.TestCase):
             with patch("os_actions.run", return_value=json.dumps([window])), \
                  patch("os_actions.move_to_main_screen") as move, patch("os_actions.maximize_foreground") as present:
                 self.assertIn("Maximized", execute_command("maximize:" + key))
-                move.assert_called_once_with(window)
+                move.assert_not_called()
                 present.assert_called_once_with(window)
 
     def test_maximize_missing_window_does_not_launch(self):
