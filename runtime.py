@@ -15,7 +15,8 @@ from gi.repository import Gio, GLib
 
 from audio_levels import pcm_level
 from browser_connection import connection
-from command_catalog import INTENTS
+from command_catalog import INTENTS, NO_LEARN_COMMANDS
+from diagnostics import append_event, LOG_PATH
 from intent_matching import IntentMatcher
 from skipper import load_model
 from live_audio import read_growing_wav
@@ -38,6 +39,7 @@ class VoiceRuntime(Gio.Application):
     def __init__(self, data=DATA, status_path=STATUS, show_on_start=False):
         super().__init__(application_id=APP_ID)
         self.data = Path(data)
+        self.diagnostic_path = LOG_PATH if self.data == DATA else self.data / 'commands.jsonl'
         self.status_path = Path(status_path)
         self.model = None
         self.started = False
@@ -50,6 +52,7 @@ class VoiceRuntime(Gio.Application):
         self.ptt_held = False
         self.panel_epoch = 0
         self.session = uuid4().hex
+        self.diagnostic_recording = None
         self.levels = deque([0.0] * 48, maxlen=48)
         self.state = dict(state='Loading', message='Loading local speech model…', transcript='',
                           intent=None, intent_label='', monitor='', confirmation=None, completed_at=0)
@@ -91,6 +94,8 @@ class VoiceRuntime(Gio.Application):
             self.start_recording()
 
     def update(self, state, message):
+        append_event('state', path=self.diagnostic_path, session=self.session, recording=self.diagnostic_recording,
+                     state=state, message=message)
         self.state.update(state=state, message=message)
         self.publish()
 
@@ -145,6 +150,9 @@ class VoiceRuntime(Gio.Application):
         self.state['monitor'] = self.focused_monitor()
         try:
             path = new_recording(self.data / 'recordings')
+            self.diagnostic_recording = str(path)
+            append_event('recording_started', path=self.diagnostic_path, session=self.session, recording=str(path),
+                         active_window=context.get('active'), context=context)
             process = subprocess.Popen([
                 'pw-record', '--rate', '16000', '--channels', '1', '--format', 's16',
                 '--sample-count', '480000', str(path),
@@ -205,11 +213,17 @@ class VoiceRuntime(Gio.Application):
             GLib.idle_add(self.complete, 'Error', f'Audio kept; recording failed: {exc}')
 
     def transcribe(self, path, context=None, commands=False):
+        self.diagnostic_recording = str(path)
         try:
             text, _ = save_transcript(self.model, path)
+            append_event('transcript', path=self.diagnostic_path, session=self.session, recording=str(path),
+                         text=text, commands_enabled=commands)
             matcher = IntentMatcher(self.data / 'aliases.json')
             windows = inject_windows(context) if commands else None
             result = matcher.parse(text, windows.expansions) if commands else None
+            append_event('parsed', path=self.diagnostic_path, session=self.session, recording=str(path),
+                         result=result.to_dict() if result else None,
+                         command=result.command if result else None, matcher_error=matcher.error)
             GLib.idle_add(self.recognized, text, result)
             if not commands:
                 GLib.idle_add(self.complete, 'Ready', 'Transcript updated. No command was run.')
@@ -228,7 +242,7 @@ class VoiceRuntime(Gio.Application):
                 GLib.idle_add(self.complete, 'Ready', message)
                 return
             named_close = result.intent.type == 'close_named_window'
-            learn = result.method == 'fuzzy' and not named_close
+            learn = result.method == 'fuzzy' and not named_close and command not in NO_LEARN_COMMANDS
             target = windows.targets[dict(result.intent.arguments)['window']] if named_close else None
             if named_close or command in TERMINAL_CLOSE_INTENTS:
                 if not named_close:

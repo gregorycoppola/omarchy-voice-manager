@@ -446,11 +446,39 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 
 ## Validation
 
+Open **History** in Skipper's taskbar dropdown to review recent recordings in three
+columns: **what was heard**, **words you meant**, and **intended action**. Each row
+also shows the original logged match and outcome, when available. Edit the words,
+choose an action from the searchable list, and click **Save correction**. **Match
+these words** can suggest an action; saving still requires your click and never
+runs the action. Use **Refresh** after recording another command.
+
+User corrections are separate from automatic fuzzy aliases. They apply before
+normal matching only when the normalized heard phrase is identical (ignoring case
+and punctuation), including commands normally excluded from automatic learning.
+Corrections take effect on the next command without restarting or training a model.
+**Remove correction** restores normal parsing. The picker currently covers the
+fixed command catalog; it does not save identities of individual named windows.
+Corrections and their edit/removal audit are saved outside the repo in
+`~/.local/share/skipper/corrections.json` (under `$XDG_DATA_HOME` if set).
+Original audio/transcripts are not overwritten when correcting a command.
+
+Command diagnostics are stored outside the checkout at
+`~/.local/state/skipper/commands.jsonl` (or `$XDG_STATE_HOME/skipper/commands.jsonl`).
+Each line is a timestamped JSON event linking the recording file, focused window
+context, recognized transcript, original parse result (including candidates and
+matching method), and action outcome or error. Unrecognized commands are logged
+too. Audio and transcript files remain in `~/.local/share/skipper/recordings`.
+Logging covers push-to-talk recordings, not conversations while Skipper is idle.
+Use `tail -n 30 ~/.local/state/skipper/commands.jsonl` to inspect recent events.
+
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 node --test tests/test_browser_tabs.cjs
 .venv/bin/python tests/learning_smoke.py
 .venv/bin/python tests/explorer_smoke.py
+.venv/bin/python tests/history_smoke.py
+.venv/bin/python tests/tutorial_smoke.py
 .venv/bin/python tests/runtime_smoke.py
 .venv/bin/python tests/bar_popup_smoke.py
 .venv/bin/python tests/bar_mode_smoke.py
@@ -513,8 +541,10 @@ Skipper and other workspaces are excluded. If no matching windows remain, nothin
 is hidden. Hidden windows stay open in a dedicated special workspace associated
 with their original workspace. The `tile_terminals`, `tile_browsers`, and
 `tile_apps` intents are available in the command catalog and Explorer.
-The apps command accepts only **“tile all apps”** or **“tile the apps”** (ignoring case and punctuation);
-fuzzy matching and learned aliases are disabled for that intent.
+The apps command uses **“tile all apps”** and **“tile the apps”** as its built-in phrases.
+Similar wording competes with other intents using the usual score threshold and
+winning margin. Learned aliases remain disabled for this intent so old wording
+cannot bypass scoring.
 
 **“Hide all terminals”** hides visible terminals; **“hide all apps”** hides
 visible non-terminal apps. Both accept only those exact phrases (ignoring case

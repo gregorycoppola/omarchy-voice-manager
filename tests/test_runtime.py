@@ -42,6 +42,28 @@ class RuntimeTests(unittest.TestCase):
             self.transcribe(text, commands).assert_not_called()
             self.assertFalse((self.data / 'aliases.json').exists())
 
+    def test_user_correction_dispatches_and_logs_original_words_without_learning(self):
+        from corrections import Corrections
+        Corrections(self.data / 'corrections.json').save('towel apps', 'tile the apps', 'apps:tile')
+        context = {'active': {'workspace': {'id': 2}}}
+        execute = self.transcribe('Towel apps.', context=context)
+        execute.assert_called_once_with('apps:tile', context, None)
+        self.assertEqual(self.app.state['transcript'], 'Towel apps.')
+        self.assertFalse((self.data / 'aliases.json').exists())
+        events = [json.loads(line) for line in (self.data / 'commands.jsonl').read_text().splitlines()]
+        parsed = next(e for e in events if e['event'] == 'parsed')
+        self.assertEqual(parsed['result']['method'], 'correction')
+        self.assertEqual(parsed['result']['correction']['meant'], 'tile the apps')
+
+    def test_user_correction_to_close_still_requires_terminal_confirmation(self):
+        from corrections import Corrections
+        Corrections(self.data / 'corrections.json').save('finish this', 'close this terminal', 'close:terminal_current')
+        target = {'class': 'foot', 'address': '0x123', 'pid': 1, 'title': 'Busy terminal'}
+        with patch('runtime.terminal_close_target', return_value=target), \
+             patch('runtime.terminal_has_jobs', return_value=True):
+            self.transcribe('finish this', context={'active': target}).assert_not_called()
+        self.assertEqual(self.app.state['state'], 'Confirm')
+
     def test_failed_action_releases_busy_and_accepts_the_next_recording(self):
         with patch('runtime.save_transcript', return_value=('open chrome', {})), \
              patch.object(self.app, 'execute', side_effect=RuntimeError('Launcher failed')):

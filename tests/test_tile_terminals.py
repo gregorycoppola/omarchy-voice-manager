@@ -135,7 +135,7 @@ class TileWorkflowTests(unittest.TestCase):
                 VoiceRuntime.execute(command, context)
                 action.assert_called_once_with(context)
 
-    def test_apps_requires_literal_phrase_even_with_old_aliases(self):
+    def test_apps_competes_on_scores_without_learning_old_aliases(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'aliases.json'
             path.write_text(json.dumps({'version': 1, 'aliases': {
@@ -145,13 +145,16 @@ class TileWorkflowTests(unittest.TestCase):
             self.assertIsNone(matcher.error)
             self.assertEqual(matcher.parse('Tile all apps!').command, 'apps:tile')
             self.assertEqual(matcher.parse('Tile the apps!').command, 'apps:tile')
-            for phrase in ('tile all the apps', 'tile apps', 'tile all applications',
-                           'tile applications', 'tile all that', 'tell the app', 'pile all apps',
-                           'tile o apps', 'tile all terminals', 'tile all the terminals', 'tile l terminal'):
-                self.assertNotEqual(matcher.exact(phrase), 'apps:tile', phrase)
-                result = matcher.parse(phrase)
-                self.assertNotEqual(result.command, 'apps:tile', phrase)
-                self.assertFalse(any(c.command == 'apps:tile' for c in result.candidates), phrase)
+            self.assertNotIn('tell the app', matcher.aliases)
+            result = matcher.parse('tile the app')
+            self.assertEqual(result.command, 'apps:tile')
+            self.assertEqual(result.method, 'fuzzy')
+            self.assertAlmostEqual(result.selected.score, .96)
+            self.assertGreaterEqual(result.candidates[0].score - result.candidates[1].score, .06)
+            self.assertIsNone(matcher.parse('tile all that').command)
+            for phrase in ('tile all non-terminals', 'tile all non terminals', 'tile nonterminals'):
+                self.assertIsNone(matcher.parse(phrase).command, phrase)
+            self.assertEqual(matcher.parse('tile the terminals').command, 'terminals:tile')
             self.assertEqual(matcher.parse('tile all terminals').command, 'terminals:tile')
             self.assertEqual(matcher.parse('pile all terminals').command, 'terminals:tile')
             with self.assertRaisesRegex(ValueError, 'built-in phrase'):

@@ -7,7 +7,9 @@ from grammar_engine import Rule, Word, compile_grammar
 TERMINAL_CLASSES = {"foot", "footclient", "alacritty", "kitty", "org.wezfurlong.wezterm", "com.mitchellh.ghostty"}
 
 # These commands accept authored phrases only, never fuzzy or learned wording.
-EXACT_ONLY_COMMANDS = {"apps:tile", "terminals:hide", "apps:hide", "window:hide"}
+EXACT_ONLY_COMMANDS = {"terminals:hide", "apps:hide", "window:hide"}
+# Apps can compete on similarity, but historical aliases must not bypass scoring.
+NO_LEARN_COMMANDS = EXACT_ONLY_COMMANDS | {"apps:tile"}
 
 # Compiled against a fresh window vocabulary at recording start, not at import.
 MOVE_PATTERNS = tuple(f'move {article}<window> to {other}{screen}'

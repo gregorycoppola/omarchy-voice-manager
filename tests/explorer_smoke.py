@@ -49,8 +49,8 @@ with tempfile.TemporaryDirectory() as directory:
             (recordings / 'example.txt').write_text('Open Gmail.')
             app.refresh_history()
             app.stack.set_visible_child_name('history')
-            assert len(app.recordings_page.rows) == 1
-            assert app.recordings_page.details.get_first_child().get_next_sibling().get_text() == 'Open Gmail.'
+            assert len(app.history_page.rows) == 1
+            assert app.history_page.rows[0].heard == 'Open Gmail.'
             app.stack.set_visible_child_name('settings')
             app.refresh_preferences()
             toggle = app.preferences_box.get_first_child().get_next_sibling()

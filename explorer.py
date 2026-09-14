@@ -154,6 +154,8 @@ class Explorer(Gtk.Application):
                          flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
         self.add_main_option('tutorial', 0, GLib.OptionFlags.NONE, GLib.OptionArg.NONE,
                              'Open the voice-command tutorial', None)
+        self.add_main_option('history', 0, GLib.OptionFlags.NONE, GLib.OptionArg.NONE,
+                             'Open command history and corrections', None)
         self.tutorial = None
         data = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
         self.alias_path = Path(alias_path) if alias_path else data / "skipper/aliases.json"
@@ -168,9 +170,16 @@ class Explorer(Gtk.Application):
     def do_command_line(self, command_line):
         if command_line.get_options_dict().contains('tutorial'):
             self.show_tutorial()
+        elif command_line.get_options_dict().contains('history'):
+            self.show_history()
         else:
             self.activate()
         return 0
+
+    def show_history(self, *_):
+        self.activate()
+        self.refresh_history()
+        self.stack.set_visible_child_name('history')
 
     def show_tutorial(self, *_):
         if self.tutorial is None:
@@ -203,6 +212,9 @@ class Explorer(Gtk.Application):
         tutorial = Gtk.Button(label='Tutorial')
         tutorial.connect('clicked', self.show_tutorial)
         header.pack_end(tutorial)
+        history = Gtk.Button(label='History')
+        history.connect('clicked', self.show_history)
+        header.pack_end(history)
         self.window.set_titlebar(header)
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         intro = column(spacing=6)
@@ -344,19 +356,12 @@ class Explorer(Gtk.Application):
 
     def refresh_history(self, *_):
         clear(self.history_box)
-        toolbar = column(margin=12)
-        refresh = Gtk.Button(label='Refresh recordings', halign=Gtk.Align.START)
-        refresh.connect('clicked', self.refresh_history)
-        toolbar.append(refresh)
-        self.history_box.append(toolbar)
-        paths = sorted((self.alias_path.parent / 'recordings').glob('*.wav'), reverse=True)
-        self.recordings_page = CatalogPage([
-            (path.stem.replace('_', ' '), 'Recording', path, path.stem) for path in paths
-        ], self.render_recording)
-        self.recordings_page.set_vexpand(True)
-        if not paths:
-            self.recordings_page.details.append(label('No recordings yet', 'title-2'))
-        self.history_box.append(self.recordings_page)
+        from diagnostics import LOG_PATH
+        from history_ui import HistoryPage
+        default_data = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'skipper'
+        log_path = LOG_PATH if self.alias_path.parent == default_data else self.alias_path.parent / 'commands.jsonl'
+        self.history_page = HistoryPage(self, log_path)
+        self.history_box.append(self.history_page)
 
     def render_recording(self, box, path):
         box.append(label(path.stem.replace('_', ' '), 'title-2'))

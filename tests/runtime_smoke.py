@@ -1,5 +1,7 @@
 """GApplication lifecycle and hold/release flow with synthetic audio, no microphone."""
 import array
+from functools import partial
+import json
 from pathlib import Path
 import signal
 import sys
@@ -10,6 +12,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from runtime import VoiceRuntime
+from diagnostics import append_event
 from gi.repository import GLib
 
 class Recording:
@@ -54,6 +57,12 @@ with tempfile.TemporaryDirectory() as directory:
                 assert app.state['intent']['arguments'] == {'destination': 'gmail'}
                 assert app.state['completed_at'] > 0
                 assert len(list((Path(directory) / 'recordings').glob('*.wav'))) == 1
+                entries = [json.loads(line) for line in (Path(directory) / 'commands.jsonl').read_text().splitlines()]
+                parsed = next(e for e in entries if e['event'] == 'parsed')
+                assert parsed['command'] == 'site:gmail'
+                assert parsed['result']['text'] == 'open gmail'
+                assert parsed['result']['intent'] == app.state['intent']
+                assert any(e.get('message') == 'Opened Gmail' and e['recording'] == parsed['recording'] for e in entries)
                 passed.append(True)
                 app.request_quit()
                 return False
@@ -67,6 +76,7 @@ with tempfile.TemporaryDirectory() as directory:
         app.quit()
         return False
     with patch('runtime.load_model', return_value=(object(), 0)), \
+         patch('runtime.append_event', side_effect=partial(append_event, path=Path(directory) / 'commands.jsonl')), \
          patch('runtime.capture_window_context', return_value={}), \
          patch.object(app, 'focused_monitor', return_value='test'), \
          patch('runtime.subprocess.Popen', side_effect=Recording), \

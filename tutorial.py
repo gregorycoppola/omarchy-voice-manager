@@ -18,7 +18,7 @@ LESSONS = (
       ('tile all browsers', 'Tile browser windows and hide everything else.'),
       ('tile all apps', 'Tile non-terminal apps and hide terminals.'),
       ('tile all windows', 'Bring hidden windows back and tile everything together.')),
-     '“Apps” means everything except terminals. Say “tile all apps” or “tile the apps” exactly. Other workspaces are left alone.'),
+     '“Apps” means everything except terminals. Try “tile all apps” or “tile the apps”. Other workspaces are left alone.'),
     ('Hide and restore', 'Put windows away without closing them',
      'Hide commands put windows out of view while their programs keep running. They do not run the tiling step '
      'or restore windows you already hid.',
@@ -49,8 +49,8 @@ LESSONS = (
      (('close this terminal', 'Close the terminal focused when you start speaking.'),
       ('close terminal', 'Close the most recently used terminal across workspaces.'),
       ('close chrome', 'Ask a Chrome / Chromium window to close.')),
-     'If a command goes wrong, check the recognized words in the dropdown. Use Explorer to inspect commands, '
-     'recording history, and learned phrases. Say one command at a time. Quit in the dropdown stops Skipper’s '
+     'If a command goes wrong, open History in the dropdown. Edit the words you meant, select the intended action, '
+     'and save a correction for next time. Use Explorer to inspect commands and learned phrases. Say one command at a time. Quit in the dropdown stops Skipper’s '
      'background process; closing this tutorial does not.'),
 )
 

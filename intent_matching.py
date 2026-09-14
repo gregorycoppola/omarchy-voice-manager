@@ -7,8 +7,9 @@ import re
 from pathlib import Path
 import tempfile
 
-from command_catalog import GRAMMAR, INTENTS, EXPANSIONS, STRUCTURED_INTENTS, GRAMMAR_REVISION, EXACT_ONLY_COMMANDS
+from command_catalog import GRAMMAR, INTENTS, EXPANSIONS, STRUCTURED_INTENTS, GRAMMAR_REVISION, EXACT_ONLY_COMMANDS, NO_LEARN_COMMANDS
 from grammar_engine import Intent, normalize
+from corrections import Corrections
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ class ParseResult:
     selected: Candidate | None = None
     candidates: tuple[Candidate, ...] = ()
     reason: str | None = None
+    correction: dict | None = None
 
     @property
     def intent(self):
@@ -51,7 +53,8 @@ class ParseResult:
         return {"text": self.text, "normalized": normalize(self.text), "status": self.status,
                 "grammar_revision": GRAMMAR_REVISION,
                 "method": self.method, "intent": self.intent.to_dict() if self.intent else None,
-                "reason": self.reason, "candidates": [c.to_dict() for c in self.candidates]}
+                "reason": self.reason, "correction": self.correction,
+                "candidates": [c.to_dict() for c in self.candidates]}
 
 
 class IntentMatcher:
@@ -69,7 +72,7 @@ class IntentMatcher:
                 if phrase in GRAMMAR and GRAMMAR[phrase] != intent:
                     raise ValueError("Alias conflicts with a built-in command")
             self.aliases = {phrase: command for phrase, command in data["aliases"].items()
-                            if command not in EXACT_ONLY_COMMANDS}
+                            if command not in NO_LEARN_COMMANDS}
         except FileNotFoundError:
             pass
         except (OSError, ValueError) as exc:
@@ -86,6 +89,16 @@ class IntentMatcher:
     def parse(self, text, extra_expansions=()):
         """Parse one snapshot, retaining competing dynamic slot bindings."""
         phrase = normalize(text)
+        corrections = Corrections(self.path.with_name('corrections.json'))
+        if corrections.error:
+            return ParseResult(text, 'unrecognized', reason=corrections.error)
+        correction = corrections.rules.get(phrase)
+        if correction:
+            command = correction['command']
+            candidate = Candidate(command, STRUCTURED_INTENTS[command], correction['meant'],
+                                  1.0, 'correction', INTENTS[command]['label'])
+            return ParseResult(text, 'matched', 'correction', candidate, (candidate,),
+                               reason='Exact phrase explicitly corrected by the user.', correction=correction)
         expansions = EXPANSIONS + tuple(extra_expansions)
         entries = []
         for wording, command in (self.aliases | GRAMMAR).items():
@@ -106,6 +119,8 @@ class IntentMatcher:
             return ParseResult(text, 'matched', method, candidate, (candidate,))
         if phrase.split()[:1] == ['hide']:
             return ParseResult(text, 'unrecognized', reason='Hide commands require their exact built-in phrase.')
+        if re.search(r'\bnon[ -]?terminals?\b', phrase):
+            return ParseResult(text, 'unrecognized', reason='Use tile the apps for non-terminal windows.')
         # Keep the existing guards, allowing longer named-window titles when the
         # entire command matched exactly above.
         move_match = re.fullmatch(r'move (.+) to (?:the )?other \w+', phrase)
@@ -178,8 +193,8 @@ class IntentMatcher:
         phrase = normalize(text)
         if not phrase or intent not in INTENTS:
             raise ValueError("Unknown intent or empty phrase")
-        if intent in EXACT_ONLY_COMMANDS:
-            raise ValueError("This command accepts only its built-in phrase")
+        if intent in NO_LEARN_COMMANDS:
+            raise ValueError("This command does not accept learned aliases; use a built-in phrase")
         existing = self.exact(phrase)
         if existing and existing != intent:
             raise ValueError("Phrase already belongs to another intent")
