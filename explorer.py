@@ -150,7 +150,11 @@ def render_schema(box, name):
 
 class Explorer(Gtk.Application):
     def __init__(self, alias_path=None):
-        super().__init__(application_id="io.github.gregorycoppola.Skipper.Explorer")
+        super().__init__(application_id="io.github.gregorycoppola.Skipper.Explorer",
+                         flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        self.add_main_option('tutorial', 0, GLib.OptionFlags.NONE, GLib.OptionArg.NONE,
+                             'Open the voice-command tutorial', None)
+        self.tutorial = None
         data = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
         self.alias_path = Path(alias_path) if alias_path else data / "skipper/aliases.json"
         self.window = None
@@ -158,16 +162,47 @@ class Explorer(Gtk.Application):
         self.player = None
         self.window_snapshot = inject_windows(None)
         self.windows_refreshing = False
+        self.windows_timer = None
         self.connect('shutdown', self.stop_playback)
+
+    def do_command_line(self, command_line):
+        if command_line.get_options_dict().contains('tutorial'):
+            self.show_tutorial()
+        else:
+            self.activate()
+        return 0
+
+    def show_tutorial(self, *_):
+        if self.tutorial is None:
+            from tutorial import TutorialWindow
+            self.tutorial = TutorialWindow(self)
+            self.tutorial.connect('close-request', self.tutorial_closed)
+        self.tutorial.present()
+
+    def tutorial_closed(self, *_):
+        self.tutorial = None
+        return False
+
+    def explorer_closed(self, *_):
+        self.stop_playback()
+        self.window = None
+        if self.windows_timer is not None:
+            GLib.source_remove(self.windows_timer)
+            self.windows_timer = None
+        return False
 
     def do_activate(self):
         if self.window:
             self.window.present()
             return
         self.window = Gtk.ApplicationWindow(application=self, title="Skipper Explorer")
+        self.window.connect('close-request', self.explorer_closed)
         self.window.set_default_size(1040, 760)
         header = Gtk.HeaderBar()
         header.set_title_widget(Gtk.Label(label="Skipper Explorer"))
+        tutorial = Gtk.Button(label='Tutorial')
+        tutorial.connect('clicked', self.show_tutorial)
+        header.pack_end(tutorial)
         self.window.set_titlebar(header)
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         intro = column(spacing=6)
@@ -223,7 +258,7 @@ class Explorer(Gtk.Application):
         self.window.set_focus(self.rules_page.search)
         self.window.present()
         self.refresh_windows()
-        GLib.timeout_add_seconds(2, self.refresh_windows)
+        self.windows_timer = GLib.timeout_add_seconds(2, self.refresh_windows)
 
     def refresh_windows(self):
         if self.windows_refreshing:
@@ -239,6 +274,8 @@ class Explorer(Gtk.Application):
 
     def update_windows(self, snapshot, error):
         self.windows_refreshing = False
+        if self.window is None:
+            return
         previous = self.window_snapshot
         self.window_snapshot = snapshot
         if previous.revision == snapshot.revision and hasattr(self, 'windows_page') and not error:

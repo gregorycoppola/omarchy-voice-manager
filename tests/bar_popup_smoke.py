@@ -22,7 +22,7 @@ ShellRoot {
         implicitHeight: 28
         exclusiveZone: -1
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        Skipper.BarWidget { id: widget; anchors.fill: parent }
+        Skipper.BarWidget { id: widget; anchors.fill: parent; settings: ({statusPath: "/nonexistent/skipper-tutorial-test-status.json"}) }
         Timer {
             interval: 150; running: true
             onTriggered: {

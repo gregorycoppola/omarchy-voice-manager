@@ -118,6 +118,12 @@ files are SHA-256 verified. Model files occupy about 639 MiB and stay in ignored
 
 ## Use
 
+Click **Tutorial** in Skipper's taskbar dropdown for a separate, six-part guide
+to hold-to-talk, tiling, hiding/restoring, opening/moving apps, terminal names,
+and closing windows. It does not record audio, execute example commands, or load
+a speech model. It is also available from Explorer's header or with
+`./launch-explorer.sh --tutorial`.
+
 Launch **Skipper** from the application launcher, run `skipper`, or use
 `./launch.sh`. Install the menu-bar widget and login launcher with
 `.venv/bin/python install_bar.py` (the installer backs up existing user config).

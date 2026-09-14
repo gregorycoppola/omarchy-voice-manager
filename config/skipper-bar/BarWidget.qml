@@ -225,6 +225,14 @@ BarWidget {
                 Row {
                     spacing: Style.space(8)
                     Button {
+                        text: "Tutorial"
+                        onClicked: {
+                            var launcher = root.setting("explorerLauncher", root.pluginRoot + "/launch-explorer.sh")
+                            if (launcher) Quickshell.execDetached([launcher, "--tutorial"])
+                            root.close()
+                        }
+                    }
+                    Button {
                         text: "Explorer"
                         onClicked: {
                             var launcher = root.setting("explorerLauncher", root.pluginRoot + "/launch-explorer.sh")
