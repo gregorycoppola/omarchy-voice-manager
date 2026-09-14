@@ -7,7 +7,7 @@ from grammar_engine import Rule, Word, compile_grammar
 TERMINAL_CLASSES = {"foot", "footclient", "alacritty", "kitty", "org.wezfurlong.wezterm", "com.mitchellh.ghostty"}
 
 # These commands accept authored phrases only, never fuzzy or learned wording.
-EXACT_ONLY_COMMANDS = {"apps:tile"}
+EXACT_ONLY_COMMANDS = {"apps:tile", "terminals:hide", "apps:hide", "window:hide"}
 
 # Compiled against a fresh window vocabulary at recording start, not at import.
 MOVE_PATTERNS = tuple(f'move {article}<window> to {other}{screen}'
@@ -81,6 +81,8 @@ SCHEMAS = {
     "tile_terminals": {"workspace": ("current",)},
     "tile_browsers": {"workspace": ("current",)},
     "tile_apps": {"workspace": ("current",)},
+    "hide_windows": {"workspace": ("current",), "category": ("terminals", "apps")},
+    "hide_window": {"selection": ("current",)},
 }
 
 RULES = (
@@ -126,6 +128,12 @@ RULES = (
                            "tile the browsers", "tile open browsers", "tile all browser windows"),
          "tile_browsers", (("workspace", "current"),), "browsers:tile",
          "Tile browsers and minimize other windows"),
+    Rule("hide_terminals", ("hide all terminals",), "hide_windows",
+         (("workspace", "current"), ("category", "terminals")), "terminals:hide", "Hide all terminals"),
+    Rule("hide_apps", ("hide all apps",), "hide_windows",
+         (("workspace", "current"), ("category", "apps")), "apps:hide", "Hide all non-terminal apps"),
+    Rule("hide_current_window", ("hide this window",), "hide_window",
+         (("selection", "current"),), "window:hide", "Hide this window"),
     Rule("tile_apps", ("tile all apps",),
          "tile_apps", (("workspace", "current"),), "apps:tile",
          "Tile non-terminal apps and minimize terminals"),

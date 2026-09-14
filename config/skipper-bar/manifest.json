@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "id": "greg.keety",
-  "name": "Keety",
-  "version": "2.0.0",
+  "id": "greg.skipper",
+  "name": "Skipper",
+  "version": "0.2.0",
   "author": "Greg",
-  "description": "Voice command status and controls",
+  "description": "Local hold-to-talk voice commands for your desktop",
   "kinds": [
     "bar-widget"
   ],
@@ -12,9 +12,10 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "Keety",
+    "displayName": "Skipper",
     "description": "Voice command status and controls",
     "category": "Utilities",
-    "allowMultiple": false
+    "allowMultiple": false,
+    "defaultSection": "right"
   }
 }

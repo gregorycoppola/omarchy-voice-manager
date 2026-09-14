@@ -8,7 +8,7 @@ local session = tostring(os.time()) .. "-" .. tostring(math.random(100000, 99999
 local function send(state)
   sequence = sequence + 1
   local event = session .. ":" .. tostring(sequence) .. ":" .. state
-  hl.dispatch(hl.dsp.exec_cmd("gapplication action io.github.gregorycoppola.Keety ptt-event \"'" .. event .. "'\""))
+  hl.dispatch(hl.dsp.exec_cmd("gapplication action io.github.gregorycoppola.Skipper ptt-event \"'" .. event .. "'\""))
 end
 
 local function chord_down()
@@ -30,12 +30,12 @@ hl.on("input.keyboard.key", function(code, timestamp, state)
   if state == 0 and not chord_down() then release() end
 end)
 
-hl.unbind("SUPER + R") -- replaces Keety's previous press binding
+hl.unbind("SUPER + R") -- replaces Skipper's previous press binding
 hl.bind("SUPER + R", function()
   if recording then return end
   recording = true
   send("down")
-end, { description = "Keety: hold to talk" })
+end, { description = "Skipper: hold to talk" })
 
 -- A dropped release message or config reload must not leave the microphone open.
 hl.timer(function()

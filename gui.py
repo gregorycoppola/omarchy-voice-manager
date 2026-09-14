@@ -1,4 +1,4 @@
-"""Keety's native GTK4 desktop window."""
+"""Skipper's native GTK4 desktop window."""
 import os
 import json
 from pathlib import Path
@@ -13,24 +13,24 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Gdk", "4.0")
 from gi.repository import Gdk, Gio, GLib, Gtk
 
-from keety import load_model
+from skipper import load_model
 from recordings import new_recording, save_transcript
 from live_audio import read_growing_wav
 from level_meter import LevelMeter, pcm_level
-from os_actions import execute_command, capture_window_context, window_target, tile_open_windows, tile_terminals, tile_browsers, tile_apps, move_other_screen, maximize_current_window, terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS
+from os_actions import execute_command, capture_window_context, window_target, tile_open_windows, hide_windows, hide_current_window, tile_terminals, tile_browsers, tile_apps, move_other_screen, maximize_current_window, terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS
 from settings import Settings
 from terminal_activity import terminal_has_jobs
 from command_catalog import GRAMMAR, INTENTS
 from intent_matching import IntentMatcher
 from push_to_talk import PushToTalk
 
-DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "keety/recordings"
+DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "skipper/recordings"
 
 
-class Keety(Gtk.Application):
+class Skipper(Gtk.Application):
     def __init__(self):
-        super().__init__(application_id="io.github.gregorycoppola.Keety")
-        self.bar_mode = os.environ.get("KEETY_BAR_MODE") == "1"
+        super().__init__(application_id="io.github.gregorycoppola.Skipper")
+        self.bar_mode = os.environ.get("SKIPPER_BAR_MODE") == "1"
         self.window = None
         self.model = None
         self.busy = False
@@ -59,11 +59,11 @@ class Keety(Gtk.Application):
             self.window.present()
             return
         DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.window = Gtk.ApplicationWindow(application=self, title="Keety")
+        self.window = Gtk.ApplicationWindow(application=self, title="Skipper")
         self.window.set_default_size(760, 620)
         self.window.connect("close-request", self.on_close)
         header = Gtk.HeaderBar()
-        header.set_title_widget(Gtk.Label(label="Keety · Voice commands"))
+        header.set_title_widget(Gtk.Label(label="Skipper · Voice commands"))
         self.window.set_titlebar(header)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         for side in ["top", "bottom", "start", "end"]:
@@ -102,7 +102,7 @@ class Keety(Gtk.Application):
             self.hold()
             self.status.connect("notify::label", lambda *_: self.publish_bar_state())
             GLib.timeout_add_seconds(5, self.publish_bar_state)
-            quit_button = Gtk.Button(label="Quit Keety")
+            quit_button = Gtk.Button(label="Quit Skipper")
             quit_button.connect("clicked", self.request_quit)
             header.pack_end(quit_button)
         progress = Gtk.Box(spacing=10)
@@ -113,7 +113,7 @@ class Keety(Gtk.Application):
         self.status.set_hexpand(True)
         box.append(progress)
         self.suggestion_dialog = Gtk.Window(
-            title="Keety — Confirm command", application=self, transient_for=self.window,
+            title="Skipper — Confirm command", application=self, transient_for=self.window,
             modal=True, destroy_with_parent=True, resizable=False)
         self.suggestion_dialog.set_default_size(560, 280)
         self.suggestion_dialog.connect("close-request", self.close_suggestion)
@@ -178,7 +178,7 @@ class Keety(Gtk.Application):
         location.add_css_class("dim-label")
         box.append(location)
         self.refresh_history()
-        if not self.bar_mode or os.environ.get("KEETY_SHOW_WINDOW") == "1":
+        if not self.bar_mode or os.environ.get("SKIPPER_SHOW_WINDOW") == "1":
             self.window.present()
         self.publish_bar_state()
         threading.Thread(target=self.prepare, daemon=True).start()
@@ -364,6 +364,14 @@ class Keety(Gtk.Application):
                 except (OSError, ValueError) as exc:
                     message += f" · Could not remember phrase: {exc}"
                 command = candidate
+            if candidate in {'terminals:hide', 'apps:hide', 'window:hide'}:
+                try:
+                    message += " · " + (hide_current_window(context) if candidate == 'window:hide'
+                                        else hide_windows(context, candidate.split(':', 1)[0]))
+                except Exception as exc:
+                    message += f" · {exc}"
+                GLib.idle_add(self.finished, path, message)
+                return
             if candidate in {"windows:tile", "terminals:tile", "browsers:tile", "apps:tile"}:
                 try:
                     action = {"windows:tile": tile_open_windows, "terminals:tile": tile_terminals,
@@ -543,7 +551,7 @@ class Keety(Gtk.Application):
         state = ("Stopped" if stopped else "Confirm" if self.pending_suggestion else
                  "Recording" if self.recorder and self.recorder.poll() is None else
                  "Working" if self.busy else "Ready" if self.model else "Loading")
-        path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / f"keety-{os.getuid()}-status.json"
+        path = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / f"skipper-{os.getuid()}-status.json"
         try:
             temporary = path.with_suffix(".tmp")
             temporary.write_text(json.dumps({"state": state, "message": self.status.get_text(), "updated": time.time()}))
@@ -556,7 +564,7 @@ class Keety(Gtk.Application):
     def request_quit(self, *_):
         if self.busy:
             self.stop_recording()
-            self.status.set_text("Finishing this recording. Click Quit Keety again when ready.")
+            self.status.set_text("Finishing this recording. Click Quit Skipper again when ready.")
             return
         if self.player and self.player.poll() is None:
             self.player.terminate()
@@ -581,5 +589,5 @@ if __name__ == "__main__":
     os.umask(0o077)
     if "--show" in sys.argv:
         sys.argv.remove("--show")
-        os.environ["KEETY_SHOW_WINDOW"] = "1"
-    raise SystemExit(Keety().run(sys.argv))
+        os.environ["SKIPPER_SHOW_WINDOW"] = "1"
+    raise SystemExit(Skipper().run(sys.argv))

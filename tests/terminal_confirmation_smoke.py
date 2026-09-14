@@ -7,13 +7,13 @@ import time
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-with tempfile.TemporaryDirectory(prefix='keety-terminal-test-') as directory:
+with tempfile.TemporaryDirectory(prefix='skipper-terminal-test-') as directory:
     os.environ['XDG_DATA_HOME'] = directory
     import gui
     from gi.repository import GLib
     from settings import Settings
-    app = gui.Keety()
-    app.set_application_id('io.github.gregorycoppola.Keety.TerminalTest')
+    app = gui.Skipper()
+    app.set_application_id('io.github.gregorycoppola.Skipper.TerminalTest')
     target = {'class':'foot', 'address':'0x1', 'pid':100, 'title':'My editor'}
     context = {'active':target, 'clients':[target]}
     text = ['close this terminal']

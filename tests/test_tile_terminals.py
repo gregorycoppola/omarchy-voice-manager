@@ -40,7 +40,7 @@ class TileTerminalTests(unittest.TestCase):
     def scenario(self, other_live=OTHER, fail_move=False, visible=False):
         excluded = [dict(OTHER, address='0x3', workspace={'id': 3}),
                     dict(OTHER, address='0x4', mapped=False),
-                    dict(OTHER, address='0x5', initialClass='io.github.gregorycoppola.Keety')]
+                    dict(OTHER, address='0x5', initialClass='io.github.gregorycoppola.Skipper')]
         x, y, w, h = equal_grid(1, MONITOR)[0]
         final = dict(WINDOW, floating=True, fullscreen=0, fullscreenClient=0, at=[x,y], size=[w,h])
         clients = [dict(WINDOW), other_live, *excluded]
@@ -49,13 +49,13 @@ class TileTerminalTests(unittest.TestCase):
             if argv[1] == 'clients':
                 return json.dumps(clients)
             if argv[1] == 'monitors':
-                return json.dumps([dict(MONITOR, specialWorkspace={'name': 'special:keety-tile-2' if visible else ''})])
+                return json.dumps([dict(MONITOR, specialWorkspace={'name': 'special:skipper-tile-2' if visible else ''})])
             dispatch = argv[-1]
             dispatches.append(dispatch)
             if 'relative = false, window = "address:0x1"' in dispatch and 'window.move' in dispatch:
                 clients[0] = final
-            if 'workspace = "special:keety-tile-2"' in dispatch and not fail_move:
-                clients[1] = dict(other_live, workspace={'id': -99, 'name': 'special:keety-tile-2'})
+            if 'workspace = "special:skipper-tile-2"' in dispatch and not fail_move:
+                clients[1] = dict(other_live, workspace={'id': -99, 'name': 'special:skipper-tile-2'})
             return 'ok'
         with patch('os_actions.run', side_effect=run):
             result = tile_terminals({'active': OTHER, 'clients': [WINDOW, OTHER, *excluded]})
@@ -89,7 +89,7 @@ class TileWorkflowTests(unittest.TestCase):
         clients = [dict(WINDOW), dict(OTHER),
                    dict(OTHER, address='0x3', stableId='three', **{'class': 'discord'}),
                    dict(OTHER, address='0x4', workspace={'id': 3}),
-                   dict(OTHER, address='0x5', workspace={'id': -98, 'name': 'special:keety-tile-3'})]
+                   dict(OTHER, address='0x5', workspace={'id': -98, 'name': 'special:skipper-tile-3'})]
         untouched = json.loads(json.dumps(clients[3:]))
         def run(argv):
             if argv[1] == 'clients':
@@ -114,7 +114,8 @@ class TileWorkflowTests(unittest.TestCase):
             for action, expected in [(tile_terminals, {'0x1'}), (tile_terminals, {'0x1'}),
                                      (tile_browsers, {'0x2'}), (tile_apps, {'0x2', '0x3'}),
                                      (tile_terminals, {'0x1'}), (tile_open_windows, {'0x1', '0x2', '0x3'})]:
-                active = next(c for c in clients if c['workspace']['id'] == 2)
+                active = next((c for c in clients if c['workspace'].get('name') == 'special:skipper-tile-2'),
+                              next(c for c in clients if c['workspace']['id'] == 2))
                 context = json.loads(json.dumps({'active': active, 'clients': clients}))
                 result = action(context)
                 self.assertIn('Tiled', result)
@@ -154,3 +155,17 @@ class TileWorkflowTests(unittest.TestCase):
             self.assertEqual(matcher.parse('pile all terminals').command, 'terminals:tile')
             with self.assertRaisesRegex(ValueError, 'built-in phrase'):
                 matcher.learn('tile all that', 'apps:tile')
+
+
+    def test_revealed_holding_workspace_is_dismissed_without_new_minimizations(self):
+        from os_actions import hide_window_targets
+        monitor = dict(MONITOR, specialWorkspace={'name': 'special:skipper-tile-2'})
+        with patch('os_actions.run', side_effect=[json.dumps([monitor]), 'ok']) as run:
+            self.assertEqual(hide_window_targets([], 2, dismiss_hidden=True), (0, 0))
+            self.assertIn('toggle_special("skipper-tile-2")', run.call_args_list[-1].args[0][-1])
+
+    def test_unrelated_special_workspace_is_not_assigned_an_origin(self):
+        with patch('os_actions.run') as run, self.assertRaisesRegex(RuntimeError, 'regular workspace'):
+            tile_terminals({'active': dict(WINDOW, workspace={'id': -98, 'name': 'special:scratchpad'}),
+                            'clients': [WINDOW]})
+        run.assert_not_called()

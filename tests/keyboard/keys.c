@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     struct xkb_state *state = xkb_state_new(map);
     char *keymap = xkb_keymap_get_as_string(map, XKB_KEYMAP_FORMAT_TEXT_V1);
     size_t length = strlen(keymap) + 1;
-    int fd = memfd_create("keety-test-keymap", 0);
+    int fd = memfd_create("skipper-test-keymap", 0);
     if (fd < 0 || write(fd, keymap, length) != length) return 3;
     struct zwp_virtual_keyboard_v1 *keyboard = zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(manager, seat);
     zwp_virtual_keyboard_v1_keymap(keyboard, WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1, fd, length);

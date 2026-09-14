@@ -14,7 +14,7 @@ import threading
 import time
 
 ROOT = Path(__file__).resolve().parent
-CONFIG = Path.home() / '.config/keety/browser-connection.json'
+CONFIG = Path.home() / '.config/skipper/browser-connection.json'
 EXTENSION = 'chrome-extension://mmlmfjhmonkocbjadbfplnigmagldckm/'
 
 
@@ -78,16 +78,16 @@ class BrowserConnection:
         try:
             entry = json.loads(CONFIG.read_text())
         except (OSError, ValueError):
-            raise RuntimeError('Browser connection is not configured: ~/.config/keety/browser-connection.json') from None
+            raise RuntimeError('Browser connection is not configured: ~/.config/skipper/browser-connection.json') from None
         if '--extension' not in entry['args']:
-            raise RuntimeError('Keety requires the regular-browser extension connection')
+            raise RuntimeError('Skipper requires the regular-browser extension connection')
         self.process = subprocess.Popen([entry['command'], *entry['args']],
             env=dict(os.environ, **entry.get('env', {})), stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         self.selector = selectors.DefaultSelector()
         self.selector.register(self.process.stdout, selectors.EVENT_READ)
         self.request('initialize', dict(protocolVersion='2024-11-05', capabilities={},
-            clientInfo=dict(name='Keety browser commands', version='1')))
+            clientInfo=dict(name='Skipper browser commands', version='1')))
         self.send(dict(method='notifications/initialized'))
 
     def bring_up(self, site):

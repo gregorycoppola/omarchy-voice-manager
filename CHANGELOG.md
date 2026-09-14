@@ -2,6 +2,14 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Rename the app and bar plugin to Skipper. Add a root Omarchy plugin manifest,
+  portable widget defaults, explicit runtime setup/removal, and single-monitor
+  support. Runtime dependencies and speech-model downloads live outside plugin
+  checkouts. Marketplace submission awaits license selection and owner review.
+
+- Add exact-only hide commands for terminals, non-terminal apps, and the current
+  window. Restore the original workspace when tiling from a revealed hidden window.
+
 - Add terminal, browser, and non-terminal app tiling views. Restore hidden
   windows with “tile all windows”; restrict “tile all apps” to exact matching.
 
@@ -43,12 +51,12 @@
 - Replace the everyday GTK voice window with a windowless runtime and an attached
   menu-bar popup. It shows microphone levels, recognized speech, and intent without
   joining the tiling layout or taking keyboard focus. Successful actions dismiss
-  the popup immediately; the latest intent name stays to the left of Keety in the bar.
+  the popup immediately; the latest intent name stays to the left of Skipper in the bar.
 - Move recording history, playback/retry, terminal-close settings, and learned
   phrase removal into Explorer. Terminal-close confirmations appear in the bar
   popup and bind approval to a unique request and captured window.
 
-- Add a separate native **Keety Explorer** app for browsing grammar rules,
+- Add a separate native **Skipper Explorer** app for browsing grammar rules,
   vocabulary, structured intent schemas/instances, and testing command parses
   with fuzzy candidate evidence. The explorer does not run actions or load speech.
 - Generate accepted phrases from shared grammar patterns and typed vocabulary.
@@ -57,15 +65,15 @@
   Chrome/Chromium name variants; different slot values remain distinct fuzzy
   candidates.
 
-- Keety now starts in the background with an Omarchy top-bar status button.
+- Skipper now starts in the background with an Omarchy top-bar status button.
   Click for history/settings; closing the window hides it without stopping
-  push-to-talk. An explicit Quit button stops Keety.
+  push-to-talk. An explicit Quit button stops Skipper.
 
 - Tiling now assigns equal-sized grid cells, including a 2 × 2 grid for four
   windows, instead of preserving the old unequal layout splits.
 
 - “Tile open windows” restores the captured workspace’s windows to normal
-  tiling, excluding Keety. Repeated commands keep the windows tiled.
+  tiling, excluding Skipper. Repeated commands keep the windows tiled.
 
 - Close-enough, unambiguous voice matches now run and learn their phrase
   automatically without a recognition confirmation. Terminal running-job
@@ -135,7 +143,7 @@
 - Voice commands use an explicit phrase-to-action table.
 - “Open Chrome” / “bring up Chrome” and listed aliases launch or focus Chromium.
 - “Bring up” phrases also set fullscreen; repeating them keeps fullscreen enabled.
-- Keety stays pinned on eDP-1; controlled browser windows move to external DP-1.
+- Skipper stays pinned on eDP-1; controlled browser windows move to external DP-1.
 - Exact normalized matching; unmatched speech remains saved for review.
 - Saved transcription retries never execute commands.
 

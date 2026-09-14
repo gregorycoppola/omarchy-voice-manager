@@ -33,7 +33,7 @@ class Recording:
 
 with tempfile.TemporaryDirectory() as directory:
     app = VoiceRuntime(directory, Path(directory) / 'status.json')
-    app.set_application_id('io.github.gregorycoppola.Keety.RuntimeTest')
+    app.set_application_id('io.github.gregorycoppola.Skipper.RuntimeTest')
     phase = ['loading']
     errors = []
     passed = []

@@ -4,7 +4,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
-from gui import Keety
+from gui import Skipper
 from intent_matching import IntentMatcher
 from os_actions import tile_open_windows, parse_command, equal_grid
 
@@ -30,11 +30,11 @@ class TileTests(unittest.TestCase):
         for phrase in ['Tile open windows!', 'tile all open windows', 'tile windows', 'tile all windows']:
             self.assertEqual(parse_command(phrase), 'windows:tile')
 
-    def test_excludes_keety_and_other_workspaces_and_unmapped_windows(self):
-        excluded = [dict(WINDOW,address='0x2', **{'class':'io.github.gregorycoppola.Keety'}),
+    def test_excludes_skipper_and_other_workspaces_and_unmapped_windows(self):
+        excluded = [dict(WINDOW,address='0x2', **{'class':'io.github.gregorycoppola.Skipper'}),
                     dict(WINDOW,address='0x3',workspace={'id':3}),
                     dict(WINDOW,address='0x4',mapped=False),
-                    dict(WINDOW,address='0x5',initialClass='io.github.gregorycoppola.Keety')]
+                    dict(WINDOW,address='0x5',initialClass='io.github.gregorycoppola.Skipper')]
         for initial in [dict(WINDOW,floating=True,fullscreen=2), dict(WINDOW,floating=False,fullscreen=0)]:
             x,y,w,h = equal_grid(1,MONITOR)[0]
             final = dict(WINDOW,floating=True,fullscreen=0,fullscreenClient=0,at=[x,y],size=[w,h])
@@ -72,6 +72,6 @@ class TileTests(unittest.TestCase):
             app = SimpleNamespace(model=object(),matcher=matcher,finished=Mock(),refresh_aliases=Mock())
             for text in ['tile open windows','tile open windos']:
                 with patch('gui.save_transcript',return_value=(text,{'audio_seconds':1,'transcribe_seconds':.1})), patch('gui.tile_open_windows',return_value='Tiled') as tile, patch('gui.GLib.idle_add',side_effect=lambda cb,*args:cb(*args)):
-                    Keety.convert(app,Path('test.wav'),commands=True,context=context)
+                    Skipper.convert(app,Path('test.wav'),commands=True,context=context)
                     tile.assert_called_once_with(context)
                     self.assertEqual(matcher.exact(text),'windows:tile')

@@ -17,10 +17,10 @@ from audio_levels import pcm_level
 from browser_connection import connection
 from command_catalog import INTENTS
 from intent_matching import IntentMatcher
-from keety import load_model
+from skipper import load_model
 from live_audio import read_growing_wav
 from os_actions import (capture_window_context, window_target, execute_command,
-                        tile_open_windows, tile_terminals, tile_browsers, tile_apps, move_other_screen, maximize_current_window,
+                        tile_open_windows, hide_windows, hide_current_window, tile_terminals, tile_browsers, tile_apps, move_other_screen, maximize_current_window,
                         terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS)
 from os_actions import focus_named_window, move_app_other_screen
 from window_vocabulary import inject_windows
@@ -29,9 +29,9 @@ from recordings import new_recording, save_transcript
 from settings import Settings
 from terminal_activity import terminal_has_jobs
 
-APP_ID = 'io.github.gregorycoppola.Keety'
-DATA = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'keety'
-STATUS = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / f'keety-{os.getuid()}-status.json'
+APP_ID = 'io.github.gregorycoppola.Skipper'
+DATA = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'skipper'
+STATUS = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / f'skipper-{os.getuid()}-status.json'
 
 
 class VoiceRuntime(Gio.Application):
@@ -104,7 +104,7 @@ class VoiceRuntime(Gio.Application):
                 json.dump(payload, handle)
             temporary.replace(self.status_path)
         except OSError as exc:
-            print(f'Could not publish Keety status: {exc}', file=sys.stderr)
+            print(f'Could not publish Skipper status: {exc}', file=sys.stderr)
         finally:
             if temporary:
                 temporary.unlink(missing_ok=True)
@@ -255,8 +255,12 @@ class VoiceRuntime(Gio.Application):
 
     @staticmethod
     def execute(command, context=None, target=None):
+        if command == 'window:hide':
+            return hide_current_window(context)
         if command.startswith('move-app:'):
             return move_app_other_screen(command.split(':', 1)[1], context)
+        if command in {'terminals:hide', 'apps:hide'}:
+            return hide_windows(context, command.split(':', 1)[0])
         if command == 'windows:tile':
             return tile_open_windows(context)
         if command in {'terminals:tile', 'browsers:tile', 'apps:tile'}:
@@ -333,7 +337,7 @@ class VoiceRuntime(Gio.Application):
             return
         self.pending = None
         self.state['confirmation'] = None
-        self.update('Stopped', 'Keety is stopped.')
+        self.update('Stopped', 'Skipper is stopped.')
         connection.close()
         self.quit()
 

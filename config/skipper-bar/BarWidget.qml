@@ -6,12 +6,20 @@ import qs.Ui
 
 BarWidget {
     id: root
-    moduleName: "greg.keety"
+    moduleName: "greg.skipper"
+    readonly property string pluginRoot: decodeURIComponent(Qt.resolvedUrl("../../").toString().replace(/^file:\/\//, "")).replace(/\/$/, "")
+    property string userId: ""
+    readonly property string defaultStatusPath: userId ? (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/skipper-" + userId + "-status.json" : ""
+    Process {
+        command: ["id", "-u"]
+        running: true
+        stdout: StdioCollector { onStreamFinished: root.userId = text.trim() }
+    }
     property var status: ({})
     property string seenEvent: ""
     property bool manual: false
     property string recentIntent: ""
-    readonly property string barText: state === "Recording" ? "● Keety" : recentIntent ? recentIntent + " · Keety" : "Keety"
+    readonly property string barText: state === "Recording" ? "● Skipper" : recentIntent ? recentIntent + " · Skipper" : "Skipper"
     readonly property bool alive: (clock.date.getTime() / 1000 - (status.updated || 0)) < 8
     readonly property string state: alive ? (status.state || "Stopped") : "Stopped"
     readonly property bool working: state === "Recording" || state === "Working" || state === "Loading"
@@ -26,7 +34,7 @@ BarWidget {
     function close() { manual = false; popup.open = false; dismissTimer.stop() }
     function togglePanel() { if (opened) close(); else open() }
     function action(name, token) {
-        var args = ["gapplication", "action", "io.github.gregorycoppola.Keety", name]
+        var args = ["gapplication", "action", "io.github.gregorycoppola.Skipper", name]
         if (token !== undefined) args.push("'" + token + "'") // Runtime-generated hex token only.
         Quickshell.execDetached(args)
     }
@@ -61,7 +69,7 @@ BarWidget {
     Timer { id: dismissTimer; interval: 2500; onTriggered: root.close() }
     onAliveChanged: if (!alive && popup.open && !manual) dismissTimer.restart()
     FileView {
-        path: root.setting("statusPath", "")
+        path: root.setting("statusPath", root.defaultStatusPath)
         watchChanges: true
         printErrors: false
         onFileChanged: reload()
@@ -70,7 +78,7 @@ BarWidget {
         }
     }
     IpcHandler {
-        target: "greg.keety"
+        target: "greg.skipper"
         function open(): void { root.open() }
         function close(): void { root.broadcast("close") }
         function toggle(): void { root.togglePanel() }
@@ -113,7 +121,7 @@ BarWidget {
                     width: parent.width
                     Text {
                         width: parent.width - hideButton.width
-                        text: "Keety · " + root.state
+                        text: "Skipper · " + root.state
                         color: Color.foreground
                         font.family: Style.font.family
                         font.pixelSize: Style.font.body
@@ -186,7 +194,7 @@ BarWidget {
                 }
                 Text {
                     width: parent.width
-                    text: root.alive ? (root.status.message || "") : "Keety is stopped."
+                    text: root.alive ? (root.status.message || "") : "Skipper is stopped. First install? Run python " + root.pluginRoot + "/plugin_setup.py install in a terminal."
                     textFormat: Text.PlainText
                     color: root.state === "Error" ? Color.urgent : Color.muted
                     font.family: Style.font.family
@@ -219,17 +227,17 @@ BarWidget {
                     Button {
                         text: "Explorer"
                         onClicked: {
-                            var launcher = root.setting("explorerLauncher", "")
+                            var launcher = root.setting("explorerLauncher", root.pluginRoot + "/launch-explorer.sh")
                             if (launcher) Quickshell.execDetached([launcher])
                             root.close()
                         }
                     }
                     Button {
-                        text: root.alive && root.state !== "Stopped" ? "Quit" : "Start Keety"
+                        text: root.alive && root.state !== "Stopped" ? "Quit" : "Start Skipper"
                         onClicked: {
                             if (root.alive && root.state !== "Stopped") root.action("quit")
                             else {
-                                var launcher = root.setting("launcher", "")
+                                var launcher = root.setting("launcher", root.pluginRoot + "/launch.sh")
                                 if (launcher) Quickshell.execDetached([launcher, "--show"])
                             }
                         }

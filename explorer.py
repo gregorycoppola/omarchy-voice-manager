@@ -1,4 +1,4 @@
-"""Native, parse-only grammar explorer; independent of Keety's voice runtime."""
+"""Native, parse-only grammar explorer; independent of Skipper's voice runtime."""
 import json
 import os
 from pathlib import Path
@@ -150,9 +150,9 @@ def render_schema(box, name):
 
 class Explorer(Gtk.Application):
     def __init__(self, alias_path=None):
-        super().__init__(application_id="io.github.gregorycoppola.Keety.Explorer")
+        super().__init__(application_id="io.github.gregorycoppola.Skipper.Explorer")
         data = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
-        self.alias_path = Path(alias_path) if alias_path else data / "keety/aliases.json"
+        self.alias_path = Path(alias_path) if alias_path else data / "skipper/aliases.json"
         self.window = None
         self.last_result = None
         self.player = None
@@ -164,10 +164,10 @@ class Explorer(Gtk.Application):
         if self.window:
             self.window.present()
             return
-        self.window = Gtk.ApplicationWindow(application=self, title="Keety Explorer")
+        self.window = Gtk.ApplicationWindow(application=self, title="Skipper Explorer")
         self.window.set_default_size(1040, 760)
         header = Gtk.HeaderBar()
-        header.set_title_widget(Gtk.Label(label="Keety Explorer"))
+        header.set_title_widget(Gtk.Label(label="Skipper Explorer"))
         self.window.set_titlebar(header)
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         intro = column(spacing=6)
@@ -353,11 +353,11 @@ class Explorer(Gtk.Application):
 
     def retry_recording(self, path, feedback):
         try:
-            result = subprocess.run(['gapplication', 'action', 'io.github.gregorycoppola.Keety',
+            result = subprocess.run(['gapplication', 'action', 'io.github.gregorycoppola.Skipper',
                                      'retry', GLib.Variant('s', path.stem).print_(False)],
                                     capture_output=True, text=True, timeout=3)
-            feedback.set_text('Requested transcription. Keety must be ready; refresh after it finishes.'
-                              if result.returncode == 0 else 'Start Keety from the bar, then retry.')
+            feedback.set_text('Requested transcription. Skipper must be ready; refresh after it finishes.'
+                              if result.returncode == 0 else 'Start Skipper from the bar, then retry.')
         except (OSError, subprocess.SubprocessError) as exc:
             feedback.set_text(f'Could not request transcription: {exc}')
 

@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
-from gui import Keety
+from gui import Skipper
 from intent_matching import IntentMatcher
 from os_actions import maximize_current_window, parse_command
 
@@ -44,7 +44,7 @@ class MaximizeWindowTests(unittest.TestCase):
             for phrase, exact in [("maximize this window", True), ("maximize this windo", False)]:
                 app = SimpleNamespace(model=object(), refresh_aliases=Mock(), matcher=matcher, finished=Mock(), offer_suggestion=Mock())
                 with patch("gui.save_transcript", return_value=(phrase, {"audio_seconds":1,"transcribe_seconds":.1})), patch("gui.maximize_current_window", return_value="Maximized") as action, patch("gui.GLib.idle_add", side_effect=lambda cb,*args: cb(*args)):
-                    Keety.convert(app, Path("test.wav"), commands=True, context={"active":TARGET})
+                    Skipper.convert(app, Path("test.wav"), commands=True, context={"active":TARGET})
                     action.assert_called_once_with(TARGET)
                     app.offer_suggestion.assert_not_called()
                     self.assertEqual(matcher.exact(phrase), 'maximize:current_window')
@@ -52,6 +52,6 @@ class MaximizeWindowTests(unittest.TestCase):
     def test_confirmation_targets_original_window(self):
         app = SimpleNamespace(finished=Mock())
         with patch("gui.maximize_current_window", return_value="Maximized") as action, patch("gui.close_terminal") as close, patch("gui.GLib.idle_add", side_effect=lambda cb,*args: cb(*args)):
-            Keety.run_confirmed(app, Path("test.wav"), "maximize:current_window", TARGET)
+            Skipper.run_confirmed(app, Path("test.wav"), "maximize:current_window", TARGET)
             action.assert_called_once_with(TARGET)
             close.assert_not_called()

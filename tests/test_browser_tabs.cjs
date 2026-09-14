@@ -21,7 +21,7 @@ function setup(windows) {
 }
 const normal=(id,tabs,extra={})=>({id,type:'normal',tabs:tabs.map(t=>({...t,windowId:id})),...extra});
 test('existing matching tab reused without navigation or creation',async()=>{
- const calls=setup([normal(1,[{id:3,url:'https://github.com/gregorycoppola/keety'}])]);
+ const calls=setup([normal(1,[{id:3,url:'https://github.com/gregorycoppola/skipper'}])]);
  assert.deepEqual(await bringUpSite(site),{reused:true,tabId:3,windowId:1});
  assert.deepEqual(calls,[['activate',3],['focus',1]]);
 });

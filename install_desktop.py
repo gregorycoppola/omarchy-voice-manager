@@ -1,4 +1,4 @@
-"""Install Keety's per-user launcher without root or system package changes."""
+"""Install Skipper's per-user launcher without root or system package changes."""
 import os
 from pathlib import Path
 import shlex
@@ -8,10 +8,10 @@ def install(root, home, data_home, *, explorer=False):
     root = Path(root).resolve()
     launcher = root / ("launch-explorer.sh" if explorer else "launch.sh")
     if not launcher.is_file():
-        raise ValueError("Run this installer from a complete Keety checkout")
-    name = "Keety Explorer" if explorer else "Keety"
-    app_id = "io.github.gregorycoppola.Keety" + (".Explorer" if explorer else "")
-    binary = Path(home) / ".local/bin" / ("keety-explorer" if explorer else "keety")
+        raise ValueError("Run this installer from a complete Skipper checkout")
+    name = "Skipper Explorer" if explorer else "Skipper"
+    app_id = "io.github.gregorycoppola.Skipper" + (".Explorer" if explorer else "")
+    binary = Path(home) / ".local/bin" / ("skipper-explorer" if explorer else "skipper")
     desktop = Path(data_home) / "applications" / f"{app_id}.desktop"
     binary.parent.mkdir(parents=True, exist_ok=True)
     desktop.parent.mkdir(parents=True, exist_ok=True)

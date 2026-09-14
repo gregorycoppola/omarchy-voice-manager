@@ -11,8 +11,8 @@ from command_catalog import APPS
 from os_actions import close_app, maximize_app, maximize_current_window, move_other_screen, run
 import json
 
-app_id = 'io.github.gregorycoppola.Keety.CloseTest'
-APPS['_close_test'] = {'name': 'Keety test', 'classes': {app_id}}
+app_id = 'io.github.gregorycoppola.Skipper.CloseTest'
+APPS['_close_test'] = {'name': 'Skipper test', 'classes': {app_id}}
 app = Gtk.Application(application_id=app_id)
 result = []
 worker = None
@@ -27,7 +27,7 @@ def close_test():
             run(['hyprctl', 'dispatch', 'hl.dsp.window.fullscreen_state({ internal = 2, client = 2, '
                  f'window = "address:{address}" }})'])
             for _ in range(2):
-                assert maximize_app('_close_test') == 'Maximized Keety test window'
+                assert maximize_app('_close_test') == 'Maximized Skipper test window'
                 client = next(c for c in json.loads(run(['hyprctl', 'clients', '-j'])) if c['address'] == address)
                 assert client['fullscreen'] == client['fullscreenClient'] == 1, client
         if '--maximize-current' in sys.argv:
@@ -56,7 +56,7 @@ def close_test():
 
 
 def activate(*_):
-    window = Gtk.ApplicationWindow(application=app, title='Keety close-command test')
+    window = Gtk.ApplicationWindow(application=app, title='Skipper close-command test')
     window.set_default_size(300, 100)
     window.set_child(Gtk.Label(label='Testing close on this temporary window'))
     window.present()
@@ -70,8 +70,8 @@ def activate(*_):
 
 
 app.connect('activate', activate)
-app.run(['keety-close-test'])
+app.run(['skipper-close-test'])
 if worker:
     worker.join(timeout=15)
-assert result == ['Closed Keety test window'], result
+assert result == ['Closed Skipper test window'], result
 print('PASS: real compositor', 'maximize current window twice on same screen;' if '--maximize-current' in sys.argv else '', 'move to other screen and back;' if '--move' in sys.argv else '', 'fullscreen to maximized, repeated maximize, then close' if '--maximize' in sys.argv else 'close', 'on disposable test window')

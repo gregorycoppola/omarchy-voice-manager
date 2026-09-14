@@ -13,7 +13,7 @@ from runtime import VoiceRuntime
 from window_vocabulary import inject_windows, window_names
 
 
-def terminal(stable='a', title='⠋ Define intent grammars | keety', address='0x1', pid=10):
+def terminal(stable='a', title='⠋ Define intent grammars | skipper', address='0x1', pid=10):
     return dict(stableId=stable, title=title, address=address, pid=pid, mapped=True,
                 **{'class': 'foot'}, workspace={'name': '2'})
 
@@ -22,12 +22,12 @@ class WindowVocabularyTests(unittest.TestCase):
     def test_focus_on_uses_live_names_and_rejects_duplicate_vim_terminals(self):
         windows = inject_windows({'clients': [terminal(title='Vim | project')]})
         for phrase in ('focus on vim terminal', 'focus on the vim terminal'):
-            result = IntentMatcher(Path('/nonexistent/keety-test-aliases.json')).parse(phrase, windows.expansions)
+            result = IntentMatcher(Path('/nonexistent/skipper-test-aliases.json')).parse(phrase, windows.expansions)
             self.assertEqual(result.intent.type, 'focus_window')
             self.assertEqual(windows.targets[dict(result.intent.arguments)['window']]['stableId'], 'a')
         duplicate = inject_windows({'clients': [terminal(title='Vim | project'),
                                                terminal('b', 'Vim | other', '0x2', 20)]})
-        result = IntentMatcher(Path('/nonexistent/keety-test-aliases.json')).parse('focus on the vim terminal', duplicate.expansions)
+        result = IntentMatcher(Path('/nonexistent/skipper-test-aliases.json')).parse('focus on the vim terminal', duplicate.expansions)
         self.assertEqual(result.status, 'ambiguous')
 
     def setUp(self):
@@ -39,9 +39,9 @@ class WindowVocabularyTests(unittest.TestCase):
         self.windows = inject_windows(self.context)
 
     def test_shared_patterns_use_all_live_names_and_fuzzy_variants(self):
-        for text, expected in [('focus keety', 'keety'), ('switch to the keety terminal', 'keety'),
-                               ('go to patch monitor replug bug', 'Projects'), ('focuss keety', 'keety'),
-                               ('focus the keety codex', 'keety'), ('focus the monitor replug bug', 'Projects')]:
+        for text, expected in [('focus skipper', 'skipper'), ('switch to the skipper terminal', 'skipper'),
+                               ('go to patch monitor replug bug', 'Projects'), ('focuss skipper', 'skipper'),
+                               ('focus the skipper codex', 'skipper'), ('focus the monitor replug bug', 'Projects')]:
             with self.subTest(text=text):
                 result = self.matcher.parse(text, self.windows.expansions)
                 self.assertEqual(result.status, 'matched')
@@ -52,17 +52,17 @@ class WindowVocabularyTests(unittest.TestCase):
         self.assertFalse(self.matcher.path.exists())
 
     def test_changing_titles_updates_names_without_changing_identity(self):
-        changed = inject_windows({'clients': [terminal(title='[ ! ] Action Required | Other task | keety')]})
+        changed = inject_windows({'clients': [terminal(title='[ ! ] Action Required | Other task | skipper')]})
         self.assertEqual(self.windows.words[0].id, changed.words[0].id)
         self.assertNotEqual(self.windows.revision, changed.revision)
         self.assertNotIn('define intent grammars', changed.words[0].forms)
         self.assertIn('other task', changed.words[0].forms)
-        self.assertIn('keety', changed.words[0].forms)
+        self.assertIn('skipper', changed.words[0].forms)
         self.assertNotIn('action required', changed.words[0].forms)
 
     def test_duplicate_project_names_remain_ambiguous_even_on_exact_match(self):
-        windows = inject_windows({'clients': [terminal(), terminal('b', 'Fix audio | keety', '0x2', 20)]})
-        for text in ('focus keety', 'focus keety terminal', 'focus keet'):
+        windows = inject_windows({'clients': [terminal(), terminal('b', 'Fix audio | skipper', '0x2', 20)]})
+        for text in ('focus skipper', 'focus skipper terminal', 'focus skipp'):
             result = self.matcher.parse(text, windows.expansions)
             self.assertEqual(result.status, 'ambiguous')
             self.assertIsNone(result.command)
@@ -79,7 +79,7 @@ class WindowVocabularyTests(unittest.TestCase):
 
     def test_static_commands_and_unknown_names(self):
         self.assertEqual(self.matcher.parse('open gmail', self.windows.expansions).command, 'site:gmail')
-        for text in ('focus unknown terminal', 'focus the nowhere window', "don't focus keety"):
+        for text in ('focus unknown terminal', 'focus the nowhere window', "don't focus skipper"):
             result = self.matcher.parse(text, self.windows.expansions)
             self.assertIsNone(result.command, (text, result))
         self.assertFalse(inject_windows(None).expansions)
@@ -109,8 +109,8 @@ class WindowVocabularyTests(unittest.TestCase):
     def test_runtime_uses_capture_and_never_learns_ephemeral_window_aliases(self):
         app = VoiceRuntime(self.data, self.data / 'status.json')
         app.model = object()
-        with patch('runtime.save_transcript', return_value=('focus keet', {})), \
-             patch('runtime.focus_named_window', return_value='Focused Keety') as focus, \
+        with patch('runtime.save_transcript', return_value=('focus skipp', {})), \
+             patch('runtime.focus_named_window', return_value='Focused Skipper') as focus, \
              patch('runtime.GLib.idle_add', side_effect=lambda fn,*args: fn(*args)), \
              patch.object(app, 'execute') as execute:
             app.transcribe(self.data / 'test.wav', self.context, True)
@@ -121,8 +121,8 @@ class WindowVocabularyTests(unittest.TestCase):
         self.assertEqual(app.state['state'], 'Ready')
 
     def test_plain_terminal_path_is_a_spoken_name(self):
-        _, forms = window_names('greg@machine: ~/Projects/keety')
-        self.assertIn('keety terminal', forms)
+        _, forms = window_names('greg@machine: ~/Projects/skipper')
+        self.assertIn('skipper terminal', forms)
 
     def test_close_uses_same_names_including_shortened_title(self):
         for phrase in ('close the patch monitor terminal', 'close patch monitor replug bug',
@@ -136,8 +136,8 @@ class WindowVocabularyTests(unittest.TestCase):
         for expansions in (self.windows.expansions, ()):
             result = self.matcher.parse('close the nonexistent terminal', expansions)
             self.assertIsNone(result.command)
-        windows = inject_windows({'clients': [terminal(), terminal('b', 'Fix audio | keety', '0x2', 20)]})
-        result = self.matcher.parse('close the keety terminal', windows.expansions)
+        windows = inject_windows({'clients': [terminal(), terminal('b', 'Fix audio | skipper', '0x2', 20)]})
+        result = self.matcher.parse('close the skipper terminal', windows.expansions)
         self.assertEqual(result.status, 'ambiguous')
         self.assertIsNone(result.command)
         self.assertEqual(self.matcher.parse('close terminal', windows.expansions).command, 'close:terminal')

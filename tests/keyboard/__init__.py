@@ -7,7 +7,7 @@ import tempfile
 
 
 def build_keyboard():
-    build = tempfile.TemporaryDirectory(prefix='keety-keyboard-test-')
+    build = tempfile.TemporaryDirectory(prefix='skipper-keyboard-test-')
     atexit.register(build.cleanup)
     source = Path(__file__).resolve().parent
     header = Path(build.name) / 'virtual-keyboard.h'

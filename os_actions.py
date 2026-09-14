@@ -1,6 +1,7 @@
 """Small explicit speech-command vocabulary for the installed Hyprland desktop."""
 import json
 import math
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -12,7 +13,7 @@ from command_catalog import APPS, GRAMMAR, SITES, TERMINAL_CLASSES
 from intent_matching import normalize
 
 BROWSER_CLASSES = {"chromium", "google-chrome", "google-chrome-stable", "chrome"}
-MAIN_MONITOR = "DP-1"
+MAIN_MONITOR = os.environ.get("SKIPPER_MAIN_MONITOR", "")
 TERMINAL_CLOSE_INTENTS = {"close:terminal", "close:terminal_current"}
 
 
@@ -62,9 +63,12 @@ def present_browser(window, fullscreen):
 
 
 def main_monitor(monitors):
-    monitor = next((m for m in monitors if m.get("name") == MAIN_MONITOR and not m.get("disabled")), None)
+    available = [m for m in monitors if not m.get('disabled')]
+    monitor = next((m for m in available if m.get('name') == (MAIN_MONITOR or 'DP-1')), None)
+    if monitor is None and not MAIN_MONITOR:
+        monitor = next((m for m in available if m.get('focused')), available[0] if available else None)
     if monitor is None:
-        raise RuntimeError(f"External screen {MAIN_MONITOR} is not connected")
+        raise RuntimeError(f"Screen {MAIN_MONITOR} is not connected" if MAIN_MONITOR else 'No usable screen is connected')
     workspace = monitor.get("activeWorkspace", {}).get("id")
     if not isinstance(workspace, int) or workspace <= 0:
         raise RuntimeError("External screen has no usable active workspace")
@@ -101,7 +105,7 @@ def execute_command(command):
     if command not in ("browser", "browser_fullscreen"):
         raise ValueError("Unsupported voice command")
     fullscreen = command == "browser_fullscreen"
-    # Check before launching anything: keep the laptop reserved for Keety.
+    # Check before launching anything: keep the laptop reserved for Skipper.
     main_monitor(json.loads(run(["hyprctl", "monitors", "-j"])))
     window = browser_window(json.loads(run(["hyprctl", "clients", "-j"])))
     if window:
@@ -128,8 +132,13 @@ def execute_command(command):
 
 def capture_window_context():
     try:
-        return {"active": json.loads(run(["hyprctl", "activewindow", "-j"])),
-                "clients": json.loads(run(["hyprctl", "clients", "-j"]))}
+        active = json.loads(run(["hyprctl", "activewindow", "-j"]))
+        if not active.get('workspace'):
+            # Hiding the last window leaves no focused client. Retain the
+            # workspace so a later tiling command can restore its windows.
+            workspace = json.loads(run(['hyprctl', 'activeworkspace', '-j']))
+            active = {'workspace': workspace, 'monitor': workspace.get('monitorID')}
+        return {"active": active, "clients": json.loads(run(["hyprctl", "clients", "-j"]))}
     except Exception:
         return None
 
@@ -186,12 +195,18 @@ def tile_open_windows(context, *, category='windows'):
     if category not in selectors:
         raise ValueError('Unsupported tiling category')
     selected = selectors[category]
-    workspace = (context or {}).get("active", {}).get("workspace", {}).get("id")
+    captured_workspace = (context or {}).get("active", {}).get("workspace", {})
+    workspace = captured_workspace.get("id")
+    # A window picker can reveal a holding workspace. Its name retains the
+    # source workspace, even when the regular workspace has no windows left.
+    origin = re.fullmatch(r'special:skipper-tile-([1-9][0-9]*)', captured_workspace.get('name', ''))
+    if origin:
+        workspace = int(origin[1])
     if type(workspace) is not int:
         raise RuntimeError("Could not identify the workspace when recording started")
     if category != 'windows' and workspace <= 0:
         raise RuntimeError("Tile app categories from a regular workspace, not a special workspace")
-    hidden_workspace = f'special:keety-tile-{workspace}'
+    hidden_workspace = f'special:skipper-tile-{workspace}'
 
     def belongs(window):
         return (window.get('workspace', {}).get('id') == workspace
@@ -200,8 +215,8 @@ def tile_open_windows(context, *, category='windows'):
     targets = [c for c in context.get("clients", [])
                if belongs(c)
                and c.get("mapped", True)
-               and c.get("class") != "io.github.gregorycoppola.Keety"
-               and c.get("initialClass") != "io.github.gregorycoppola.Keety"
+               and c.get("class") != "io.github.gregorycoppola.Skipper"
+               and c.get("initialClass") != "io.github.gregorycoppola.Skipper"
                and re.fullmatch(r"0x[0-9a-fA-F]+", c.get("address", ""))]
     others = [c for c in targets if not selected(c)
               and c.get('workspace', {}).get('id') == workspace]
@@ -261,34 +276,77 @@ def tile_open_windows(context, *, category='windows'):
         tiled += 1
     message = f"Tiled {tiled} {category}" if tiled else empty_message
     if category != 'windows' and tiled:
-        minimized = 0
-        for target in others:
-            address = target['address']
-            current = next((c for c in json.loads(run(['hyprctl', 'clients', '-j']))
-                            if c.get('address') == address), None)
-            if (current is None or not current.get('mapped', True)
-                    or current.get('workspace', {}).get('id') != workspace
-                    or any(current.get(k) != target.get(k) for k in ('pid', 'class', 'stableId'))):
-                skipped += 1
-                continue
-            if len(current.get('grouped', [])) > 1:
-                run(['hyprctl', 'dispatch', f'hl.dsp.window.move({{ out_of_group = true, window = "address:{address}" }})'])
-            run(['hyprctl', 'dispatch', f'hl.dsp.window.move({{ workspace = "{hidden_workspace}", follow = false, window = "address:{address}" }})'])
-            updated = next((c for c in json.loads(run(['hyprctl', 'clients', '-j']))
-                            if c.get('address') == address), None)
-            if (updated is None or updated.get('workspace', {}).get('name') != hidden_workspace
-                    or any(updated.get(k) != target.get(k) for k in ('pid', 'class', 'stableId'))):
-                raise RuntimeError(f'{message}; could not confirm minimization of another window')
-            minimized += 1
-        # Hide the holding workspace if a window picker made it visible.
-        if minimized:
-            for screen in json.loads(run(['hyprctl', 'monitors', '-j'])):
-                if screen.get('specialWorkspace', {}).get('name') == hidden_workspace:
-                    run(['hyprctl', 'dispatch', f'hl.dsp.workspace.toggle_special("keety-tile-{workspace}")'])
-                    break
+        minimized, hide_skipped = hide_window_targets(others, workspace, dismiss_hidden=bool(origin))
+        skipped += hide_skipped
         message += f' · Minimized {minimized} other windows (tile all windows to restore)'
     if skipped:
         message += f" · Skipped {skipped} closed, moved, or changed windows"
+    return message
+
+
+def hide_window_targets(targets, workspace, *, dismiss_hidden=False):
+    hidden_workspace = f'special:skipper-tile-{workspace}'
+    skipped = 0
+    minimized = 0
+    for target in targets:
+        address = target['address']
+        current = next((c for c in json.loads(run(['hyprctl', 'clients', '-j']))
+                        if c.get('address') == address), None)
+        if (current is None or not current.get('mapped', True)
+                or current.get('workspace', {}).get('id') != workspace
+                or any(current.get(k) != target.get(k) for k in ('pid', 'class', 'stableId'))):
+            skipped += 1
+            continue
+        if len(current.get('grouped', [])) > 1:
+            run(['hyprctl', 'dispatch', f'hl.dsp.window.move({{ out_of_group = true, window = "address:{address}" }})'])
+        run(['hyprctl', 'dispatch', f'hl.dsp.window.move({{ workspace = "{hidden_workspace}", follow = false, window = "address:{address}" }})'])
+        updated = next((c for c in json.loads(run(['hyprctl', 'clients', '-j']))
+                        if c.get('address') == address), None)
+        if (updated is None or updated.get('workspace', {}).get('name') != hidden_workspace
+                or any(updated.get(k) != target.get(k) for k in ('pid', 'class', 'stableId'))):
+            raise RuntimeError(f'Hid {minimized} windows; could not confirm minimization of another window')
+        minimized += 1
+    # Hide the holding workspace if a window picker made it visible.
+    if minimized or dismiss_hidden:
+        for screen in json.loads(run(['hyprctl', 'monitors', '-j'])):
+            if screen.get('specialWorkspace', {}).get('name') == hidden_workspace:
+                run(['hyprctl', 'dispatch', f'hl.dsp.workspace.toggle_special("skipper-tile-{workspace}")'])
+                break
+    return minimized, skipped
+
+
+def hide_current_window(context):
+    target = window_target(context)
+    workspace = target.get('workspace', {}).get('id')
+    if type(workspace) is not int or workspace <= 0:
+        raise RuntimeError('The captured window was not on a regular workspace')
+    if 'io.github.gregorycoppola.Skipper' in (target.get('class'), target.get('initialClass')):
+        raise RuntimeError('Skipper is excluded from window hiding')
+    hidden, skipped = hide_window_targets([target], workspace)
+    if skipped:
+        return 'That window closed, moved, or changed. No window was hidden.'
+    return 'Hid this window (tile all windows to restore)'
+
+
+def hide_windows(context, category):
+    if category not in {'terminals', 'apps'}:
+        raise ValueError('Unsupported hiding category')
+    workspace = (context or {}).get('active', {}).get('workspace', {}).get('id')
+    if type(workspace) is not int or workspace <= 0:
+        raise RuntimeError('Could not identify a regular workspace when recording started')
+    targets = [c for c in context.get('clients', [])
+               if c.get('workspace', {}).get('id') == workspace
+               and c.get('mapped', True)
+               and c.get('class') != 'io.github.gregorycoppola.Skipper'
+               and c.get('initialClass') != 'io.github.gregorycoppola.Skipper'
+               and re.fullmatch(r'0x[0-9a-fA-F]+', c.get('address', ''))
+               and bool(is_terminal(c)) == (category == 'terminals')]
+    if not targets:
+        return f'No visible {category} to hide on this workspace'
+    hidden, skipped = hide_window_targets(targets, workspace)
+    message = f'Hid {hidden} {category} (tile all windows to restore)'
+    if skipped:
+        message += f' · Skipped {skipped} closed, moved, or changed windows'
     return message
 
 
@@ -299,7 +357,7 @@ def maximize_foreground(target):
     if current is None or any(current.get(k) != target.get(k) for k in ('pid', 'class', 'stableId')):
         raise RuntimeError('That window closed or changed. No other window was maximized.')
     address = current['address']
-    # Join the floating layer before maximizing: Keety's grid consists of
+    # Join the floating layer before maximizing: Skipper's grid consists of
     # floating windows that can otherwise cover even a focused tiled window.
     run(['hyprctl', 'dispatch', f'hl.dsp.window.fullscreen_state({{ internal = 0, client = 0, action = "set", window = "address:{address}" }})'])
     run(['hyprctl', 'dispatch', f'hl.dsp.window.float({{ action = "on", window = "address:{address}" }})'])
@@ -344,8 +402,8 @@ def move_other_screen(target):
         raise RuntimeError("Could not confirm the window moved to the other screen")
     neighbors = [c for c in clients if c.get('monitor') == destination['id']
                  and c.get('workspace', {}).get('id') == workspace and c.get('mapped', True)
-                 and c.get('class') != 'io.github.gregorycoppola.Keety'
-                 and c.get('initialClass') != 'io.github.gregorycoppola.Keety'
+                 and c.get('class') != 'io.github.gregorycoppola.Skipper'
+                 and c.get('initialClass') != 'io.github.gregorycoppola.Skipper'
                  and re.fullmatch(r'0x[0-9a-fA-F]+', c.get('address', ''))]
     if len(neighbors) == 1:
         maximize_foreground(moved)

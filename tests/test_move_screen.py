@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
-from gui import Keety
+from gui import Skipper
 from intent_matching import IntentMatcher
 from unittest.mock import patch
 from os_actions import parse_command, window_target, move_other_screen
@@ -44,8 +44,8 @@ class MoveScreenTests(unittest.TestCase):
         elsewhere = dict(TARGET, address='0x3', workspace={'id': 1})
         hidden_workspace = dict(neighbor, address='0x4', workspace={'id': 9})
         unmapped = dict(neighbor, address='0x5', mapped=False)
-        keety = dict(neighbor, address='0x6', **{'class': 'io.github.gregorycoppola.Keety'})
-        clients = [moved, neighbor, elsewhere, hidden_workspace, unmapped, keety]
+        skipper = dict(neighbor, address='0x6', **{'class': 'io.github.gregorycoppola.Skipper'})
+        clients = [moved, neighbor, elsewhere, hidden_workspace, unmapped, skipper]
         with patch('os_actions.run', side_effect=[json.dumps([TARGET]), json.dumps(MONITORS), 'ok', 'ok', json.dumps(clients)]), \
              patch('os_actions.maximize_foreground') as maximize, \
              patch('os_actions.tile_open_windows', return_value='Tiled 2 windows') as tile, \
@@ -98,7 +98,7 @@ class MoveRoutingTests(unittest.TestCase):
                 with patch('gui.save_transcript', return_value=(phrase, {'audio_seconds':1,'transcribe_seconds':.1})), \
                      patch('gui.move_other_screen', return_value='Moved') as move, \
                      patch('gui.GLib.idle_add', side_effect=lambda callback,*args: callback(*args)):
-                    Keety.convert(app, Path('test.wav'), commands=True, context={'active':TARGET})
+                    Skipper.convert(app, Path('test.wav'), commands=True, context={'active':TARGET})
                     move.assert_called_once_with(TARGET)
                     app.offer_suggestion.assert_not_called()
                     self.assertEqual(matcher.exact(phrase), 'move:other_screen')
@@ -108,6 +108,6 @@ class MoveRoutingTests(unittest.TestCase):
         with patch('gui.move_other_screen', return_value='Moved') as move, \
              patch('gui.execute_command') as generic, \
              patch('gui.GLib.idle_add', side_effect=lambda callback,*args: callback(*args)):
-            Keety.run_confirmed(app, Path('test.wav'), 'move:other_screen', TARGET, True)
+            Skipper.run_confirmed(app, Path('test.wav'), 'move:other_screen', TARGET, True)
             move.assert_called_once_with(TARGET)
             generic.assert_not_called()

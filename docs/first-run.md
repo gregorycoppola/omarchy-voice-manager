@@ -47,7 +47,7 @@ representative accuracy evaluation or a cold-disk startup benchmark.
 Loading and transcription timings exclude Python startup and imports.
 
 The test replaced Python socket connect/connect_ex/getaddrinfo with functions
-that raise on use and ran Keety through `runpy`; it passed. Keety also sets
+that raise on use and ran Skipper through `runpy`; it passed. Skipper also sets
 `HF_HUB_OFFLINE=1`, uses explicit local model paths and a CPU-only provider.
 This validates the exercised path without Python network access; it is not an
 OS-level network sandbox.
@@ -59,8 +59,8 @@ yet. No background service or desktop shortcut was installed.
 ## Next hands-on test
 
 ```bash
-cd ~/Projects/keety
-.venv/bin/python keety.py record --seconds 10
+cd ~/Projects/skipper
+.venv/bin/python skipper.py record --seconds 10
 ```
 
 Wait for “Speak now,” then speak a short sentence, including a few names or

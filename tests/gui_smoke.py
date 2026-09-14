@@ -12,7 +12,7 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
+with tempfile.TemporaryDirectory(prefix="skipper-gui-test-") as directory:
     os.environ["XDG_DATA_HOME"] = directory
     import gui
     from gi.repository import GLib
@@ -34,9 +34,9 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
         return original_popen(command, **kwargs)
 
     gui.subprocess.Popen = fake_microphone
-    app = gui.Keety()
+    app = gui.Skipper()
     if not ptt:
-        app.set_application_id("io.github.gregorycoppola.Keety.Test")
+        app.set_application_id("io.github.gregorycoppola.Skipper.Test")
     started = time.monotonic()
     sequence = 1
 
@@ -107,8 +107,8 @@ with tempfile.TemporaryDirectory(prefix="keety-gui-test-") as directory:
         return True
 
     GLib.timeout_add(100, step)
-    app.run(["keety-gui-test"])
+    app.run(["skipper-gui-test"])
     if state["error"]:
         raise SystemExit(state["error"])
     if not state["passed"]:
-        raise SystemExit("Test exited before completing; close any existing Keety instance for --ptt")
+        raise SystemExit("Test exited before completing; close any existing Skipper instance for --ptt")

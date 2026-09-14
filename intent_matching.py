@@ -104,6 +104,8 @@ class IntentMatcher:
             candidate = next(iter(exact.values()))
             method = 'alias' if candidate.source == 'alias' else 'exact'
             return ParseResult(text, 'matched', method, candidate, (candidate,))
+        if phrase.split()[:1] == ['hide']:
+            return ParseResult(text, 'unrecognized', reason='Hide commands require their exact built-in phrase.')
         # Keep the existing guards, allowing longer named-window titles when the
         # entire command matched exactly above.
         move_match = re.fullmatch(r'move (.+) to (?:the )?other \w+', phrase)

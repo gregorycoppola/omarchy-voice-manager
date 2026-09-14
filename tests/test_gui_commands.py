@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from gui import Keety
+from gui import Skipper
 from intent_matching import IntentMatcher
 import tempfile
 
@@ -28,7 +28,7 @@ class CommandRoutingTests(unittest.TestCase):
         with patch("gui.save_transcript", side_effect=save), \
              patch("gui.execute_command", side_effect=execute), \
              patch("gui.GLib.idle_add", side_effect=lambda callback, *args: callback(*args)):
-            Keety.convert(app, Path("test.wav"), enabled)
+            Skipper.convert(app, Path("test.wav"), enabled)
         return events, app
 
     def test_enabled_exact_match_saves_before_action(self):

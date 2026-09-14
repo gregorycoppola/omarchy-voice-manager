@@ -15,7 +15,7 @@ history and grammar editing are still pending.
 
 ## Product direction
 
-Keety becomes a small, everyday voice interface. Its primary surface is a
+Skipper becomes a small, everyday voice interface. Its primary surface is a
 popover from the top bar, showing three things:
 
 1. The voice waveform or amplitude visualizer.
@@ -46,7 +46,7 @@ continues to work across those combinations.
   an explicit part of a language model or durable interpretation record.
 - `recordings.py` saves WAV, transcript, and timing metadata. It does not save
   a structured interpretation and execution history.
-- `launch.sh` and `config/keety-bar/BarWidget.qml` already support background
+- `launch.sh` and `config/skipper-bar/BarWidget.qml` already support background
   operation and a top-bar status button. Clicking opens the large controls UI.
 
 Build on these foundations and preserve existing action semantics during the
@@ -158,7 +158,7 @@ later; the shared rule mechanism belongs in the first grammar implementation.
 ## Contexts
 
 A context snapshot records facts relevant to interpreting one utterance:
-focused app/window, workspace/monitor, and any explicit Keety mode. Capture it
+focused app/window, workspace/monitor, and any explicit Skipper mode. Capture it
 at recording start, before the popover can take focus. Keep target identity
 stable through transcription and confirmation, and revalidate it before acting.
 
@@ -180,8 +180,8 @@ For the initial version, contexts are captured facts and declared scopes.
 | Component | Responsibility |
 | --- | --- |
 | Shared runtime | Own microphone/model, capture context, parse, resolve targets, execute, persist history, publish state |
-| Keety voice app | Top-bar entry and compact popover with visualizer, transcript, intent, and essential status/confirmation feedback |
-| Keety companion | Grammar/vocabulary editor, expansion explorer, parse playground, learned-item management, history and settings |
+| Skipper voice app | Top-bar entry and compact popover with visualizer, transcript, intent, and essential status/confirmation feedback |
+| Skipper companion | Grammar/vocabulary editor, expansion explorer, parse playground, learned-item management, history and settings |
 
 Proposed first split: two separately launchable apps, with Grammar and History
 as sections of the companion. Keep those modules separate so they can become
@@ -297,7 +297,7 @@ system and history, with one runtime handling recording and actions.
 - Verify hold-to-talk/release behavior, focus preservation, model lifecycle,
   errors, confirmations, closing either UI, and explicit quitting end to end.
 
-Done when routine voice use needs only the small Keety surface, and management
+Done when routine voice use needs only the small Skipper surface, and management
 and inspection are available through the separately launched companion.
 
 ## Decisions to settle during implementation

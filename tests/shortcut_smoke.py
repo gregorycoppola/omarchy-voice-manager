@@ -13,7 +13,7 @@ from push_to_talk import PushToTalk
 from keyboard import build_keyboard
 keyboard_bin = build_keyboard()
 
-app = Gtk.Application(application_id='io.github.gregorycoppola.Keety')
+app = Gtk.Application(application_id='io.github.gregorycoppola.Skipper')
 events = []
 messages = []
 drop_release = False
@@ -76,14 +76,14 @@ def exercise():
 
 
 def activate(*_):
-    window = Gtk.ApplicationWindow(application=app, title='Keety shortcut test')
+    window = Gtk.ApplicationWindow(application=app, title='Skipper shortcut test')
     window.set_child(Gtk.Label(label='Testing hold-to-talk; microphone is off'))
     window.present()
     threading.Thread(target=exercise, daemon=True).start()
 
 app.connect('activate', activate)
-app.run(['keety-shortcut-test'])
+app.run(['skipper-shortcut-test'])
 if errors:
     raise SystemExit(errors[0])
 if not messages:
-    raise SystemExit('No shortcut events received; close the real Keety app first')
+    raise SystemExit('No shortcut events received; close the real Skipper app first')

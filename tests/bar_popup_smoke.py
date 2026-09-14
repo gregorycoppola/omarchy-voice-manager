@@ -4,17 +4,17 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-with tempfile.TemporaryDirectory(prefix='keety-bar-test-') as directory:
+with tempfile.TemporaryDirectory(prefix='skipper-bar-test-') as directory:
     directory = Path(directory)
     for source in Path('/usr/share/omarchy/shell').iterdir():
         if source.is_dir():
             (directory / source.name).symlink_to(source, target_is_directory=True)
-    (directory / 'keety').symlink_to(ROOT / 'config/keety-bar', target_is_directory=True)
+    (directory / 'skipper').symlink_to(ROOT / 'config/skipper-bar', target_is_directory=True)
     (directory / 'shell.qml').write_text('''
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import "keety" as Keety
+import "skipper" as Skipper
 ShellRoot {
     PanelWindow {
         anchors { top: true; left: true }
@@ -22,7 +22,7 @@ ShellRoot {
         implicitHeight: 28
         exclusiveZone: -1
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-        Keety.BarWidget { id: widget; anchors.fill: parent }
+        Skipper.BarWidget { id: widget; anchors.fill: parent }
         Timer {
             interval: 150; running: true
             onTriggered: {
@@ -36,14 +36,14 @@ ShellRoot {
             onTriggered: {
                 widget.readStatus({state:"Ready", updated:Date.now()/1000, session:"test", panel_epoch:1,
                     completed_at:1, intent_label:"Open Gmail"})
-                if (widget.opened || widget.snapshot().visible || widget.barText !== "Open Gmail · Keety") throw new Error("Missing result")
+                if (widget.opened || widget.snapshot().visible || widget.barText !== "Open Gmail · Skipper") throw new Error("Missing result")
                 check.start()
             }
         }
         Timer {
             id: check; interval: 350
             onTriggered: {
-                if (widget.opened || widget.snapshot().visible || widget.barText !== "Open Gmail · Keety") throw new Error("Dismissal or intent persistence failed")
+                if (widget.opened || widget.snapshot().visible || widget.barText !== "Open Gmail · Skipper") throw new Error("Dismissal or intent persistence failed")
                 widget.readStatus({state:"Confirm", updated:Date.now()/1000, session:"test", panel_epoch:2,
                     confirmation:{token:"abc", detail:"Test terminal"}})
                 confirmCheck.start()
@@ -60,7 +60,7 @@ ShellRoot {
         Timer {
             id: expire; interval: 200
             onTriggered: {
-                if (widget.barText !== "Open Gmail · Keety") throw new Error("Last intent did not persist")
+                if (widget.barText !== "Open Gmail · Skipper") throw new Error("Last intent did not persist")
                 console.log("PASS: popup opens for recording, closes after completion, preserves intent, retains confirmation")
                 Qt.quit()
             }

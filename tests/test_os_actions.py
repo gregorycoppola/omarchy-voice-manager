@@ -38,7 +38,7 @@ class CommandTests(unittest.TestCase):
         from os_actions import app_window
         self.assertIsNone(app_window("discord", [{"class":"chromium", "title":"Discord", "address":"0x123"}]))
         with patch("os_actions.run", return_value="[]") as run:
-            with self.assertRaisesRegex(RuntimeError, "not connected"):
+            with self.assertRaisesRegex(RuntimeError, "connected"):
                 execute_command("discord")
             self.assertEqual(run.call_count, 1)
 
@@ -161,7 +161,7 @@ class CommandTests(unittest.TestCase):
 
     def test_terminal_missing_monitor_does_not_launch(self):
         with patch("os_actions.run", return_value="[]") as run:
-            with self.assertRaisesRegex(RuntimeError, "not connected"):
+            with self.assertRaisesRegex(RuntimeError, "connected"):
                 execute_command("terminal:new")
             run.assert_called_once()
 
@@ -269,8 +269,8 @@ class CommandTests(unittest.TestCase):
             self.assertIn('follow = false', run.call_args_list[1].args[0][2])
 
     def test_missing_external_stops_before_launching(self):
-        with patch("os_actions.run", return_value='[{"name":"eDP-1","id":0,"activeWorkspace":{"id":1}}]') as run:
-            with self.assertRaisesRegex(RuntimeError, "not connected"):
+        with patch("os_actions.MAIN_MONITOR", "DP-1"), patch("os_actions.run", return_value='[{"name":"eDP-1","id":0,"activeWorkspace":{"id":1}}]') as run:
+            with self.assertRaisesRegex(RuntimeError, "connected"):
                 execute_command("browser")
             run.assert_called_once_with(["hyprctl", "monitors", "-j"])
 
@@ -298,7 +298,7 @@ class CommandTests(unittest.TestCase):
 
     def test_site_requires_external_before_launch(self):
         with patch("os_actions.run", return_value="[]"), patch("os_actions.subprocess.Popen") as launch:
-            with self.assertRaisesRegex(RuntimeError, "not connected"):
+            with self.assertRaisesRegex(RuntimeError, "connected"):
                 execute_command("site:gmail")
             launch.assert_not_called()
 

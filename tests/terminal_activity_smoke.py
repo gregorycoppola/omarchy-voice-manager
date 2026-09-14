@@ -7,7 +7,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from terminal_activity import terminal_has_jobs
 
 for command, expected in [(['bash','--noprofile','--norc','-i'], False), (['sleep','20'], True)]:
-    terminal = subprocess.Popen(['foot','--app-id=io.github.gregorycoppola.Keety.ActivityTest', *command],
+    terminal = subprocess.Popen(['foot','--app-id=io.github.gregorycoppola.Skipper.ActivityTest', *command],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         deadline = time.monotonic() + 5

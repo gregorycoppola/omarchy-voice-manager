@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 
-from keety import recognize_file
+from skipper import recognize_file
 
 
 def new_recording(directory):

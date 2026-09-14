@@ -9,9 +9,9 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import gi
 gi.require_version('Gtk','4.0')
 from gi.repository import GLib, Gtk
-from os_actions import run, tile_open_windows, tile_terminals, tile_apps
+from os_actions import run, tile_open_windows, tile_terminals, tile_apps, hide_windows
 
-APP_ID = 'io.github.gregorycoppola.Keety.TileTest'
+APP_ID = 'io.github.gregorycoppola.Skipper.TileTest'
 app = Gtk.Application(application_id=APP_ID)
 windows = []
 result = []
@@ -25,7 +25,7 @@ def test():
         clients = json.loads(run(['hyprctl','clients','-j']))
         targets = [c for c in clients if c['class'] == APP_ID]
         assert len(targets) == 4, targets
-        keety = [c for c in clients if c['class'] == 'io.github.gregorycoppola.Keety']
+        skipper = [c for c in clients if c['class'] == 'io.github.gregorycoppola.Skipper']
         for target in targets:
             address = target['address']
             run(['hyprctl','dispatch',f'hl.dsp.window.move({{workspace = "{workspace}", follow = false, window = "address:{address}"}})'])
@@ -33,7 +33,7 @@ def test():
         address = targets[0]['address']
         run(['hyprctl','dispatch',f'hl.dsp.window.fullscreen_state({{internal = 2, client = 2, action = "set", window = "address:{address}"}})'])
         targets = [c for c in json.loads(run(['hyprctl','clients','-j'])) if c['class'] == APP_ID]
-        context = {'active':targets[0],'clients':targets+keety}
+        context = {'active':targets[0],'clients':targets+skipper}
         for _ in range(2):
             assert tile_open_windows(context) == 'Tiled 4 windows'
         time.sleep(.3)
@@ -58,7 +58,7 @@ def test():
                 targets = [c for c in json.loads(run(['hyprctl', 'clients', '-j'])) if c['class'] == APP_ID]
                 active = next(c for c in targets if c['workspace']['id'] == workspace)
                 print(f'Checking {action.__name__}', flush=True)
-                action({'active': active, 'clients': targets + keety})
+                action({'active': active, 'clients': targets + skipper})
                 time.sleep(.3)
                 targets = [c for c in json.loads(run(['hyprctl', 'clients', '-j'])) if c['class'] == APP_ID]
                 visible = [c for c in targets if c['workspace']['id'] == workspace]
@@ -70,13 +70,29 @@ def test():
                 elif action == tile_apps:
                     assert not terminal_addresses.intersection(c['address'] for c in visible)
                 for c in targets:
-                    assert c['workspace']['id'] == workspace or c['workspace']['name'] == f'special:keety-tile-{workspace}'
+                    assert c['workspace']['id'] == workspace or c['workspace']['name'] == f'special:skipper-tile-{workspace}'
+        with patch('os_actions.is_terminal', side_effect=lambda c: c['address'] in terminal_addresses):
+            anchor = dict(visible[0])
+            for category in ('terminals', 'apps'):
+                targets = [c for c in json.loads(run(['hyprctl', 'clients', '-j'])) if c['class'] == APP_ID]
+                hide_windows({'active': anchor, 'clients': targets + skipper}, category)
+            targets = [c for c in json.loads(run(['hyprctl', 'clients', '-j'])) if c['class'] == APP_ID]
+            assert all(c['workspace']['name'] == f'special:skipper-tile-{workspace}' for c in targets)
+            # Simulate the captured context after a picker focuses a hidden
+            # window. Both category tiling and restore-all must find the origin.
+            tile_terminals({'active': targets[0], 'clients': targets + skipper})
+            targets = [c for c in json.loads(run(['hyprctl', 'clients', '-j'])) if c['class'] == APP_ID]
+            assert {c['address'] for c in targets if c['workspace']['id'] == workspace} == terminal_addresses
+            hidden_target = next(c for c in targets if c['workspace']['id'] != workspace)
+            tile_open_windows({'active': hidden_target, 'clients': targets + skipper})
+            targets = [c for c in json.loads(run(['hyprctl', 'clients', '-j'])) if c['class'] == APP_ID]
+            assert all(c['workspace']['id'] == workspace for c in targets)
         after = json.loads(run(['hyprctl', 'clients', '-j']))
-        for before in keety:
+        for before in skipper:
             current = next(c for c in after if c['address']==before['address'])
             for key in ['at','size','floating','fullscreen','fullscreenClient','workspace','monitor']:
                 assert current[key] == before[key], (key,before,current)
-        result.append('PASS: four disposable windows in equal 2x2 grid without overlap, repeated command, terminal/app views and restore-all, Keety unchanged')
+        result.append('PASS: four disposable windows in equal 2x2 grid without overlap, repeated command, terminal/app views, hide both categories, and restore-all, Skipper unchanged')
     except Exception as exc:
         result.append(exc)
     finally:
@@ -85,7 +101,7 @@ def test():
 
 def activate(*_):
     for index in range(4):
-        window = Gtk.ApplicationWindow(application=app,title=f'Keety tiling test {index}')
+        window = Gtk.ApplicationWindow(application=app,title=f'Skipper tiling test {index}')
         window.set_default_size(200,100)
         window.present()
         windows.append(window)

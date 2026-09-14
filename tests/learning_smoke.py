@@ -10,16 +10,16 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-with tempfile.TemporaryDirectory(prefix="keety-learning-test-") as directory:
+with tempfile.TemporaryDirectory(prefix="skipper-learning-test-") as directory:
     os.environ['XDG_DATA_HOME'] = directory
     import gui
     from gi.repository import GLib
     from intent_matching import IntentMatcher
 
-    app = gui.Keety()
+    app = gui.Skipper()
     installed = '--installed-id' in sys.argv
     if not installed:
-        app.set_application_id('io.github.gregorycoppola.Keety.LearningTest')
+        app.set_application_id('io.github.gregorycoppola.Skipper.LearningTest')
     state = {'phase': 'load', 'error': None, 'passed': False}
     started = time.monotonic()
     path = gui.DATA / 'example.wav'
@@ -50,7 +50,7 @@ with tempfile.TemporaryDirectory(prefix="keety-learning-test-") as directory:
                 print('PASS: GTK automatic execution, persistent alias, no dialog, exact reuse, Forget')
                 state['passed'] = True
                 app.window.close()
-                # A hidden application-owned dialog must not keep Keety alive.
+                # A hidden application-owned dialog must not keep Skipper alive.
                 def lingering():
                     state['passed'] = False
                     state['error'] = 'Closing the main window left the app running'

@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import Mock
 import wave
 
-from keety import transcribe
+from skipper import transcribe
 
 
 class AudioBoundsTests(unittest.TestCase):

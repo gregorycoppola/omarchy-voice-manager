@@ -13,7 +13,10 @@ import urllib.request
 import wave
 
 ROOT = Path(__file__).resolve().parent
-MODEL = ROOT / "models/parakeet-tdt-0.6b-v3-int8"
+DATA = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'skipper'
+MODEL = Path(os.environ.get('SKIPPER_MODEL_DIR',
+             ROOT / 'models/parakeet-tdt-0.6b-v3-int8' if (ROOT / 'models/parakeet-tdt-0.6b-v3-int8').is_dir()
+             else DATA / 'models/parakeet-tdt-0.6b-v3-int8'))
 
 
 def download():
@@ -49,7 +52,7 @@ def load_model(threads):
 
     manifest = json.loads((ROOT / "model-manifest.json").read_text())
     if any(not (MODEL / f["rfilename"]).is_file() for f in manifest["files"]):
-        raise ValueError("Model missing. Run: python keety.py download")
+        raise ValueError("Model missing. Run: python skipper.py download")
     options = ort.SessionOptions()
     options.intra_op_num_threads = threads
     options.inter_op_num_threads = 1
@@ -112,7 +115,7 @@ def main():
         if args.command == "transcribe":
             transcribe(model, args.wav, load_seconds)
         else:
-            with tempfile.TemporaryDirectory(prefix="keety-") as directory:
+            with tempfile.TemporaryDirectory(prefix="skipper-") as directory:
                 path = Path(directory) / "recording.wav"
                 print(f"Recording for {args.seconds} seconds. Speak now.", file=sys.stderr, flush=True)
                 subprocess.run([
@@ -121,7 +124,7 @@ def main():
                 ], check=True, timeout=args.seconds + 15)
                 transcribe(model, path, load_seconds)
     except (OSError, ValueError, wave.Error, subprocess.SubprocessError) as exc:
-        parser.exit(1, f"Keety: {exc}\n")
+        parser.exit(1, f"Skipper: {exc}\n")
     except KeyboardInterrupt:
         parser.exit(130, "\nCancelled.\n")
 

@@ -1,4 +1,4 @@
-# Keety
+# Skipper
 
 Current release: **0.1.0**. This checkout includes **0.2.0-dev** voice-command
 work. See [the changelog](CHANGELOG.md).
@@ -7,21 +7,93 @@ Planned direction: [structured intents, grammars, contexts, and separate voice
 and management apps](docs/intents-and-app-split-plan.md).
 
 A local voice-command app for an M2 MacBook Pro running ARM Linux / Omarchy.
-Keety lives in the menu bar: hold-to-talk opens a compact popup with microphone
+Skipper lives in the menu bar: hold-to-talk opens a compact popup with microphone
 levels, recognized words, and the parsed intent. A windowless background process
-handles speech and actions. **Keety Explorer** is the separate native app for
+handles speech and actions. **Skipper Explorer** is the separate native app for
 language inspection, recording history, learned phrases, and settings.
 
 Uses NVIDIA Parakeet TDT 0.6B v3 through a community INT8 ONNX conversion and
 `onnx-asr`. Inference runs on the CPU. No NVIDIA GPU, cloud transcription,
 PyTorch, system package updates, or macOS frameworks are required.
 
-## Setup
+## Install as an Omarchy plugin
+
+Requires Omarchy Quattro with the Lua Hyprland API and Quickshell. Tested on
+Linux aarch64; x86_64 has not yet been tested. Speech runs locally on the CPU.
+
+```bash
+omarchy plugin add https://github.com/gregorycoppola/omarchy-voice-manager.git --enable
+python ~/.config/omarchy/plugins/greg.skipper/plugin_setup.py install --shortcut --autostart
+```
+
+Run setup yourself in a terminal: Omarchy does not run installation hooks.
+Setup downloads pinned Python dependencies and about 639 MiB of speech-model
+files. It installs them under `${XDG_DATA_HOME:-~/.local/share}/skipper`, outside
+of the plugin checkout. It needs system `python`, `gtk4`, `python-gobject`,
+`python-cairo`, PipeWire's `pw-record`, `hyprctl`, and `gapplication` (GLib).
+Install missing system packages through Omarchy's package manager first.
+The widget has a **Start Skipper** button; setup does not start recording.
+
+`--shortcut` explicitly replaces **Super+R** with hold-to-talk. Omit it if you
+want to configure a different binding yourself using
+`config/hyprland-skipper-ptt.lua`. `--autostart` adds a login launcher; omit it
+for manual startup. Existing conflicting Skipper files are refused unless you
+supply `--replace-existing`, which backs them up first. Setup preserves other
+bindings and stores a receipt so uninstall only removes its own integration.
+
+Application-opening commands prefer `DP-1` when connected, otherwise the focused
+screen (or the first available screen). Set `SKIPPER_MAIN_MONITOR` in the runtime's
+environment to require a specific output. Tiling and hiding use the captured
+workspace. Browser-tab reuse for Gmail/GitHub additionally needs the optional
+browser connection described below; other window commands do not require it.
+
+### Update, disable, and remove
+
+```bash
+omarchy plugin update greg.skipper
+# Re-run setup when dependency pins or shortcut integration change:
+python ~/.config/omarchy/plugins/greg.skipper/plugin_setup.py install --shortcut --autostart
+```
+
+Quit Skipper from the bar, then click **Start Skipper** to load updated Python
+code. The widget hot-reloads. Disabling the widget hides its controls; it does
+not stop an already-running companion process. Use **Quit** first if desired:
+
+```bash
+omarchy plugin disable greg.skipper
+```
+
+To remove both the runtime integration and the widget, run these in order:
+
+```bash
+python ~/.config/omarchy/plugins/greg.skipper/plugin_setup.py uninstall
+omarchy plugin remove greg.skipper
+```
+
+Uninstall stops the runtime, removes unmodified setup-owned launchers and its
+shortcut block, and preserves recordings, learned phrases, settings, model,
+Python environment, and backups. It reports modified files rather than deleting
+them. Review the retained `~/.local/share/skipper` directory yourself if you
+also want to remove saved data. No system packages are removed.
+
+### Capabilities and privacy
+
+Skipper records microphone audio only during hold-to-talk, transcribes locally,
+and stores recordings/transcripts locally for history and retry. It reads window
+metadata, controls windows via Hyprland, launches installed apps, and inspects
+terminal process trees to decide whether closing needs confirmation. Its shortcut
+observes only R and Super key events. The optional browser connection can inspect
+and select browser tabs. Setup uses the network for Python packages and the
+pinned model; transcription itself does not use a cloud service. Plugins and the
+runtime run with your normal user permissions.
+
+## Development setup
+
 
 ```bash
 python -m venv --system-site-packages .venv
 .venv/bin/pip install -r requirements.lock
-.venv/bin/python keety.py download
+.venv/bin/python skipper.py download
 python install_desktop.py
 ```
 
@@ -31,8 +103,8 @@ The GUI uses system GTK4, PyGObject and Cairo (`gtk4`, `python-gobject` and
 `python-cairo` on Arch),
 already present on this machine. System-site-packages exposes those bindings to
 the environment without modifying installed system packages.
-The launcher installer adds Keety to your per-user application menu and creates
-`~/.local/bin/keety`. Keep the checkout at the same path after installation,
+The launcher installer adds Skipper to your per-user application menu and creates
+`~/.local/bin/skipper`. Keep the checkout at the same path after installation,
 or rerun the installer if you move it. `launch.sh` also works directly.
 The model download is pinned by revision in `model-manifest.json`; large weight
 files are SHA-256 verified. Model files occupy about 639 MiB and stay in ignored
@@ -40,23 +112,23 @@ files are SHA-256 verified. Model files occupy about 639 MiB and stay in ignored
 
 ## Use
 
-Launch **Keety** from the application launcher, run `keety`, or use
+Launch **Skipper** from the application launcher, run `skipper`, or use
 `./launch.sh`. Install the menu-bar widget and login launcher with
 `.venv/bin/python install_bar.py` (the installer backs up existing user config).
 
 **Hold Super/Command + R to speak; release either key to transcribe.** A compact
-popup opens from the Keety bar indicator on the focused monitor. It shows actual
+popup opens from the Skipper bar indicator on the focused monitor. It shows actual
 microphone amplitude, then the recognized words and parsed intent. It does not
 join the tiling layout or grab keyboard focus. Recognition completes after
 release; words do not stream during recording.
 
 After a successful action the popup closes **immediately**. The latest readable
-intent name stays to the **left of “Keety”** in the menu bar until another intent replaces it.
+intent name stays to the **left of “Skipper”** in the menu bar until another intent replaces it.
 Unrecognized commands remain visible for 2.5 seconds and errors for six seconds.
 Terminal-close confirmations stay in the popup until answered or superseded by
 a new recording. Click the bar indicator to inspect the latest result manually;
 click it again or use × to dismiss. **Explorer** opens the separate management
-app. **Quit** finishes any current work and stops the runtime; **Start Keety**
+app. **Quit** finishes any current work and stops the runtime; **Start Skipper**
 restarts it.
 
 There is no main desktop window. Closing Explorer does not stop recording or
@@ -69,16 +141,16 @@ R or either Super key stops capture even if focus changes. The shortcut renews a
 about 700 ms. Late renewals cannot restart it. Wait for transcription/action
 completion before another take.
 
-The installed shortcut is `~/.config/hypr/keety-ptt.lua`, loaded by
+The installed shortcut is `~/.config/hypr/skipper-ptt.lua`, loaded by
 `~/.config/hypr/bindings.lua`; its source is
-[config/hyprland-keety-ptt.lua](config/hyprland-keety-ptt.lua). It uses physical XKB
+[config/hyprland-skipper-ptt.lua](config/hyprland-skipper-ptt.lua). It uses physical XKB
 codes for R (27) and left/right Super (133/134), sending typed D-Bus actions to
 the runtime. The desktop/bar installers do not install that shortcut.
 
 Audio (`.wav`), transcripts (`.txt`), and timing metadata (`.json`) are saved in
-`~/.local/share/keety/recordings/` (respecting `XDG_DATA_HOME`). Explorer's
+`~/.local/share/skipper/recordings/` (respecting `XDG_DATA_HOME`). Explorer's
 **History** offers playback, Copy text, Transcribe again, and Open folder. Retry
-requires a ready Keety runtime and never executes or learns a command. Audio is
+requires a ready Skipper runtime and never executes or learns a command. Audio is
 retained if transcription fails. Files remain until you delete them; nothing is
 automatically pasted into another application.
 
@@ -86,10 +158,10 @@ For the command-line interface:
 
 ```bash
 # A mono, 16-bit PCM, 16 kHz WAV, up to 30 seconds:
-.venv/bin/python keety.py transcribe /path/to/clip.wav
+.venv/bin/python skipper.py transcribe /path/to/clip.wav
 
 # Load the model, then record ten seconds from the default PipeWire microphone:
-.venv/bin/python keety.py record --seconds 10
+.venv/bin/python skipper.py record --seconds 10
 ```
 
 Wait for “Speak now” before speaking. Record mode requires `pw-record`, already
@@ -109,9 +181,9 @@ substantially more memory.
 
 ### Grammar and intent explorer
 
-Open **Keety Explorer** from the application launcher, run `keety-explorer`,
+Open **Skipper Explorer** from the application launcher, run `skipper-explorer`,
 or run `./launch-explorer.sh` from this checkout. `python install_desktop.py`
-installs both Keety and the separate explorer launcher.
+installs both Skipper and the separate explorer launcher.
 
 The native GTK explorer has these views:
 
@@ -151,14 +223,14 @@ concrete intent. Voice status now includes the parsed intent.
 
 ### Command behavior
 
-Named terminals are now a live vocabulary. Say **“focus keety,” “switch to the
-keety terminal,” “focus the monitor replug bug,”** or **“close the patch monitor
+Named terminals are now a live vocabulary. Say **“focus skipper,” “switch to the
+skipper terminal,” “focus the monitor replug bug,”** or **“close the patch monitor
 terminal.”** `WINDOW_RULES` defines `focus <window>`, `switch to <window>`,
 `go to <window>`, `close <window>`, and `move <window> to the other screen`,
 with optional “the.” Move also accepts “other monitor.”
 The rules expand across the terminal windows captured when recording starts.
 New/renamed/closed terminals are reflected on the next recording without
-restarting Keety. Explorer's command tester fetches a fresh list on each test.
+restarting Skipper. Explorer's command tester fetches a fresh list on each test.
 
 `window_vocabulary.py` extracts spoken forms from titles: task name, project
 name, combined title, and terminal/window qualifiers. Task/project titles also
@@ -188,7 +260,7 @@ Hold Super + R throughout one allowed phrase, then release.
 The transcript and audio save first; a matching phrase then runs its fixed action.
 Built-in phrases and learned aliases run immediately on an exact normalized match.
 A sufficiently close match runs immediately and saves the heard phrase as an
-alternate for that intent. Keety displays the matched command in its status;
+alternate for that intent. Skipper displays the matched command in its status;
 there is no “Did you mean” prompt. Learned phrases can be removed with **Forget**.
 Unrelated or ambiguous speech shows “Unrecognized command.” Audio and transcripts
 remain saved for review. Retrying a saved transcript never executes or learns a command.
@@ -197,7 +269,7 @@ Stable intent IDs, display labels, and built-in phrases are generated into `INTE
 [command_catalog.py](command_catalog.py), beside the fixed website URL registry.
 `GRAMMAR` is generated from the same rules. Browse **Grammar** in Explorer for
 built-in phrases, or **Settings & phrases** to review aliases and **Forget** a mistake.
-Aliases persist in `~/.local/share/keety/aliases.json` (respecting `XDG_DATA_HOME`),
+Aliases persist in `~/.local/share/skipper/aliases.json` (respecting `XDG_DATA_HOME`),
 using a versioned JSON format and private file permissions. They stay outside Git.
 This teaches the command matcher; it does not retrain the speech recognition model.
 Starting another recording, retrying, or selecting history dismisses a pending suggestion.
@@ -231,7 +303,7 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 | open discord / bring up discord / focus discord / switch to discord | Launch Discord if closed, otherwise maximize and focus its existing app window |
 | show all windows / show all open windows / show all open window | Show a searchable window list across all screens and workspaces; select a window to focus it, or press Escape to dismiss |
 
-All Keety open/bring-up commands now use the same presentation policy: move the
+All Skipper open/bring-up commands now use the same presentation policy: move the
 selected or newly created window to DP-1, maximize it with normal controls visible,
 explicitly raise it above the floating grid, and focus it. This includes browsers,
 Gmail/GitHub browser windows, Discord, X, and new terminals. Say **“tile open
@@ -245,7 +317,7 @@ windows; ordinary browser tabs titled Discord or X are not treated as app window
 Maximize commands select one existing window, keep it on its current screen and focus it,
 then set maximized mode for both the compositor and app. Normal browser controls
 remain visible; this is different from fullscreen. Repeating the command keeps
-it maximized. If the app is closed, Keety reports that instead of launching it.
+it maximized. If the app is closed, Skipper reports that instead of launching it.
 
 “Move to other screen” and “move window to other screen” work for any captured
 window, including Chromium. The window moves to the other screen's active
@@ -269,19 +341,19 @@ most recently used terminal across screens/workspaces. Only that window is close
 
 **Confirm before closing a terminal with running programs** defaults on. Turn it off in Explorer’s **Settings & phrases** to skip
 confirmation for terminal-close commands; the choice persists locally in
-`~/.local/share/keety/settings.json` (respecting `XDG_DATA_HOME`). Fuzzy matches follow the same running-program warning setting. Keety inspects the terminal's process tree and foreground process group. A lone
+`~/.local/share/skipper/settings.json` (respecting `XDG_DATA_HOME`). Fuzzy matches follow the same running-program warning setting. Skipper inspects the terminal's process tree and foreground process group. A lone
 interactive shell with no live child jobs is treated as idle; foreground commands,
 background/stopped jobs, and directly launched apps count as running programs.
 Unknown states (including shared terminal servers that cannot be resolved per
-window) still ask. This detects processes, not unsaved work. Closing can stop them. Keety sends a normal close request and leaves
+window) still ask. This detects processes, not unsaved work. Closing can stop them. Skipper sends a normal close request and leaves
 any additional terminal/app confirmation to you; it never force-kills them.
-If the selected window disappears or is replaced before approval, Keety will not
+If the selected window disappears or is replaced before approval, Skipper will not
 close a different window.
 
 Close commands send a normal window-close request to one matching window,
 preferring the most recently used match across workspaces. They do not focus,
-move, launch, or forcibly kill the app. If no match exists, Keety says so.
-An app may ask you to confirm closing; Keety leaves that dialog for you.
+move, launch, or forcibly kill the app. If no match exists, Skipper says so.
+An app may ask you to confirm closing; Skipper leaves that dialog for you.
 Close commands work even without DP-1. “Close Chrome” closes the whole selected
 browser window and its tabs; it excludes the separate Discord and X app windows.
 Gmail/GitHub tab closing and arbitrary window-name closing are not included.
@@ -303,14 +375,14 @@ Pending navigations count as matching tabs to avoid duplicates during page loads
 Both “open” and “bring up” currently follow these same rules.
 
 Tab control uses the already installed Playwright extension (0.4.0) and the pinned
-local Playwright MCP runtime from `codex-browser-tools` (0.0.80). Keety sends fixed
+local Playwright MCP runtime from `codex-browser-tools` (0.0.80). Skipper sends fixed
 JavaScript to the extension's tabs API; no AI agent interprets or runs commands.
-The local connection is stored at `~/.config/keety/browser-connection.json`, with
+The local connection is stored at `~/.config/skipper/browser-connection.json`, with
 mode 0600, using the installed runtime's `command`, `args` (including `--extension`),
 and `env`. The existing extension connection token remains outside this repo.
 This machine is configured; other installations need their own extension connection.
-Keety keeps a connection open after the first website command; an extension control
-tab supports that connection. Closing Keety stops its connection process.
+Skipper keeps a connection open after the first website command; an extension control
+tab supports that connection. Closing Skipper stops its connection process.
 A connection failure reports an error rather than opening duplicate fallback tabs.
 
 To add a website, add its fixed HTTPS URL, display name, and exact hostname to
@@ -344,7 +416,7 @@ policies: open/focus app commands target **DP-1**, all maximize commands
 stay on the target's current screen, and move-to-other-screen selects another
 monitor and arranges the destination workspace.
 
-The old GTK-window rule in [config/hyprland-keety.lua](config/hyprland-keety.lua)
+The old GTK-window rule in [config/hyprland-skipper.lua](config/hyprland-skipper.lua)
 only applies to the development window; the runtime creates no such window.
 
 ## Model provenance
@@ -356,7 +428,7 @@ only applies to the development window; the runtime creates no such window.
 The converted model is marked CC BY 4.0 by its publisher. Credit belongs to
 NVIDIA for the original model and Ivan Stupakov for the conversion/runtime.
 Weights are downloaded separately and are not committed to this repository.
-Keety is an independent app, not an NVIDIA product.
+Skipper is an independent app, not an NVIDIA product.
 
 See [the first local benchmark](docs/first-run.md) for hardware and measurements.
 
@@ -382,7 +454,7 @@ node --test tests/test_browser_tabs.cjs
 .venv/bin/python tests/gui_smoke.py local/jfk.wav --auto
 ```
 
-With the real Keety app closed and the shortcut installed, `tests/gui_smoke.py`
+With the real Skipper app closed and the shortcut installed, `tests/gui_smoke.py`
 also supports `--ptt` and `--ptt --super-first`. These use a test-only virtual
 keyboard with a standard evdev keymap to exercise the compositor binding and
 D-Bus action, checking transcription before the second key is released.
@@ -415,7 +487,7 @@ windows form a 2 × 2 grid). It exits maximize/fullscreen and separates groups.
 The adapter uses positioned floating windows to avoid inheriting old split ratios,
 respects monitor scaling and the panel, and leaves spare cells empty for odd counts.
 Run the command again after opening or closing windows to rearrange the grid.
-Keety is excluded. Other workspaces stay as they are; repeating the command keeps
+Skipper is excluded. Other workspaces stay as they are; repeating the command keeps
 the windows tiled.
 
 Say **“tile all the terminals”**, **“tile all terminals”**, or **“tile terminals”**
@@ -425,23 +497,33 @@ shows all non-terminal apps and hides terminals. **“Tile all windows”** brin
 the hidden windows back and tiles everything together. These commands include
 windows hidden by an earlier tiling command on the same workspace, so you can
 switch between terminals, browsers, apps, and everything repeatedly.
-Keety and other workspaces are excluded. If no matching windows remain, nothing
+Skipper and other workspaces are excluded. If no matching windows remain, nothing
 is hidden. Hidden windows stay open in a dedicated special workspace associated
 with their original workspace. The `tile_terminals`, `tile_browsers`, and
 `tile_apps` intents are available in the command catalog and Explorer.
 The apps command accepts only **“tile all apps”** (ignoring case and punctuation);
 fuzzy matching and learned aliases are disabled for that intent.
 
+**“Hide all terminals”** hides visible terminals; **“hide all apps”** hides
+visible non-terminal apps. Both accept only those exact phrases (ignoring case
+and punctuation). They leave the remaining windows in place and do not bring
+back previously hidden windows. **“Tile all windows”** restores and tiles them,
+even after hiding the last window on a workspace.
+**“Hide this window”** hides just the window focused when recording starts,
+whether it is a terminal or another app. It also requires the exact phrase and
+can be restored with **“tile all windows”**. A focus change while speaking does
+not change the target; a closed, moved, or replaced window is skipped.
+
 ### Menu-bar runtime
 
 `launch.sh` starts `runtime.py`, a windowless `Gio.Application` retaining the
 existing application ID and push-to-talk D-Bus actions. The user-owned
-`config/keety-bar` widget renders a passive attached popup. Runtime state lives
+`config/skipper-bar` widget renders a passive attached popup. Runtime state lives
 privately under `XDG_RUNTIME_DIR`, including transcript, intent, amplitude samples,
 and a per-confirmation token. Stale or repeated confirmation tokens cannot act on
 a later command. The widget detects a stopped/unresponsive runtime.
 
-`install_bar.py` installs the widget under `~/.config/omarchy/plugins/greg.keety`,
+`install_bar.py` installs the widget under `~/.config/omarchy/plugins/greg.skipper`,
 updates the user shell layout, and installs a login launcher. Existing plugin
 files and shell config are backed up. Packaged Omarchy files are unchanged.
 Plugin changes normally reload automatically; `omarchy restart shell` can apply

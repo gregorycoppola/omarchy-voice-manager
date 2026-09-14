@@ -10,7 +10,7 @@ from gi.repository import GLib
 with tempfile.TemporaryDirectory() as directory:
     path = Path(directory) / 'aliases.json'
     app = Explorer(path)
-    app.set_application_id('io.github.gregorycoppola.Keety.ExplorerTest')
+    app.set_application_id('io.github.gregorycoppola.Skipper.ExplorerTest')
     errors = []
     passed = []
 
@@ -79,7 +79,7 @@ with tempfile.TemporaryDirectory() as directory:
             assert not app.windows_page.rows
             assert 'gui' not in sys.modules
             assert 'os_actions' not in sys.modules
-            assert 'keety' not in sys.modules
+            assert 'skipper' not in sys.modules
             passed.append(True)
         except Exception as exc:
             errors.append(repr(exc))

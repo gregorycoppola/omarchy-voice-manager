@@ -1,5 +1,5 @@
 // Runs in the installed extension's page, where Chrome's tabs API is available.
-// The caller supplies only an entry from Keety's fixed site registry.
+// The caller supplies only an entry from Skipper's fixed site registry.
 async function bringUpSite(site) {
   const windows = (await chrome.windows.getAll({populate: true, windowTypes: ['normal']}))
     .filter(w => !w.incognito && w.tabs.some(t => !t.url?.startsWith('chrome-extension://')));

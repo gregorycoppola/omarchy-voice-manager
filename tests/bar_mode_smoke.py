@@ -8,11 +8,11 @@ import time
 from unittest.mock import Mock, patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 with tempfile.TemporaryDirectory() as directory:
-    os.environ.update(KEETY_BAR_MODE='1', XDG_DATA_HOME=directory, XDG_RUNTIME_DIR=directory)
+    os.environ.update(SKIPPER_BAR_MODE='1', XDG_DATA_HOME=directory, XDG_RUNTIME_DIR=directory)
     import gui
     from gi.repository import GLib
-    app = gui.Keety()
-    app.set_application_id('io.github.gregorycoppola.Keety.BarTest')
+    app = gui.Skipper()
+    app.set_application_id('io.github.gregorycoppola.Skipper.BarTest')
     result = []
     started = time.monotonic()
     def test():
@@ -38,7 +38,7 @@ with tempfile.TemporaryDirectory() as directory:
                 app.activate_action('ptt-event',GLib.Variant('s','1-1:1:down'))
                 record.assert_called_once()
                 app.publish_bar_state()
-                path = Path(directory)/f'keety-{os.getuid()}-status.json'
+                path = Path(directory)/f'skipper-{os.getuid()}-status.json'
                 assert json.loads(path.read_text())['state']=='Recording'
                 app.window.close()
                 stop.assert_not_called()
