@@ -20,6 +20,9 @@ class RuntimeTests(unittest.TestCase):
         self.idle = patch('runtime.GLib.idle_add', side_effect=lambda fn, *args: fn(*args))
         self.idle.start()
         self.addCleanup(self.idle.stop)
+        popup = patch.object(self.app, 'show_correction')
+        popup.start()
+        self.addCleanup(popup.stop)
 
     def transcribe(self, text, commands=True, context=None):
         with patch('runtime.save_transcript', return_value=(text, {})), \

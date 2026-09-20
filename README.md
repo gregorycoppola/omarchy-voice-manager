@@ -369,7 +369,7 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 | close x / close twitter | Close the most recently used X/Twitter app window |
 | close chrome / close chromium / close google chrome | Close one normal Chrome/Chromium window, including its tabs |
 | open discord / bring up discord / focus discord / switch to discord | Launch Discord if closed, otherwise maximize and focus its existing app window |
-| show all windows / show all open windows / show all open window | Show a searchable window list across all screens and workspaces; select a window to focus it, or press Escape to dismiss |
+| show all windows / show all open windows / show all open window | Restore and tile all windows on the captured workspace, just like “tile all windows” |
 
 All Skipper open/bring-up commands now use the same presentation policy: move the
 selected or newly created window to DP-1, maximize it with normal controls visible,
@@ -502,6 +502,40 @@ See [the first local benchmark](docs/first-run.md) for hardware and measurements
 
 ## Validation
 
+Unparsed push-to-talk commands expand a correction editor **inside the Skipper
+bar dropdown**: “I heard ‘…’, but I wasn’t sure what you meant.” There is no
+separate correction window. Recognized commands, including accepted fuzzy
+matches, run without asking you to repeat their wording. If only the target
+window is ambiguous, the dropdown asks which window instead.
+
+**Super + Shift + R** opens a centered written-command box on the active monitor.
+It stays open while you type, including after clicking outside or pressing the
+shortcut again. Only Enter submits; Escape cancels. It reserves no workspace space.
+Super + R remains hold-to-talk. The three layers are speech recognition,
+written wording, and logical intent. Typed input starts at the written layer:
+it does not record audio, run the speech model, apply speech corrections, or
+save automatic speech aliases. Both modes share logical parsing, window
+selection and terminal-close confirmation. The active window is captured before
+the input box opens, so “this window” refers to your application. Unknown typed
+commands remain editable in place. Escape cancels without running anything.
+The optional shortcut source is `config/hyprland-skipper-written.lua`; check for
+conflicts before installing it elsewhere. Skipper must be running for the shortcut.
+
+Type the command you meant in the single field, click **Check meaning**, then
+**Save**. An unclear typed command stays editable with an explanation. Saving
+remembers the exact heard phrase for next time and does not run it immediately.
+The original transcript remains intact; the typed wording and interpreted action
+are saved separately. Previously saved three-layer corrections remain compatible.
+Cancel saves nothing. Starting a new recording invalidates the old request.
+
+Tiling defaults to **side by side (left to right)**, using a grid for larger groups, on the monitor
+of the active window captured when recording starts. Paired commands bring the
+selected second window to that workspace. Five windows use two columns over
+three rows, with every window the same size and one unused cell. Incomplete
+rows retain the same cell dimensions. The layout respects scale, rotation,
+bar space and gaps; too many windows to fit at a usable minimum size produce an
+error.
+
 Open **History** in Skipper's taskbar dropdown to review recent recordings in three
 columns: **what was heard**, **words you meant**, and **intended action**. Each row
 also shows the original logged match and outcome, when available. Edit the words,
@@ -534,6 +568,7 @@ node --test tests/test_browser_tabs.cjs
 .venv/bin/python tests/learning_smoke.py
 .venv/bin/python tests/explorer_smoke.py
 .venv/bin/python tests/history_smoke.py
+.venv/bin/python tests/correction_smoke.py
 .venv/bin/python tests/tutorial_smoke.py
 .venv/bin/python tests/runtime_smoke.py
 .venv/bin/python tests/bar_popup_smoke.py
@@ -626,3 +661,55 @@ updates the user shell layout, and installs a login launcher. Existing plugin
 files and shell config are backed up. Packaged Omarchy files are unchanged.
 Plugin changes normally reload automatically; `omarchy restart shell` can apply
 a change if this shell version retains the previous component in its cache.
+
+### Tile two specific windows
+
+Say **“tile this window and the browser”**. `tile_current_window_with_browser(first, second)` is a dedicated intent that resolves
+“this window” from the focus captured when recording starts. One open browser
+resolves automatically; several browsers produce a picker with window titles
+and workspace numbers. Choose a button to continue, or cancel. Starting a new
+recording cancels the pending picker. Spoken answers to picker questions are not
+yet supported.
+
+The selected pair is tiled side by side on the original workspace and screen:
+the original focused window on the left, the chosen browser on the right. The browser
+is brought there if needed. All other windows on that workspace are hidden,
+including unselected browsers. They remain running; “tile all windows” restores
+them. Other workspaces are left in place.
+Both references must identify different windows. Missing matches or windows that
+closed, moved, or changed identity stop the command with an explanation.
+
+The reusable resolver in `window_resolution.py` handles each intent argument
+separately and asks only about ambiguous references. It also accepts “the
+terminal”, browser names, and exact spoken window titles; for example, “tile the
+terminal and the browser” can ask about either slot. Resolution retains the
+original capture through every question. Terminal nicknames can be added as
+another reference source without changing the picker or tiling action.
+
+### Close a particular app window
+
+Say or type **“close the browser”**, **“close the X window”**, or
+**“close the file browser window”**. “Close the file manager window” and
+“close Files” also target Nautilus. X matches the installed X/Twitter app,
+not a browser tab whose title happens to mention X.
+
+A single matching window closes directly. If several match, Skipper asks which
+window to close and lists their titles and workspaces. Cancel leaves them open.
+The chosen window's identity is rechecked before closing. An app's own unsaved
+work confirmation can still keep its window open.
+
+### Open the browser with a layout
+
+Chromium is the default browser Skipper launches when none is open. Common
+misspellings such as “brwoser” are accepted in these opening commands.
+
+- **“Open the browser and tile”** reuses an open browser, or launches Chromium
+  if none is open. It puts the originally focused window on the left and the
+  browser on the right, hiding the other windows on that workspace.
+- **“Open the browser in full screen”** opens or reuses a browser in true
+  fullscreen on the captured workspace.
+- **“Open the browser”** defaults to fullscreen.
+
+If several browsers are open, choose one in the picker. The tiling command keeps
+its original focused window even when launching the browser changes focus.
+Both commands work through speech and the centered typing box.

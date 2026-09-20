@@ -40,6 +40,8 @@ def recent_recordings(directory, log_path, limit=100):
         if event.get('event') == 'parsed' and event.get('result') and record['parsed'] is None:
             record['parsed'] = event['result']
             record['command'] = event.get('command')
-        if event.get('event') == 'state' and not record.get('_retry') and event.get('state') in ('Ready', 'Error', 'Confirm'):
+        if event.get('event') == 'correction_saved':
+            record.update(said=event.get('said'), meant=event.get('meant'), corrected_intent=event.get('intent'))
+        if event.get('event') == 'state' and not record.get('_retry') and event.get('state') in ('Ready', 'Error', 'Confirm', 'Correction'):
             record['outcome'] = event.get('message', '')
     return sorted(records.values(), key=lambda record: record['recording'], reverse=True)[:limit]

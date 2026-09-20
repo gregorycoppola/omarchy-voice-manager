@@ -173,32 +173,16 @@ class CommandTests(unittest.TestCase):
 
     def test_window_phrases_are_exact_commands(self):
         for phrase in ["Show all windows.", " SHOW  ALL OPEN WINDOWS! ", "Show all open window."]:
-            self.assertEqual(parse_command(phrase), "windows")
+            self.assertEqual(parse_command(phrase), "windows:tile")
         self.assertIsNone(parse_command("do not show all windows"))
 
-    def test_window_list_includes_other_workspaces_and_focuses_exact_choice(self):
-        clients = [
-            {"mapped": True, "address": "0x1", "title": "Same title", "workspace": {"name": "1"}},
-            {"mapped": True, "hidden": True, "address": "0x2", "title": "Same title", "workspace": {"name": "9"}},
-            {"mapped": False, "address": "0x3", "title": "Unmapped"},
-            {"mapped": True, "address": '0x4\"', "title": "Invalid"},
-        ]
-        with patch("os_actions.run", side_effect=[json.dumps(clients), "ok", '{"address":"0x2"}']) as run, \
-             patch("os_actions.subprocess.run", return_value=CompletedProcess([], 0, "2. Same title — Workspace 9\n", "")) as menu:
-            self.assertEqual(execute_command("windows"), "Brought selected window forward")
-            self.assertEqual(menu.call_args.kwargs["input"], "1. Same title — Workspace 1\n2. Same title — Workspace 9\n")
-            self.assertIn('address:0x2', run.call_args_list[1].args[0][2])
-
-    def test_window_list_cancel_does_not_change_focus(self):
-        clients = [{"mapped": True, "address": "0x1", "title": "Window"}]
-        with patch("os_actions.run", return_value=json.dumps(clients)) as run, \
-             patch("os_actions.subprocess.run", return_value=CompletedProcess([], 1, "", "")):
-            self.assertEqual(execute_command("windows"), "Window list closed")
-            run.assert_called_once()
-
-    def test_empty_window_list_does_not_open_menu(self):
-        with patch("os_actions.run", return_value="[]"), patch("os_actions.subprocess.run") as menu:
-            self.assertEqual(execute_command("windows"), "No open windows")
+    def test_show_windows_legacy_command_tiles_instead_of_opening_menu(self):
+        context = {'active': {'workspace': {'id': 1}}, 'clients': []}
+        with patch('os_actions.capture_window_context', return_value=context), \
+             patch('os_actions.tile_open_windows', return_value='Tiled') as tile, \
+             patch('os_actions.subprocess.run') as menu:
+            self.assertEqual(execute_command('windows'), 'Tiled')
+            tile.assert_called_once_with(context)
             menu.assert_not_called()
 
     def test_requested_phrases(self):

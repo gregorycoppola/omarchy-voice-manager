@@ -86,19 +86,64 @@ class IntentMatcher:
         result = self.parse(text)
         return result.command if result.method == "fuzzy" else None
 
-    def parse(self, text, extra_expansions=()):
+    def parse(self, text, extra_expansions=(), *, use_corrections=True):
         """Parse one snapshot, retaining competing dynamic slot bindings."""
         phrase = normalize(text)
         corrections = Corrections(self.path.with_name('corrections.json'))
         if corrections.error:
             return ParseResult(text, 'unrecognized', reason=corrections.error)
-        correction = corrections.rules.get(phrase)
+        correction = corrections.rules.get(phrase) if use_corrections else None
         if correction:
+            if correction.get('kind') == 'wording':
+                # Resolve relative references against this recording's windows, not
+                # the old correction session. Do not chain rules or fuzzy guesses.
+                resolved = self.parse(correction['meant'], extra_expansions, use_corrections=False)
+                if resolved.method not in ('exact', 'alias') or not resolved.intent:
+                    return ParseResult(text, 'unrecognized', reason='Saved wording no longer has a clear action.', correction=correction)
+                saved_intent = correction['intent']
+                if (saved_intent.get('type') == 'tile_pair'
+                        and resolved.intent.type == 'tile_current_window_with_browser'
+                        and saved_intent.get('arguments') == dict(resolved.intent.arguments)):
+                    saved_intent = saved_intent | {'type': resolved.intent.type}
+                if resolved.intent.type != saved_intent.get('type'):
+                    return ParseResult(text, 'unrecognized', reason='Saved wording changed meaning; please correct it again.', correction=correction)
+                if correction.get('command') in STRUCTURED_INTENTS and resolved.intent.to_dict() != saved_intent:
+                    return ParseResult(text, 'unrecognized', reason='Saved action changed; please correct it again.', correction=correction)
+                return ParseResult(text, 'matched', 'correction', resolved.selected, resolved.candidates,
+                                   reason='Explicit wording correction, resolved against current windows.', correction=correction)
             command = correction['command']
             candidate = Candidate(command, STRUCTURED_INTENTS[command], correction['meant'],
                                   1.0, 'correction', INTENTS[command]['label'])
             return ParseResult(text, 'matched', 'correction', candidate, (candidate,),
                                reason='Exact phrase explicitly corrected by the user.', correction=correction)
+        # Correct known browser misspellings only inside an otherwise exact
+        # authored opening/tiling command. Do not fuzzy-match its action words.
+        browser_spelling = re.sub(r'\b(?:brwoser|brwoswer|brower|browesr)\b', 'browser', phrase)
+        spelling_command = GRAMMAR.get(browser_spelling) if browser_spelling != phrase else None
+        if spelling_command in ('browser:open_tile', 'browser:open_fullscreen', 'windows:tile_current_browser'):
+            intent = STRUCTURED_INTENTS[spelling_command]
+            candidate = Candidate(spelling_command, intent, browser_spelling,
+                                  SequenceMatcher(None, phrase, browser_spelling).ratio(), 'spelling',
+                                  INTENTS[spelling_command]['label'],
+                                  tuple(e for e in EXPANSIONS if e.phrase == browser_spelling and e.intent == intent))
+            return ParseResult(text, 'matched', 'fuzzy', candidate, (candidate,),
+                               reason='Browser spelling corrected within an exact command.')
+        # Authored, specific intents take precedence over the generic pair frame.
+        specific = GRAMMAR.get(phrase)
+        if specific == 'windows:tile_current_browser':
+            intent = STRUCTURED_INTENTS[specific]
+            candidate = Candidate(specific, intent, phrase, 1.0, 'grammar', INTENTS[specific]['label'],
+                                  tuple(e for e in EXPANSIONS if e.phrase == phrase and e.intent == intent))
+            return ParseResult(text, 'matched', 'exact', candidate, (candidate,))
+        pair = re.fullmatch(r'tile (.+?) and (.+)', phrase)
+        if pair and not set(phrase.split()) & {"no", "not", "never", "don't", "dont", "cancel"}:
+            intent = Intent('tile_pair', (('first', pair[1]), ('second', pair[2])))
+            candidate = Candidate('windows:tile_pair', intent, phrase, 1.0, 'grammar', 'Tile two windows',
+                                  tuple(e for e in EXPANSIONS if e.phrase == phrase and e.intent == intent))
+            return ParseResult(text, 'matched', 'exact', candidate, (candidate,))
+        # An incomplete pair must never fall back to tiling every window.
+        if phrase.startswith('tile ') and 'and' in phrase.split():
+            return ParseResult(text, 'unrecognized', reason='Name two windows to tile.')
         expansions = EXPANSIONS + tuple(extra_expansions)
         entries = []
         for wording, command in (self.aliases | GRAMMAR).items():

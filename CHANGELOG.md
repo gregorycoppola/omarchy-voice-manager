@@ -2,6 +2,12 @@
 
 ## Unreleased — 0.2.0-dev
 
+- Add centered typed commands, window selection for pair tiling and app closing,
+  and correction handling for unknown commands. Restore the tiled workspace with
+  show-all commands and improve equal-size grid layouts.
+- Add browser opening in true fullscreen or tiled beside the originally focused
+  window, with Chromium launch when needed and common browser typo handling.
+
 - Rename the app and bar plugin to Skipper. Add a root Omarchy plugin manifest,
   portable widget defaults, explicit runtime setup/removal, and single-monitor
   support. Runtime dependencies and speech-model downloads live outside plugin

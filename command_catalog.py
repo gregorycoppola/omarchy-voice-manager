@@ -7,7 +7,7 @@ from grammar_engine import Rule, Word, compile_grammar
 TERMINAL_CLASSES = {"foot", "footclient", "alacritty", "kitty", "org.wezfurlong.wezterm", "com.mitchellh.ghostty"}
 
 # These commands accept authored phrases only, never fuzzy or learned wording.
-EXACT_ONLY_COMMANDS = {"terminals:hide", "apps:hide", "window:hide"}
+EXACT_ONLY_COMMANDS = {"terminals:hide", "apps:hide", "window:hide", "windows:tile_pair", "windows:tile_current_browser", "browser:open_tile", "browser:open_fullscreen"}
 # Apps can compete on similarity, but historical aliases must not bypass scoring.
 NO_LEARN_COMMANDS = EXACT_ONLY_COMMANDS | {"apps:tile"}
 
@@ -39,6 +39,11 @@ SITES = {
 
 # Installed desktop apps are matched by exact class, never by window title.
 APPS = {
+    "files": {
+        "name": "Files",
+        "classes": {"org.gnome.Nautilus", "nautilus", "Nautilus"},
+        "desktop_files": ("org.gnome.Nautilus.desktop",),
+    },
     "discord": {
         "name": "Discord",
         "classes": {"discord", "Discord", "chrome-discord.com__channels_@me-Default"},
@@ -60,8 +65,11 @@ VOCABULARY = {
     "destination": tuple(Word(key, site["name"], DESTINATION_FORMS.get(key, (key,)))
                          for key, site in SITES.items()),
     "browser": (BROWSER,),
+    "browser_target": (Word("browser", "Browser", ("browser", "the browser", "chrome", "chromium", "google chrome")),),
     "app": APP_WORDS,
     "window_app": (BROWSER,) + APP_WORDS,
+    "close_app": (Word("browser", "Browser", BROWSER.forms + ("browser",)),) + APP_WORDS + (
+        Word("files", "Files", ("file browser", "file manager", "files", "nautilus")),),
 }
 
 # Argument values are registry IDs or explicit targeting/presentation policies.
@@ -70,15 +78,17 @@ SCHEMAS = {
     "open_application": {"application": ("browser", "discord", "x"),
                          "presentation": ("normal", "maximized", "fullscreen")},
     "create_terminal": {},
-    "close_window": {"application": ("browser", "discord", "x", "terminal"),
-                     "selection": ("most_recent", "current")},
+    "close_window": {"application": ("browser", "discord", "x", "terminal", "files"),
+                     "selection": ("unique_or_choose", "most_recent", "current")},
     "maximize_window": {"application": ("browser", "discord", "x", "any"),
                         "selection": ("most_recent", "current"),
                         "monitor": ("main", "current")},
     "move_window": {"selection": ("current",), "monitor": ("other",)},
     "move_application": {"application": ("browser", "discord", "x"),
                          "selection": ("most_recent",), "monitor": ("other",)},
-    "show_windows": {},
+    "open_browser_and_tile": {"first": ("this window",), "second": ("the browser",)},
+    "open_browser_fullscreen": {"window": ("the browser",)},
+    "tile_current_window_with_browser": {"first": ("this window",), "second": ("the browser",)},
     "tile_windows": {"workspace": ("current",)},
     "tile_terminals": {"workspace": ("current",)},
     "tile_browsers": {"workspace": ("current",)},
@@ -95,11 +105,20 @@ RULES = (
     Rule("present_browser", ("bring up <browser>",), "open_application",
          (("application", "$browser"), ("presentation", "maximized")),
          "browser_fullscreen", "Bring up Chrome with tabs visible"),
+    Rule("open_browser_and_tile", ("open <browser_target> and tile", "open <browser_target> and tile it"),
+         "open_browser_and_tile", (("first", "this window"), ("second", "the browser")),
+         "browser:open_tile", "Open the browser and tile"),
+    Rule("open_browser_fullscreen", ("open the browser", "open browser",
+         "open <browser_target> in full screen", "open <browser_target> in fullscreen",
+         "open <browser_target> full screen", "open <browser_target> fullscreen"),
+         "open_browser_fullscreen", (("window", "the browser"),),
+         "browser:open_fullscreen", "Open the browser in full screen"),
     Rule("open_app", ("open <app>", "bring up <app>", "focus <app>", "switch to <app>"), "open_application",
          (("application", "$app"), ("presentation", "maximized")), "{app}", "Open {app}"),
-    Rule("close_app", ("close <window_app>",), "close_window",
-         (("application", "$window_app"), ("selection", "most_recent")),
-         "close:{window_app}", "Close {window_app} window"),
+    Rule("close_app", ("close <close_app>", "close the <close_app>",
+                       "close <close_app> window", "close the <close_app> window"), "close_window",
+         (("application", "$close_app"), ("selection", "unique_or_choose")),
+         "close:{close_app}", "Close {close_app} window"),
     Rule("move_app", tuple(p.replace('<window>', '<window_app>') for p in MOVE_PATTERNS),
          "move_application", (("application", "$window_app"), ("selection", "most_recent"), ("monitor", "other")),
          "move-app:{window_app}", "Move {window_app} to the other screen"),
@@ -119,7 +138,12 @@ RULES = (
                          "move window to the other screen", "move this window to the other screen"),
          "move_window", (("selection", "current"), ("monitor", "other")), "move:other_screen", "Move window to the other screen"),
     Rule("show_windows", ("show all windows", "show all open windows", "show all open window"),
-         "show_windows", (), "windows", "Show all open windows"),
+         "tile_windows", (("workspace", "current"),), "windows:tile", "Tile open windows"),
+    Rule("tile_current_window_with_browser", ("tile this window and the browser",
+         "tile this window and browser", "tile the current window and the browser"),
+         "tile_current_window_with_browser",
+         (("first", "this window"), ("second", "the browser")),
+         "windows:tile_current_browser", "Tile this window and the browser"),
     Rule("tile_windows", ("tile open windows", "tile all open windows", "tile windows", "tile all windows"),
          "tile_windows", (("workspace", "current"),), "windows:tile", "Tile open windows"),
     Rule("tile_terminals", ("tile all the terminals", "tile all terminals", "tile terminals",
@@ -154,6 +178,12 @@ for expansion in EXPANSIONS:
     if expansion.phrase not in entry["phrases"]:
         entry["phrases"].append(expansion.phrase)
     GRAMMAR[expansion.phrase] = expansion.command
+
+# Legacy execution IDs in previously saved aliases and corrections.
+STRUCTURED_INTENTS['windows'] = STRUCTURED_INTENTS['windows:tile']
+INTENTS['windows'] = {'label': 'Tile open windows', 'phrases': []}
+STRUCTURED_INTENTS['windows:tile_pair'] = STRUCTURED_INTENTS['windows:tile_current_browser']
+INTENTS['windows:tile_pair'] = {'label': 'Tile this window and the browser', 'phrases': []}
 
 GRAMMAR_REVISION = hashlib.sha256(json.dumps([
     {"phrase": e.phrase, "rule": e.rule_id, "pattern": e.pattern,

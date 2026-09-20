@@ -21,21 +21,37 @@ class Corrections:
             for phrase, rule in data['rules'].items():
                 if not phrase or normalize(phrase) != phrase or not isinstance(rule, dict):
                     raise ValueError('Invalid corrected phrase')
-                if not isinstance(rule.get('meant'), str) or not rule['meant'].strip() or rule.get('command') not in STRUCTURED_INTENTS:
+                if not isinstance(rule.get('meant'), str) or not rule['meant'].strip():
                     raise ValueError('Invalid correction intent or words')
+                if rule.get('kind') == 'wording':
+                    if not isinstance(rule.get('said'), str) or not rule['said'].strip() or not isinstance(rule.get('intent'), dict):
+                        raise ValueError('Invalid wording correction')
+                elif rule.get('command') not in STRUCTURED_INTENTS:
+                    raise ValueError('Invalid correction intent')
             self.rules, self.events = data['rules'], data['events']
         except FileNotFoundError:
             pass
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             self.error = f'Could not load corrections: {exc}'
 
-    def save(self, heard, meant, command, recording=None):
+    def save(self, heard, meant, command, recording=None, *, said=None):
         phrase = normalize(heard)
         if not phrase or not meant.strip() or command not in STRUCTURED_INTENTS:
             raise ValueError('Enter the words you meant and choose an intended action.')
-        rule = dict(heard=heard, meant=meant.strip(), command=command,
+        rule = dict(heard=heard, said=said.strip() if said else meant.strip(), meant=meant.strip(), command=command,
                     intent=STRUCTURED_INTENTS[command].to_dict(), recording=recording,
                     updated_at=datetime.now(timezone.utc).isoformat())
+        self._write(self.rules | {phrase: rule}, dict(action='save', phrase=phrase,
+                    previous=self.rules.get(phrase), correction=rule))
+
+    def save_wording(self, heard, said, meant, result, recording=None):
+        """Save explicit words and the reviewed meaning, never a live window address."""
+        phrase = normalize(heard)
+        if not phrase or not said.strip() or not meant.strip() or not result.intent or result.method not in ('exact', 'alias'):
+            raise ValueError('Enter the spoken words and a command with a clear intended action.')
+        rule = dict(kind='wording', heard=heard, said=said.strip(), meant=meant.strip(),
+                    command=result.command, intent=result.intent.to_dict(), label=result.selected.label,
+                    recording=recording, updated_at=datetime.now(timezone.utc).isoformat())
         self._write(self.rules | {phrase: rule}, dict(action='save', phrase=phrase,
                     previous=self.rules.get(phrase), correction=rule))
 

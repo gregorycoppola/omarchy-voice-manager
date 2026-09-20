@@ -121,7 +121,7 @@ class TileWorkflowTests(unittest.TestCase):
                 self.assertIn('Tiled', result)
                 visible = [c for c in clients if c['workspace']['id'] == 2]
                 self.assertEqual({c['address'] for c in visible}, expected)
-                self.assertEqual({tuple(c['size']) for c in visible}, {equal_grid(len(expected), MONITOR)[0][2:]})
+                self.assertEqual({tuple(c['size']) for c in visible}, {cell[2:] for cell in equal_grid(len(expected), MONITOR)})
                 self.assertEqual(clients[3:], untouched)
 
     def test_category_phrases_route(self):

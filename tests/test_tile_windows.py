@@ -15,7 +15,7 @@ MONITOR = dict(id=1, width=1920, height=1080, scale=1, x=1280, y=0, reserved=[0,
 class TileTests(unittest.TestCase):
     def test_equal_cells_scaling_rotation_and_odd_counts(self):
         for monitor in [MONITOR, dict(MONITOR,width=2560,height=1600,scale=2,x=-1280), dict(MONITOR,transform=1)]:
-            for count in range(1,10):
+            for count in range(1,9):
                 cells = equal_grid(count,monitor)
                 self.assertEqual(len(cells),count)
                 self.assertEqual(len({(w,h) for x,y,w,h in cells}),1)
@@ -25,6 +25,27 @@ class TileTests(unittest.TestCase):
         cells = equal_grid(4,MONITOR)
         self.assertEqual(len({x for x,y,w,h in cells}),2)
         self.assertEqual(len({y for x,y,w,h in cells}),2)
+
+    def test_side_by_side_on_scaled_laptop_and_minimum_size(self):
+        laptop = dict(MONITOR, width=2560, height=1600, scale=2)
+        with self.assertRaisesRegex(RuntimeError, 'equal grid'):
+            equal_grid(200, laptop)
+        first, second = equal_grid(2, laptop)
+        self.assertEqual(first[1], second[1])
+        self.assertEqual(first[2], 622)
+        self.assertGreater(second[0], first[0] + first[2])
+
+    def test_five_windows_use_equal_wide_cells(self):
+        laptop = dict(MONITOR, width=2560, height=1600, scale=2, x=0)
+        cells = equal_grid(5, laptop)
+        self.assertEqual([len([c for c in cells if c[1] == y])
+                          for y in sorted({c[1] for c in cells})], [2, 2, 1])
+        self.assertEqual([c[2] for c in cells], [622, 622, 622, 622, 622])
+        for y in {c[1] for c in cells}:
+            row = [c for c in cells if c[1] == y]
+            self.assertEqual(row[0][0], 12)
+            if len(row) == 2:
+                self.assertLessEqual(1280 - (row[-1][0] + row[-1][2]), 13)
 
     def test_phrases(self):
         for phrase in ['Tile open windows!', 'tile all open windows', 'tile windows', 'tile all windows']:
@@ -75,3 +96,20 @@ class TileTests(unittest.TestCase):
                     Skipper.convert(app,Path('test.wav'),commands=True,context=context)
                     tile.assert_called_once_with(context)
                     self.assertEqual(matcher.exact(text),'windows:tile')
+
+    def test_show_and_tile_share_intent_and_captured_workspace(self):
+        from runtime import VoiceRuntime
+        with tempfile.TemporaryDirectory() as directory:
+            matcher = IntentMatcher(Path(directory) / 'aliases.json')
+            expected = matcher.parse('tile all windows').intent
+            context = {'active': WINDOW, 'clients': [WINDOW]}
+            for phrase in ('show all windows', 'show all open windows', 'show all open window'):
+                result = matcher.parse(phrase)
+                self.assertEqual(result.intent, expected)
+                self.assertEqual(result.command, 'windows:tile')
+                with patch('runtime.tile_open_windows', return_value='Tiled') as tile:
+                    VoiceRuntime.execute(result.command, context)
+                    tile.assert_called_once_with(context)
+            with patch('runtime.tile_open_windows', return_value='Tiled') as tile:
+                VoiceRuntime.execute('windows', context)
+                tile.assert_called_once_with(context)

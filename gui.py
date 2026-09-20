@@ -17,6 +17,8 @@ from skipper import load_model
 from recordings import new_recording, save_transcript
 from live_audio import read_growing_wav
 from level_meter import LevelMeter, pcm_level
+from window_resolution import WindowResolution, needs_window_resolution
+from os_actions import tile_selected_windows, close_selected_window, prepare_browser_context, fullscreen_selected_browser
 from os_actions import execute_command, capture_window_context, window_target, tile_open_windows, hide_windows, hide_current_window, tile_terminals, tile_browsers, tile_apps, move_other_screen, maximize_current_window, terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS
 from settings import Settings
 from terminal_activity import terminal_has_jobs
@@ -252,6 +254,7 @@ class Skipper(Gtk.Application):
     def start_recording(self, *_):
         if self.busy or self.model is None:
             return
+        context = capture_window_context()
         path = None
         try:
             if self.player and self.player.poll() is None:
@@ -278,7 +281,7 @@ class Skipper(Gtk.Application):
         self.status.set_text("Recording… keep holding Super + R. Release to transcribe.")
         GLib.timeout_add(50, self.tick, path)
         threading.Thread(target=self.finish_recording,
-                         args=(path, self.recorder), daemon=True).start()
+                         args=(path, self.recorder, context), daemon=True).start()
 
     def tick(self, path):
         if self.active_path != path or not self.recorder or self.recorder.poll() is not None:
@@ -323,8 +326,7 @@ class Skipper(Gtk.Application):
         self.level_label.set_text("Recording saved · microphone stopped")
         self.status.set_text("Audio saved. Transcribing locally…")
 
-    def finish_recording(self, path, process):
-        context = capture_window_context()
+    def finish_recording(self, path, process, context=None):
         try:
             _, error = process.communicate(timeout=45)
             # This installed pw-record returns 1 on a requested SIGINT stop, even
@@ -350,6 +352,15 @@ class Skipper(Gtk.Application):
             return
         if commands:
             interpretation = self.matcher.parse(text)
+            if interpretation.intent and interpretation.intent.type in ('open_browser_and_tile', 'open_browser_fullscreen'):
+                try:
+                    context = prepare_browser_context(context, require_focused=interpretation.intent.type == 'open_browser_and_tile')
+                except Exception as exc:
+                    GLib.idle_add(self.finished, path, str(exc))
+                    return
+            if needs_window_resolution(interpretation.intent):
+                GLib.idle_add(self.resolve_pair, path, WindowResolution(interpretation.intent, context))
+                return
             command = interpretation.command if interpretation.method in {"exact", "alias"} else None
             candidate = interpretation.command
             if interpretation.intent:
@@ -372,9 +383,9 @@ class Skipper(Gtk.Application):
                     message += f" · {exc}"
                 GLib.idle_add(self.finished, path, message)
                 return
-            if candidate in {"windows:tile", "terminals:tile", "browsers:tile", "apps:tile"}:
+            if candidate in {"windows", "windows:tile", "terminals:tile", "browsers:tile", "apps:tile"}:
                 try:
-                    action = {"windows:tile": tile_open_windows, "terminals:tile": tile_terminals,
+                    action = {"windows": tile_open_windows, "windows:tile": tile_open_windows, "terminals:tile": tile_terminals,
                               "browsers:tile": tile_browsers, "apps:tile": tile_apps}[candidate]
                     message += " · " + action(context)
                 except Exception as exc:
@@ -409,6 +420,49 @@ class Skipper(Gtk.Application):
                     message += f" · Could not complete voice command: {exc}"
             else:
                 message += " · Unrecognized command — no action taken"
+        GLib.idle_add(self.finished, path, message)
+
+    def resolve_pair(self, path, resolution):
+        try:
+            question = resolution.advance()
+            if question is None:
+                self.set_busy(True)
+                threading.Thread(target=self.run_pair, args=(path, resolution), daemon=True).start()
+                return
+            self.finished(path, question.prompt)
+            picker = Gtk.Window(title=question.prompt, modal=True, transient_for=self.window)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8,
+                          margin_top=16, margin_bottom=16, margin_start=16, margin_end=16)
+            scroll = Gtk.ScrolledWindow(max_content_height=500, propagate_natural_height=True)
+            scroll.set_child(box)
+            picker.set_child(scroll)
+            for index, target in enumerate(question.candidates):
+                title = ' '.join((target.get('title') or target['class']).split())[:100]
+                button = Gtk.Button(label=f'{index + 1}. {title} · Workspace {target.get("workspace", {}).get("id")}')
+                def choose(_, index=index):
+                    picker.close()
+                    resolution.choose(question, index)
+                    self.resolve_pair(path, resolution)
+                button.connect('clicked', choose)
+                box.append(button)
+            cancel = Gtk.Button(label='Cancel')
+            cancel.connect('clicked', lambda _: picker.close())
+            box.append(cancel)
+            picker.present()
+        except Exception as exc:
+            self.finished(path, str(exc))
+
+    def run_pair(self, path, resolution):
+        try:
+            if resolution.intent.type == 'open_browser_fullscreen':
+                message = fullscreen_selected_browser(resolution.context, resolution.resolved['window'])
+            elif resolution.intent.type == 'close_window':
+                message = close_selected_window(resolution.resolved['window'])
+            else:
+                message = tile_selected_windows(resolution.context,
+                    [resolution.resolved[slot] for slot in ('first', 'second')])
+        except Exception as exc:
+            message = f'Could not complete the selected window action: {exc}'
         GLib.idle_add(self.finished, path, message)
 
     def offer_terminal_close(self, path, message, text, intent, target, learn):

@@ -1,5 +1,6 @@
 """Windowless voice runtime. The Omarchy bar owns all everyday voice UI."""
 from collections import deque
+from copy import deepcopy
 import json
 import os
 from pathlib import Path
@@ -18,6 +19,7 @@ from browser_connection import connection
 from command_catalog import INTENTS, NO_LEARN_COMMANDS
 from diagnostics import append_event, LOG_PATH
 from intent_matching import IntentMatcher
+from corrections import Corrections
 from skipper import load_model
 from live_audio import read_growing_wav
 from os_actions import (capture_window_context, window_target, execute_command,
@@ -25,6 +27,8 @@ from os_actions import (capture_window_context, window_target, execute_command,
                         terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS)
 from os_actions import focus_named_window, move_app_other_screen
 from window_vocabulary import inject_windows
+from window_resolution import WindowResolution, needs_window_resolution
+from os_actions import tile_selected_windows, close_selected_window, prepare_browser_context, fullscreen_selected_browser
 from push_to_talk import PushToTalk
 from recordings import new_recording, save_transcript
 from settings import Settings
@@ -49,16 +53,25 @@ class VoiceRuntime(Gio.Application):
         self.stop_requested = False
         self.quit_when_finished = False
         self.pending = None
+        self.pending_correction = None
+        self.pending_written = None
+        self.window_resolution = None
+        self.window_choices = {}
         self.ptt_held = False
         self.panel_epoch = 0
         self.session = uuid4().hex
         self.diagnostic_recording = None
         self.levels = deque([0.0] * 48, maxlen=48)
         self.state = dict(state='Loading', message='Loading local speech model…', transcript='',
-                          intent=None, intent_label='', monitor='', confirmation=None, completed_at=0)
+                          intent=None, intent_label='', monitor='', confirmation=None, clarification=None, correction=None, written_entry=None, input_source='speech', written='', completed_at=0)
         self.ptt = PushToTalk(self.press, self.release)
         for name, signature, callback in (
             ('ptt-event', 's', lambda value: self.ptt.event(value)),
+            ('choose-window', 's', self.choose_window),
+            ('correct-command', 's', self.correct_command),
+            ('type-command', None, self.type_command),
+            ('submit-written', 's', self.submit_written),
+            ('show-correction', None, self.show_correction),
             ('confirm', 's', self.confirm), ('cancel', 's', self.cancel),
             ('quit', None, self.request_quit), ('show', None, self.show),
             ('retry', 's', self.retry),
@@ -129,6 +142,8 @@ class VoiceRuntime(Gio.Application):
             return ''
 
     def press(self):
+        if self.pending_written:
+            return
         self.ptt_held = True
         if self.model is None:
             self.show()
@@ -167,7 +182,7 @@ class VoiceRuntime(Gio.Application):
         self.levels = deque([0.0] * 48, maxlen=48)
         self.meter_bytes = 0
         self.record_start = time.monotonic()
-        self.state.update(transcript='', intent=None, intent_label='')
+        self.state.update(transcript='', intent=None, intent_label='', input_source='speech', written='')
         self.panel_epoch += 1
         self.update('Recording', 'Keep holding Super + R. Release to transcribe.')
         GLib.timeout_add(100, self.tick, path, process)
@@ -218,21 +233,36 @@ class VoiceRuntime(Gio.Application):
             text, _ = save_transcript(self.model, path)
             append_event('transcript', path=self.diagnostic_path, session=self.session, recording=str(path),
                          text=text, commands_enabled=commands)
+            self.interpret(text, context, commands, path, source='speech')
+        except Exception as exc:
+            GLib.idle_add(self.complete, 'Error', f'Could not transcribe: {exc}. Audio is kept.')
+
+    def interpret(self, text, context=None, commands=True, path=None, source='written'):
+        """Both input modes enter the same logical parser and action routing."""
+        try:
             matcher = IntentMatcher(self.data / 'aliases.json')
             windows = inject_windows(context) if commands else None
-            result = matcher.parse(text, windows.expansions) if commands else None
-            append_event('parsed', path=self.diagnostic_path, session=self.session, recording=str(path),
+            result = matcher.parse(text, windows.expansions, use_corrections=source == "speech") if commands else None
+            append_event('parsed', path=self.diagnostic_path, session=self.session, recording=str(path) if path else None,
+                         input_source=source, written=result.correction['meant'] if result and result.correction else text,
                          result=result.to_dict() if result else None,
                          command=result.command if result else None, matcher_error=matcher.error)
-            GLib.idle_add(self.recognized, text, result)
+            GLib.idle_add(self.recognized, text, result, source)
             if not commands:
                 GLib.idle_add(self.complete, 'Ready', 'Transcript updated. No command was run.')
                 return
             command = result.command
             if not command:
-                choices = '; '.join(dict.fromkeys(c.label for c in result.candidates[:3]))
-                GLib.idle_add(self.complete, 'Ready', 'Ambiguous command — use a more specific name: ' + choices if result.status == 'ambiguous'
-                              else 'Unrecognized command — no action taken.')
+                if source == 'written':
+                    GLib.idle_add(self.written_error, text, result.reason or 'No clear command. Try different wording.')
+                    return
+                GLib.idle_add(self.offer_correction, text, context, str(path))
+                return
+            if result.intent.type in ('open_browser_and_tile', 'open_browser_fullscreen'):
+                context = prepare_browser_context(context, require_focused=result.intent.type == 'open_browser_and_tile')
+            if needs_window_resolution(result.intent):
+                resolution = WindowResolution(result.intent, context)
+                GLib.idle_add(self.resolve_windows, resolution)
                 return
             if result.intent.type in ('focus_window', 'move_named_window', 'maximize_named_window'):
                 key = dict(result.intent.arguments)['window']
@@ -242,7 +272,7 @@ class VoiceRuntime(Gio.Application):
                 GLib.idle_add(self.complete, 'Ready', message)
                 return
             named_close = result.intent.type == 'close_named_window'
-            learn = result.method == 'fuzzy' and not named_close and command not in NO_LEARN_COMMANDS
+            learn = source == 'speech' and result.method == 'fuzzy' and not named_close and command not in NO_LEARN_COMMANDS
             target = windows.targets[dict(result.intent.arguments)['window']] if named_close else None
             if named_close or command in TERMINAL_CLOSE_INTENTS:
                 if not named_close:
@@ -260,12 +290,116 @@ class VoiceRuntime(Gio.Application):
             message = self.execute(command, context, target)
             GLib.idle_add(self.complete, 'Ready', message + warning)
         except Exception as exc:
-            GLib.idle_add(self.complete, 'Error', f'Could not complete voice command: {exc}. Audio is kept.')
+            GLib.idle_add(self.complete, 'Error', f'Could not complete command: {exc}')
 
-    def recognized(self, text, result):
-        self.state.update(transcript=text, intent=result.intent.to_dict() if result and result.intent else None,
+    def recognized(self, text, result, source='speech'):
+        if source == 'written' and result and result.command:
+            self.pending_written = None
+            self.state['written_entry'] = None
+        self.state.update(input_source=source, written=(result.correction['meant'] if result and result.correction else text),
+                          transcript=text, intent=result.intent.to_dict() if result and result.intent else None,
                           intent_label=result.selected.label if result and result.selected else '')
         self.publish()
+
+    def type_command(self):
+        if self.busy or self.pending_written:
+            return
+        self.cancel()
+        context = capture_window_context()
+        self.diagnostic_recording = None
+        self.pending_written = dict(token=uuid4().hex, context=deepcopy(context))
+        self.state.update(written_entry=dict(token=self.pending_written['token'], text='', error=''),
+                          input_source='written', written='', transcript='', intent=None, intent_label='',
+                          monitor=self.focused_monitor())
+        self.panel_epoch += 1
+        self.update('TextEntry', 'Type a command and press Enter.')
+
+    def submit_written(self, payload):
+        if self.busy or not self.pending_written:
+            return
+        try:
+            request = json.loads(payload)
+            if not isinstance(request, dict) or request.get('token') != self.pending_written['token']:
+                return
+            text = request.get('text')
+            if not isinstance(text, str) or not text.strip() or len(text) > 2000:
+                self.written_error('', 'Type a command, up to 2000 characters.')
+                return
+            text = text.strip()
+            context = self.pending_written['context']
+            append_event('written_input', path=self.diagnostic_path, session=self.session,
+                         text=text, context=context, input_source='written')
+            self.busy = True
+            self.state['written_entry']['text'] = text
+            self.update('Working', 'Understanding your written command…')
+            threading.Thread(target=self.interpret, args=(text, context), daemon=True).start()
+        except ValueError:
+            self.written_error('', 'Could not read the typed command.')
+
+    def written_error(self, text, message):
+        self.busy = False
+        if self.pending_written:
+            self.state['written_entry'].update(text=text, error=message)
+            self.panel_epoch += 1
+            self.update('TextEntry', message)
+
+    def offer_correction(self, heard, context, recording):
+        self.busy = False
+        self.recorder = None
+        if not heard.strip():
+            self.complete('Ready', 'No speech recognized. Please try again.')
+            return
+        token = uuid4().hex
+        self.pending_correction = dict(token=token, heard=heard, context=deepcopy(context), recording=recording)
+        self.state['correction'] = dict(token=token, heard=heard, preview=None, error='')
+        self.panel_epoch += 1
+        self.update('Correction', f'I heard “{heard}”, but I wasn’t sure what you meant.')
+        self.show_correction()
+        if self.quit_when_finished:
+            self.request_quit()
+
+    def show_correction(self):
+        if self.pending_correction:
+            self.show()
+
+    def correct_command(self, payload):
+        if self.busy or not self.pending_correction:
+            return
+        try:
+            request = json.loads(payload)
+            pending = self.pending_correction
+            if not isinstance(request, dict) or request.get('token') != pending['token']:
+                return
+            said, meant = request.get('said', ''), request.get('meant', '')
+            if not isinstance(said, str) or not isinstance(meant, str):
+                raise ValueError('Enter text for the spoken words and intended command.')
+            said, meant = said.strip(), meant.strip() or said.strip()
+            if not said or max(len(said), len(meant)) > 2000:
+                raise ValueError('Enter the words you said (up to 2000 characters).')
+            windows = inject_windows(pending['context'])
+            result = IntentMatcher(self.data / 'aliases.json').parse(meant, windows.expansions, use_corrections=False)
+            if not result.intent or result.method not in ('exact', 'alias'):
+                raise ValueError('I still cannot identify one action. Try a supported command, such as “tile this window and the browser”.')
+            preview = dict(said=said, meant=meant, intent=result.intent.to_dict(), label=result.selected.label)
+            if request.get('operation') == 'preview':
+                self.state['correction'].update(preview=preview, error='')
+                self.publish()
+                return
+            if request.get('operation') != 'save':
+                raise ValueError('Unknown correction operation.')
+            if preview != self.state['correction'].get('preview'):
+                raise ValueError('Check the intended action before saving.')
+            Corrections(self.data / 'corrections.json').save_wording(
+                pending['heard'], said, meant, result, pending['recording'])
+            append_event('correction_saved', path=self.diagnostic_path, session=self.session,
+                         recording=pending['recording'], heard=pending['heard'], said=said,
+                         meant=meant, intent=result.intent.to_dict())
+            self.pending_correction = None
+            self.state['correction'] = None
+            self.complete('Ready', 'Correction saved. Say the command again to use it.')
+        except (ValueError, OSError, TypeError) as exc:
+            self.state['correction'].update(preview=None, error=str(exc))
+            self.publish()
 
     @staticmethod
     def execute(command, context=None, target=None):
@@ -275,7 +409,7 @@ class VoiceRuntime(Gio.Application):
             return move_app_other_screen(command.split(':', 1)[1], context)
         if command in {'terminals:hide', 'apps:hide'}:
             return hide_windows(context, command.split(':', 1)[0])
-        if command == 'windows:tile':
+        if command in ('windows:tile', 'windows'):
             return tile_open_windows(context)
         if command in {'terminals:tile', 'browsers:tile', 'apps:tile'}:
             return {'terminals:tile': tile_terminals, 'browsers:tile': tile_browsers, 'apps:tile': tile_apps}[command](context)
@@ -285,6 +419,69 @@ class VoiceRuntime(Gio.Application):
         if target is not None:
             return close_terminal(target)
         return execute_command(command)
+
+    def resolve_windows(self, resolution):
+        self.window_resolution = resolution
+        self.busy = False
+        self.recorder = None
+        try:
+            question = resolution.advance()
+            if question is None:
+                self.window_resolution = None
+                self.window_choices = {}
+                self.state['clarification'] = None
+                self.busy = True
+                closing = resolution.intent.type == 'close_window'
+                fullscreen = resolution.intent.type == 'open_browser_fullscreen'
+                self.update('Working', 'Closing the selected window…' if closing else 'Opening the browser in full screen…' if fullscreen else 'Tiling the selected windows…')
+                threading.Thread(target=self.run_close_selection if closing else self.run_browser_fullscreen if fullscreen else self.run_tile_pair, args=(resolution,), daemon=True).start()
+                return
+            self.window_choices = {}
+            choices = []
+            for index, target in enumerate(question.candidates):
+                token = uuid4().hex
+                self.window_choices[token] = (question, index)
+                title = ' '.join((target.get('title') or target['class']).split())[:100]
+                workspace = target.get('workspace', {}).get('name') or target.get('workspace', {}).get('id')
+                choices.append(dict(token=token, label=f'{index + 1}. {title} · Workspace {workspace}'))
+            self.state['clarification'] = dict(prompt=question.prompt, choices=choices)
+            self.panel_epoch += 1
+            self.update('Choose', question.prompt)
+        except Exception as exc:
+            self.window_resolution = None
+            self.window_choices = {}
+            self.state['clarification'] = None
+            self.complete('Error', str(exc))
+
+    def choose_window(self, token):
+        if self.busy or not self.window_resolution or token not in self.window_choices:
+            return
+        resolution = self.window_resolution
+        question, index = self.window_choices[token]
+        resolution.choose(question, index)
+        self.resolve_windows(resolution)
+
+    def run_browser_fullscreen(self, resolution):
+        try:
+            message = fullscreen_selected_browser(resolution.context, resolution.resolved['window'])
+            GLib.idle_add(self.complete, 'Ready', message)
+        except Exception as exc:
+            GLib.idle_add(self.complete, 'Error', f'Could not open the browser in full screen: {exc}')
+
+    def run_close_selection(self, resolution):
+        try:
+            message = close_selected_window(resolution.resolved['window'])
+            GLib.idle_add(self.complete, 'Ready', message)
+        except Exception as exc:
+            GLib.idle_add(self.complete, 'Error', f'Could not close the selected window: {exc}')
+
+    def run_tile_pair(self, resolution):
+        try:
+            message = tile_selected_windows(resolution.context,
+                [resolution.resolved[slot] for slot in ('first', 'second')])
+            GLib.idle_add(self.complete, 'Ready', message)
+        except Exception as exc:
+            GLib.idle_add(self.complete, 'Error', f'Could not tile the selected windows: {exc}')
 
     def offer_confirmation(self, command, target, text, learn):
         self.busy = False
@@ -319,6 +516,19 @@ class VoiceRuntime(Gio.Application):
             GLib.idle_add(self.complete, 'Error', f'Could not close terminal: {exc}')
 
     def cancel(self, token=None):
+        if self.pending_written and token in (None, '', self.pending_written['token']):
+            self.pending_written = None
+            self.state['written_entry'] = None
+            self.update('Ready', 'Written command cancelled.')
+        if self.pending_correction and token in (None, '', self.pending_correction['token']):
+            self.pending_correction = None
+            self.state['correction'] = None
+            self.update('Ready', 'Correction cancelled. Nothing was saved or run.')
+        if self.window_resolution and token in (None, ''):
+            self.window_resolution = None
+            self.window_choices = {}
+            self.state['clarification'] = None
+            self.update('Ready', 'Window selection cancelled.')
         if self.pending and (token is None or token == self.pending[0]):
             self.pending = None
             self.state['confirmation'] = None
@@ -350,7 +560,14 @@ class VoiceRuntime(Gio.Application):
             self.stop_recording()
             return
         self.pending = None
+        self.pending_correction = None
+        self.state['correction'] = None
         self.state['confirmation'] = None
+        self.window_resolution = None
+        self.window_choices = {}
+        self.state['clarification'] = None
+        self.pending_written = None
+        self.state['written_entry'] = None
         self.update('Stopped', 'Skipper is stopped.')
         connection.close()
         self.quit()

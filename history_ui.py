@@ -86,6 +86,8 @@ class HistoryPage(Gtk.Box):
             cells.append(cell)
         first.append(label(heard or 'No transcript available', 'heading'))
         first.append(label(record['timestamp'], 'dim-label'))
+        if saved and saved.get('kind') == 'wording':
+            first.append(label('You said: ' + saved['said'], 'dim-label'))
         feedback = label('', 'dim-label')
         play = Gtk.Button(label='Play recording', halign=Gtk.Align.START)
         play.set_sensitive(Path(record['recording']).is_file())
@@ -131,6 +133,9 @@ class HistoryPage(Gtk.Box):
         row.append(Gtk.Separator())
         if saved:
             feedback.set_text('Saved correction applies to this exact heard phrase.')
+            if saved.get('kind') == 'wording':
+                feedback.set_text('Saved wording correction: ' + saved.get('label', saved['meant']) +
+                                  '. Spoken words and original transcript are retained. Remove to forget it.')
 
         def match_words(*_):
             result = IntentMatcher(self.app.alias_path).parse(meant.get_text())
@@ -147,7 +152,8 @@ class HistoryPage(Gtk.Box):
                 if not 1 <= index <= len(self.commands):
                     raise ValueError('Choose an intended action first.')
                 Corrections(self.app.alias_path.with_name('corrections.json')).save(
-                    heard, meant.get_text(), self.commands[index - 1], record['recording'])
+                    heard, meant.get_text(), self.commands[index - 1], record['recording'],
+                    said=saved.get('said') if saved else None)
                 feedback.set_text('Saved. The next time Skipper hears this phrase, it will use your chosen action.')
                 remove.set_sensitive(True)
             except (OSError, ValueError) as exc:
