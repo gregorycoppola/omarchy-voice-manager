@@ -93,12 +93,19 @@ ShellRoot {
                     widget.action("type-command")
                     panel.phase = 5
                 } else if (panel.phase === 5 && widget.state === "TextEntry" && widget.snapshot().writtenOpen) {
-                    helper.parent = helper.findChild(widget, "writtenWords")
+                    var recalledField = helper.findChild(widget, "writtenWords")
+                    helper.parent = recalledField
+                    recalledField.text = "op chr"
+                    if (widget.historyMatches[0] !== "open chrome") throw new Error("Missing fuzzy history match")
+                    helper.keyClick(Qt.Key_Down)
+                    helper.keyClick(Qt.Key_Tab)
+                    if (recalledField.text !== "open chrome") throw new Error("Tab did not recall command")
+                    if (widget.historySelection !== -1) throw new Error("Recalled text should be editable")
                     helper.keyClick(Qt.Key_Escape)
                     panel.phase = 6
                 } else if (panel.phase === 6 && widget.state === "Ready") {
                     if (widget.snapshot().writtenOpen) throw new Error("Escape did not close input")
-                    console.log("PASS: centered input persists through wait, outside click and repeated shortcut; Enter executes, Escape cancels")
+                    console.log("PASS: centered input persists; Enter executes; fuzzy history and Tab recall work; Escape cancels")
                     Qt.quit()
                 }
             }
@@ -127,6 +134,8 @@ ShellRoot {
         process.wait()
         if process.returncode == 0:
             GLib.source_remove(timer)
+        if process.returncode != 0:
+            raise AssertionError((root / 'output.log').read_text())
         execute.assert_called_once_with('browser', {}, None)
     output = (root / 'output.log').read_text()
     assert process.returncode == 0 and 'PASS:' in output and 'Error:' not in output, output

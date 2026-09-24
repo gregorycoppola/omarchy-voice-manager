@@ -1,6 +1,25 @@
 # Changelog
 
-## Unreleased — 0.2.0-dev
+## 0.2.0 — 2026-09-24
+
+- Load shared intents and grammar from the public Omarchy Voice Dataset. Fresh
+  installations fetch a pinned dataset snapshot; development can use a sibling
+  checkout or an explicit dataset path.
+- Store personal aliases, corrections, named actions, settings, and command
+  history in owner-only local SQLite outside Git. Import legacy preferences once
+  and preserve their original files as private backups.
+- Add live fuzzy command history to Shift+Super+R: show the ten most recent
+  distinct commands when empty and update matches while typing.
+- Document shared versus personal data ownership and command matching precedence.
+
+
+- Discover visible installed desktop applications as exact `open`/`launch`
+  commands. Add an Explorer page listing the safe, unambiguous app vocabulary.
+
+- Add exact volume, explicit mute/unmute, captured-display brightness, and media
+  playback commands to speech and typed input. Report unsupported media actions.
+- Add Explorer's Named actions editor for custom exact phrases mapped to existing
+  typed commands, preserving window selection and terminal-close confirmation.
 
 - Add centered typed commands, window selection for pair tiling and app closing,
   and correction handling for unknown commands. Restore the tiled workspace with

@@ -1,6 +1,6 @@
 """Local stdio connection to the installed Playwright browser extension.
 
-Only fixed code from browser_tabs.js and registry entries are sent. The connection
+Only fixed browser scripts and registry/validated window IDs are sent. The connection
 configuration stays outside the repo; responses containing browser data/tokens
 are never logged. No model or language interpretation is involved here.
 """
@@ -90,7 +90,7 @@ class BrowserConnection:
             clientInfo=dict(name='Skipper browser commands', version='1')))
         self.send(dict(method='notifications/initialized'))
 
-    def bring_up(self, site):
+    def _select_site_tab(self, site, function):
         with self.lock:
             try:
                 if self.process is None or self.process.poll() is not None:
@@ -108,9 +108,9 @@ class BrowserConnection:
                   }
                   return await control.evaluate(async (site) => {
                     SCRIPT
-                    return await bringUpSite(site);
+                    return await FUNCTION(site);
                   }, SITE);
-                }'''.replace('PREFIX', json.dumps(EXTENSION)).replace('SCRIPT', script).replace('SITE', json.dumps(site))
+                }'''.replace('PREFIX', json.dumps(EXTENSION)).replace('SCRIPT', script).replace('FUNCTION', function).replace('SITE', json.dumps(site))
                 result = self.request('tools/call', dict(name='browser_run_code_unsafe', arguments={'code': code}))
                 for content in result.get('content', []):
                     if content.get('type') != 'text':
@@ -125,6 +125,67 @@ class BrowserConnection:
                 self.close()
                 # Do not retry mutations automatically: a timed-out request may
                 # already have opened a tab. The next command queries tabs anew.
+                raise
+
+    def bring_up(self, site):
+        return self._select_site_tab(site, 'bringUpSite')
+
+    def open_another(self, site):
+        return self._select_site_tab(site, 'openAnotherSiteTab')
+
+    def reset_tabs(self, focus_target, verify_target):
+        """Bind the native selection to a focused extension window before clearing it."""
+        with self.lock:
+            try:
+                if self.process is None or self.process.poll() is not None:
+                    self.close()
+                    self.connect()
+                script = (ROOT / 'browser_reset.js').read_text().split('if (typeof module')[0]
+
+                def invoke(phase, window_id=None):
+                    code = '''async (page) => {
+                      const prefix = PREFIX;
+                      const phase = PHASE;
+                      let control = page.context().pages().find(p => p.url().startsWith(prefix));
+                      if (!control && phase === 'prepare') {
+                        control = await page.context().newPage();
+                        await control.goto(prefix + 'status.html');
+                      }
+                      if (!control) throw new Error('Browser control page closed');
+                      if (phase === 'prepare') return {prepared: true};
+                      const result = await control.evaluate(async ({phase, windowId}) => {
+                        SCRIPT
+                        return phase === 'inspect' ? await inspectResetWindow() : await resetWindowTabs(windowId);
+                      }, {phase, windowId: WINDOW_ID});
+                      // Close our own control tab from Playwright, after its evaluate
+                      // finishes, so the selected window contains just the blank tab.
+                      if (result.closeControl) await control.close();
+                      return result;
+                    }'''.replace('PREFIX', json.dumps(EXTENSION)).replace('PHASE', json.dumps(phase)).replace('SCRIPT', script).replace('WINDOW_ID', json.dumps(window_id))
+                    result = self.request('tools/call', dict(name='browser_run_code_unsafe', arguments={'code': code}))
+                    for content in result.get('content', []):
+                        if content.get('type') == 'text':
+                            section = content['text'].split('### Result\n', 1)
+                            if len(section) == 2:
+                                value, _ = json.JSONDecoder().raw_decode(section[1].lstrip())
+                                if isinstance(value, dict):
+                                    return value
+                    raise RuntimeError('Browser did not confirm the tab operation')
+
+                if invoke('prepare').get('prepared') is not True:
+                    raise RuntimeError('Browser control page unavailable')
+                focus_target()
+                selected = invoke('inspect')
+                if type(selected.get('windowId')) is not int:
+                    raise RuntimeError('Browser window identity unavailable')
+                verify_target()
+                result = invoke('reset', selected['windowId'])
+                if (result.get('windowId') != selected['windowId']
+                        or type(result.get('tabId')) is not int or type(result.get('closed')) is not int):
+                    raise RuntimeError('Browser did not confirm closing tabs')
+                return result
+            except Exception:
+                self.close()
                 raise
 
 

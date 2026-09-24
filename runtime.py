@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -16,7 +17,9 @@ from gi.repository import Gio, GLib
 
 from audio_levels import pcm_level
 from browser_connection import connection
-from command_catalog import INTENTS, NO_LEARN_COMMANDS
+from command_store import CommandStore
+import personal_store
+from command_catalog import GRAMMAR, INTENTS, NO_LEARN_COMMANDS
 from diagnostics import append_event, LOG_PATH
 from intent_matching import IntentMatcher
 from corrections import Corrections
@@ -25,13 +28,16 @@ from live_audio import read_growing_wav
 from os_actions import (capture_window_context, window_target, execute_command,
                         tile_open_windows, hide_windows, hide_current_window, tile_terminals, tile_browsers, tile_apps, move_other_screen, maximize_current_window,
                         terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS)
-from os_actions import focus_named_window, move_app_other_screen
+from os_actions import focus_named_window, move_app_other_screen, list_open_windows, open_window_entries, focus_listed_window
 from window_vocabulary import inject_windows
+from installed_apps import discover_installed_apps, reserved_app_forms
 from window_resolution import WindowResolution, needs_window_resolution
-from os_actions import tile_selected_windows, close_selected_window, prepare_browser_context, fullscreen_selected_browser
+from os_actions import tile_selected_windows, close_selected_window, prepare_browser_context, fullscreen_selected_browser, open_installed_app, close_browser_tabs
 from push_to_talk import PushToTalk
 from recordings import new_recording, save_transcript
 from settings import Settings
+from desktop_commands import DESKTOP_COMMANDS, execute_desktop
+from os_actions import run as run_os
 from terminal_activity import terminal_has_jobs
 
 APP_ID = 'io.github.gregorycoppola.Skipper'
@@ -44,6 +50,15 @@ class VoiceRuntime(Gio.Application):
         super().__init__(application_id=APP_ID)
         self.data = Path(data)
         self.diagnostic_path = LOG_PATH if self.data == DATA else self.data / 'commands.jsonl'
+        self.command_store = None
+        self.history_error = ''
+        try:
+            self.command_store = CommandStore(self.diagnostic_path.parent / 'command-history.sqlite3')
+            self.command_store.import_log(self.diagnostic_path)
+            personal_store.initialize(self.data)
+        except (OSError, ValueError, sqlite3.Error):
+            self.command_store = None
+            self.history_error = 'Command history is unavailable; commands can still run.'
         self.status_path = Path(status_path)
         self.model = None
         self.started = False
@@ -63,7 +78,7 @@ class VoiceRuntime(Gio.Application):
         self.diagnostic_recording = None
         self.levels = deque([0.0] * 48, maxlen=48)
         self.state = dict(state='Loading', message='Loading local speech model…', transcript='',
-                          intent=None, intent_label='', monitor='', confirmation=None, clarification=None, correction=None, written_entry=None, input_source='speech', written='', completed_at=0)
+                          intent=None, intent_label='', monitor='', confirmation=None, clarification=None, correction=None, written_entry=None, window_list=[], input_source='speech', written='', completed_at=0)
         self.ptt = PushToTalk(self.press, self.release)
         for name, signature, callback in (
             ('ptt-event', 's', lambda value: self.ptt.event(value)),
@@ -72,6 +87,8 @@ class VoiceRuntime(Gio.Application):
             ('type-command', None, self.type_command),
             ('submit-written', 's', self.submit_written),
             ('show-correction', None, self.show_correction),
+            ('focus-listed-window', 's', self.focus_listed_window),
+            ('dismiss-window-list', None, self.dismiss_window_list),
             ('confirm', 's', self.confirm), ('cancel', 's', self.cancel),
             ('quit', None, self.request_quit), ('show', None, self.show),
             ('retry', 's', self.retry),
@@ -91,7 +108,10 @@ class VoiceRuntime(Gio.Application):
         self.publish()
         if self.show_on_start:
             self.show()
-        threading.Thread(target=self.prepare, daemon=True).start()
+        if os.environ.get('SKIPPER_TEXT_ONLY') == '1':
+            self.update('Ready', 'Keyboard mode · Super + Shift + R to type. Speech model unloaded.')
+        else:
+            threading.Thread(target=self.prepare, daemon=True).start()
 
     def prepare(self):
         try:
@@ -242,11 +262,19 @@ class VoiceRuntime(Gio.Application):
         try:
             matcher = IntentMatcher(self.data / 'aliases.json')
             windows = inject_windows(context) if commands else None
-            result = matcher.parse(text, windows.expansions, use_corrections=source == "speech") if commands else None
+            apps = discover_installed_apps(reserved_forms=reserved_app_forms(GRAMMAR)) if commands else None
+            expansions = windows.expansions + apps.expansions if commands else ()
+            result = matcher.parse(text, expansions, use_corrections=source == "speech") if commands else None
             append_event('parsed', path=self.diagnostic_path, session=self.session, recording=str(path) if path else None,
                          input_source=source, written=result.correction['meant'] if result and result.correction else text,
                          result=result.to_dict() if result else None,
                          command=result.command if result else None, matcher_error=matcher.error)
+            if commands and result and result.command and self.command_store:
+                try:
+                    self.command_store.record(result.correction['meant'] if result.correction else text,
+                                              result.command, source)
+                except (OSError, sqlite3.Error):
+                    self.history_error = 'Could not save command history.'
             GLib.idle_add(self.recognized, text, result, source)
             if not commands:
                 GLib.idle_add(self.complete, 'Ready', 'Transcript updated. No command was run.')
@@ -260,6 +288,15 @@ class VoiceRuntime(Gio.Application):
                 return
             if result.intent.type in ('open_browser_and_tile', 'open_browser_fullscreen'):
                 context = prepare_browser_context(context, require_focused=result.intent.type == 'open_browser_and_tile')
+            if result.intent.type == 'open_installed_app':
+                app = apps.targets[dict(result.intent.arguments)['desktop']]
+                GLib.idle_add(self.complete, 'Ready', open_installed_app(app))
+                return
+            if result.intent.type == 'list_windows':
+                entries = open_window_entries()
+                message = list_open_windows()
+                GLib.idle_add(self.show_window_list, message, entries)
+                return
             if needs_window_resolution(result.intent):
                 resolution = WindowResolution(result.intent, context)
                 GLib.idle_add(self.resolve_windows, resolution)
@@ -301,6 +338,33 @@ class VoiceRuntime(Gio.Application):
                           intent_label=result.selected.label if result and result.selected else '')
         self.publish()
 
+    def show_window_list(self, message, entries):
+        self.busy = False
+        self.recorder = None
+        # A list is global information, rather than an action on the focused
+        # monitor.  Let every bar instance render it so it cannot disappear on
+        # a different display from the one that received the command.
+        self.state['monitor'] = ''
+        self.state['window_list'] = entries
+        self.panel_epoch += 1
+        self.update('WindowList', message)
+
+    def dismiss_window_list(self):
+        if self.state.get('state') == 'WindowList':
+            self.state['window_list'] = []
+            self.complete('Ready', 'Window list closed.')
+
+    def focus_listed_window(self, address):
+        if self.state.get('state') != 'WindowList' or not any(
+                item.get('address') == address for item in self.state.get('window_list', [])):
+            return
+        try:
+            message = focus_listed_window(address)
+            self.state['window_list'] = []
+            self.complete('Ready', message)
+        except Exception as exc:
+            self.update('Error', f'Could not focus window: {exc}')
+
     def type_command(self):
         if self.busy or self.pending_written:
             return
@@ -308,7 +372,14 @@ class VoiceRuntime(Gio.Application):
         context = capture_window_context()
         self.diagnostic_recording = None
         self.pending_written = dict(token=uuid4().hex, context=deepcopy(context))
-        self.state.update(written_entry=dict(token=self.pending_written['token'], text='', error=''),
+        history = []
+        if self.command_store:
+            try:
+                history = self.command_store.recent()
+            except (OSError, sqlite3.Error):
+                self.history_error = 'Could not read command history.'
+        self.state.update(written_entry=dict(token=self.pending_written['token'], text='', error=self.history_error,
+                                             history=history),
                           input_source='written', written='', transcript='', intent=None, intent_label='',
                           monitor=self.focused_monitor())
         self.panel_epoch += 1
@@ -403,6 +474,8 @@ class VoiceRuntime(Gio.Application):
 
     @staticmethod
     def execute(command, context=None, target=None):
+        if command in DESKTOP_COMMANDS:
+            return execute_desktop(command, run_os, context)
         if command == 'window:hide':
             return hide_current_window(context)
         if command.startswith('move-app:'):
@@ -432,9 +505,10 @@ class VoiceRuntime(Gio.Application):
                 self.state['clarification'] = None
                 self.busy = True
                 closing = resolution.intent.type == 'close_window'
+                clearing_tabs = resolution.intent.type == 'close_browser_tabs'
                 fullscreen = resolution.intent.type == 'open_browser_fullscreen'
-                self.update('Working', 'Closing the selected window…' if closing else 'Opening the browser in full screen…' if fullscreen else 'Tiling the selected windows…')
-                threading.Thread(target=self.run_close_selection if closing else self.run_browser_fullscreen if fullscreen else self.run_tile_pair, args=(resolution,), daemon=True).start()
+                self.update('Working', 'Closing tabs in the selected browser…' if clearing_tabs else 'Closing the selected window…' if closing else 'Opening the browser in full screen…' if fullscreen else 'Tiling the selected windows…')
+                threading.Thread(target=self.run_close_browser_tabs if clearing_tabs else self.run_close_selection if closing else self.run_browser_fullscreen if fullscreen else self.run_tile_pair, args=(resolution,), daemon=True).start()
                 return
             self.window_choices = {}
             choices = []
@@ -460,6 +534,13 @@ class VoiceRuntime(Gio.Application):
         question, index = self.window_choices[token]
         resolution.choose(question, index)
         self.resolve_windows(resolution)
+
+    def run_close_browser_tabs(self, resolution):
+        try:
+            message = close_browser_tabs(resolution.resolved['window'])
+            GLib.idle_add(self.complete, 'Ready', message)
+        except Exception as exc:
+            GLib.idle_add(self.complete, 'Error', f'Could not close browser tabs: {exc}')
 
     def run_browser_fullscreen(self, resolution):
         try:

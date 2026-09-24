@@ -18,12 +18,15 @@ from recordings import new_recording, save_transcript
 from live_audio import read_growing_wav
 from level_meter import LevelMeter, pcm_level
 from window_resolution import WindowResolution, needs_window_resolution
-from os_actions import tile_selected_windows, close_selected_window, prepare_browser_context, fullscreen_selected_browser
+from os_actions import tile_selected_windows, close_selected_window, prepare_browser_context, fullscreen_selected_browser, open_installed_app
 from os_actions import execute_command, capture_window_context, window_target, tile_open_windows, hide_windows, hide_current_window, tile_terminals, tile_browsers, tile_apps, move_other_screen, maximize_current_window, terminal_close_target, close_terminal, TERMINAL_CLOSE_INTENTS
 from settings import Settings
+from desktop_commands import DESKTOP_COMMANDS, execute_desktop
+from os_actions import run as run_os
 from terminal_activity import terminal_has_jobs
 from command_catalog import GRAMMAR, INTENTS
 from intent_matching import IntentMatcher
+from installed_apps import discover_installed_apps, reserved_app_forms
 from push_to_talk import PushToTalk
 
 DATA = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "skipper/recordings"
@@ -351,13 +354,22 @@ class Skipper(Gtk.Application):
             GLib.idle_add(self.finished, path, message)
             return
         if commands:
-            interpretation = self.matcher.parse(text)
+            apps = discover_installed_apps(reserved_forms=reserved_app_forms(GRAMMAR))
+            interpretation = self.matcher.parse(text, apps.expansions)
             if interpretation.intent and interpretation.intent.type in ('open_browser_and_tile', 'open_browser_fullscreen'):
                 try:
                     context = prepare_browser_context(context, require_focused=interpretation.intent.type == 'open_browser_and_tile')
                 except Exception as exc:
                     GLib.idle_add(self.finished, path, str(exc))
                     return
+            if interpretation.intent and interpretation.intent.type == 'open_installed_app':
+                try:
+                    app = apps.targets[dict(interpretation.intent.arguments)['desktop']]
+                    message += ' · ' + open_installed_app(app)
+                except Exception as exc:
+                    message += f' · {exc}'
+                GLib.idle_add(self.finished, path, message)
+                return
             if needs_window_resolution(interpretation.intent):
                 GLib.idle_add(self.resolve_pair, path, WindowResolution(interpretation.intent, context))
                 return
@@ -375,6 +387,13 @@ class Skipper(Gtk.Application):
                 except (OSError, ValueError) as exc:
                     message += f" · Could not remember phrase: {exc}"
                 command = candidate
+            if candidate in DESKTOP_COMMANDS:
+                try:
+                    message += ' · ' + execute_desktop(candidate, run_os, context)
+                except Exception as exc:
+                    message += f' · {exc}'
+                GLib.idle_add(self.finished, path, message)
+                return
             if candidate in {'terminals:hide', 'apps:hide', 'window:hide'}:
                 try:
                     message += " · " + (hide_current_window(context) if candidate == 'window:hide'

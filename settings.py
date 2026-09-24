@@ -1,7 +1,6 @@
 """Local preferences, saved atomically with private permissions."""
-import json
+import personal_store
 from pathlib import Path
-import tempfile
 
 
 class Settings:
@@ -10,7 +9,7 @@ class Settings:
         self.confirm_terminal_close = True
         self.error = None
         try:
-            data = json.loads(self.path.read_text())
+            data = personal_store.load(self.path)
             value = data['confirm_terminal_close']
             if type(value) is not bool:
                 raise ValueError('Invalid terminal confirmation preference')
@@ -23,15 +22,5 @@ class Settings:
     def set_confirm_terminal_close(self, value):
         if self.error:
             raise ValueError(self.error)
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        temporary = None
-        try:
-            with tempfile.NamedTemporaryFile(mode='w', dir=self.path.parent, delete=False) as handle:
-                temporary = Path(handle.name)
-                json.dump({'confirm_terminal_close': bool(value)}, handle)
-                handle.write('\n')
-            temporary.replace(self.path)
-        finally:
-            if temporary:
-                temporary.unlink(missing_ok=True)
+        personal_store.save(self.path, {'confirm_terminal_close': bool(value)})
         self.confirm_terminal_close = bool(value)

@@ -1,6 +1,6 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {bringUpSite} = require('../browser_tabs.js');
+const {bringUpSite, openAnotherSiteTab} = require('../browser_tabs.js');
 const site = {url:'https://github.com/', host:'github.com'};
 function setup(windows) {
   const calls=[];
@@ -53,4 +53,10 @@ test('host matching rejects lookalike domains and other protocols',async()=>{
 test('pending site navigation is reused to prevent duplicate tabs',async()=>{
  setup([normal(1,[{id:1,url:'about:blank',pendingUrl:site.url}])]);
  assert.equal((await bringUpSite(site)).reused,true);
+});
+test('open another site tab creates a new tab even when the site is already open',async()=>{
+ const calls=setup([normal(1,[{id:1,url:site.url,lastAccessed:20}],{focused:true})]);
+ const selected=await openAnotherSiteTab(site);
+ assert.deepEqual(selected,{reused:false,tabId:80,windowId:1});
+ assert.deepEqual(calls,[['tab',1,site.url],['activate',80],['focus',1]]);
 });

@@ -1,3 +1,4 @@
+import personal_store
 import json
 from pathlib import Path
 import tempfile
@@ -45,7 +46,7 @@ class MatchingTests(unittest.TestCase):
         self.matcher.learn(" Open DIS Cord! ", "discord")
         loaded = IntentMatcher(self.path)
         self.assertEqual(loaded.exact("open dis cord."), "discord")
-        self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(personal_store.database_path(self.path).stat().st_mode & 0o777, 0o600)
         loaded.forget("open dis cord")
         self.assertIsNone(IntentMatcher(self.path).exact("open dis cord"))
 
@@ -66,8 +67,8 @@ class MatchingTests(unittest.TestCase):
             self.assertEqual(self.path.read_text(), contents)
 
     def test_failed_save_does_not_learn_in_memory(self):
-        with patch('intent_matching.os.fsync', side_effect=OSError('disk full')):
+        with patch('personal_store.save', side_effect=OSError('disk full')):
             with self.assertRaises(OSError):
                 self.matcher.learn('open dis cord', 'discord')
         self.assertIsNone(self.matcher.exact('open dis cord'))
-        self.assertEqual(list(self.path.parent.iterdir()), [])
+        self.assertFalse(self.path.exists())

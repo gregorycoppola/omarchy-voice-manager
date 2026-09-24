@@ -1,3 +1,4 @@
+import "CommandSearch.js" as CommandSearch
 import QtQuick
 import Quickshell
 import Quickshell.Io
@@ -23,6 +24,21 @@ BarWidget {
     property string correctionToken: ""
     property string writtenToken: ""
     property bool writtenOpen: false
+    property int historySelection: -1
+    readonly property var historyMatches: CommandSearch.search(
+        status.written_entry ? (status.written_entry.history || []) : [], writtenWords.text)
+    function selectHistory(delta) {
+        if (!historyMatches.length) return
+        historySelection = (historySelection + delta + historyMatches.length) % historyMatches.length
+    }
+    function recallHistory() {
+        if (historySelection < 0 || historySelection >= historyMatches.length) return
+        var recalled = historyMatches[historySelection]
+        writtenWords.text = recalled
+        writtenWords.cursorPosition = recalled.length
+        historySelection = -1
+        writtenWords.forceActiveFocus()
+    }
     readonly property bool correctionMatches: !!status.correction && !!status.correction.preview
         && status.correction.preview.said === correctionWords.text.trim()
         && status.correction.preview.meant === correctionWords.text.trim()
@@ -52,6 +68,7 @@ BarWidget {
     }
     function submitWritten() {
         if (!status.written_entry) return
+        if (historySelection >= 0) recallHistory()
         writtenOpen = false
         root.action("submit-written", JSON.stringify({token: status.written_entry.token, text: writtenWords.text}))
     }
@@ -67,6 +84,7 @@ BarWidget {
             correctionWords.text = ""
         }
         if (value.written_entry && value.written_entry.token !== writtenToken) {
+            historySelection = -1
             writtenToken = value.written_entry.token
             writtenWords.text = value.written_entry.text || ""
         }
@@ -97,7 +115,7 @@ BarWidget {
                 popup.beginFocusPrime()
             })
         }
-        if (value.state === "Recording" || value.state === "Working" || value.state === "Confirm" || value.state === "Choose" || value.state === "Correction" || value.state === "TextEntry" || value.state === "Loading") {
+        if (value.state === "Recording" || value.state === "Working" || value.state === "Confirm" || value.state === "Choose" || value.state === "Correction" || value.state === "TextEntry" || value.state === "Loading" || value.state === "WindowList") {
             dismissTimer.stop()
         } else if (popup.open && !manual && !dismissTimer.running) {
             dismissTimer.interval = value.state === "Error" ? 6000 : 2500
@@ -108,7 +126,17 @@ BarWidget {
     SystemClock { id: clock; precision: SystemClock.Seconds }
     Timer { id: dismissTimer; interval: 2500; onTriggered: root.close() }
     onAliveChanged: if (!alive && popup.open && !manual) dismissTimer.restart()
+    // File notifications can be missed when the runtime atomically replaces
+    // its JSON status file.  Polling is a cheap backstop and keeps overlays in
+    // sync even after a shell/plugin reload.
+    Timer {
+        interval: 400
+        running: true
+        repeat: true
+        onTriggered: statusFile.reload()
+    }
     FileView {
+        id: statusFile
         path: root.setting("statusPath", root.defaultStatusPath)
         watchChanges: true
         printErrors: false
@@ -176,16 +204,54 @@ BarWidget {
                     width: parent.width
                     placeholderText: "e.g. tile this window and the browser"
                     maximumLength: 2000
+                    onTextChanged: root.historySelection = text.trim() && CommandSearch.search(root.status.written_entry ? (root.status.written_entry.history || []) : [], text).length ? 0 : -1
                     onAccepted: root.submitWritten()
+                    Keys.onDownPressed: root.selectHistory(1)
+                    Keys.onUpPressed: {
+                        if (root.historySelection < 0) root.historySelection = root.historyMatches.length - 1
+                        else root.selectHistory(-1)
+                    }
+                    Keys.onTabPressed: root.recallHistory()
+                    Keys.onPressed: function(event) {
+                        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && (event.modifiers & Qt.ControlModifier)) {
+                            root.historySelection = -1
+                            root.submitWritten()
+                            event.accepted = true
+                        }
+                    }
                     Keys.onEscapePressed: {
                         root.writtenOpen = false
                         root.action("cancel", root.writtenToken)
                     }
                 }
+                Repeater {
+                    model: root.historyMatches
+                    delegate: Rectangle {
+                        required property string modelData
+                        required property int index
+                        width: writtenContent.width
+                        height: 34
+                        radius: 5
+                        color: root.historySelection === index ? Color.accent : "transparent"
+                        Text {
+                            anchors { fill: parent; margins: 7 }
+                            text: modelData
+                            textFormat: Text.PlainText
+                            elide: Text.ElideRight
+                            color: root.historySelection === index ? Color.background : Color.foreground
+                            font.family: Style.font.family
+                            font.pixelSize: Style.font.body
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: { root.historySelection = index; root.recallHistory() }
+                        }
+                    }
+                }
                 Text {
                     width: parent.width
                     text: root.status.written_entry && root.status.written_entry.error
-                        ? root.status.written_entry.error : "Enter to run · Escape to cancel"
+                        ? root.status.written_entry.error : "↑↓ history · Tab to edit · Enter to run selection · Ctrl+Enter to run exactly what you typed · Esc to cancel"
                     textFormat: Text.PlainText
                     color: Color.muted
                     wrapMode: Text.Wrap
@@ -207,7 +273,8 @@ BarWidget {
             : WlrKeyboardFocus.None
         // Do not leave a fading result window over the app after execution.
         visible: open
-        contentWidth: fittedContentWidth(Style.space(440))
+        centerOnBar: root.state === "WindowList"
+        contentWidth: fittedContentWidth(root.state === "WindowList" ? Style.space(680) : Style.space(440))
         contentHeight: fittedContentHeight(content.implicitHeight)
 
         Flickable {
@@ -222,7 +289,7 @@ BarWidget {
                     width: parent.width
                     Text {
                         width: parent.width - hideButton.width
-                        text: "Skipper · " + root.state
+                        text: root.state === "WindowList" ? "Open windows" : "Skipper · " + root.state
                         color: Color.foreground
                         font.family: Style.font.family
                         font.pixelSize: Style.font.body
@@ -230,11 +297,15 @@ BarWidget {
                         textFormat: Text.PlainText
                         anchors.verticalCenter: parent.verticalCenter
                     }
-                    Button { id: hideButton; text: "×"; onClicked: root.close() }
+                    Button {
+                        id: hideButton
+                        text: root.state === "WindowList" ? "Close" : "×"
+                        onClicked: root.state === "WindowList" ? root.action("dismiss-window-list") : root.close()
+                    }
                 }
                 Rectangle {
                     width: parent.width
-                    visible: root.status.input_source !== "written"
+                    visible: root.status.input_source !== "written" && root.state !== "WindowList"
                     height: Style.space(48)
                     radius: Style.space(6)
                     color: Qt.alpha(Color.foreground, 0.04)
@@ -257,6 +328,7 @@ BarWidget {
                 }
                 Text {
                     width: parent.width
+                    visible: root.state !== "WindowList"
                     text: root.status.transcript || (root.state === "TextEntry" ? "Written command" : root.state === "Recording" ? "Listening…" : "Hold Super + R to speak.")
                     textFormat: Text.PlainText
                     color: Color.foreground
@@ -266,9 +338,10 @@ BarWidget {
                     maximumLineCount: 4
                     elide: Text.ElideRight
                 }
-                Rectangle { width: parent.width; height: 1; color: Qt.alpha(Color.foreground, 0.12) }
+                Rectangle { width: parent.width; visible: root.state !== "WindowList"; height: visible ? 1 : 0; color: Qt.alpha(Color.foreground, 0.12) }
                 Text {
                     width: parent.width
+                    visible: root.state !== "WindowList"
                     text: root.status.intent_label || (root.state === "Working" ? "Understanding…" : "No intent yet")
                     textFormat: Text.PlainText
                     color: root.status.intent_label ? Color.accent : Color.muted
@@ -281,7 +354,7 @@ BarWidget {
                 }
                 Text {
                     width: parent.width
-                    visible: !!root.status.intent
+                    visible: !!root.status.intent && root.state !== "WindowList"
                     text: {
                         var intent = root.status.intent
                         if (!intent) return ""
@@ -296,6 +369,7 @@ BarWidget {
                 }
                 Text {
                     width: parent.width
+                    visible: root.state !== "WindowList"
                     text: root.alive ? (root.status.message || "") : "Skipper is stopped. First install? Run python " + root.pluginRoot + "/plugin_setup.py install in a terminal."
                     textFormat: Text.PlainText
                     color: root.state === "Error" ? Color.urgent : Color.muted
@@ -304,6 +378,63 @@ BarWidget {
                     wrapMode: Text.Wrap
                     maximumLineCount: 3
                     elide: Text.ElideRight
+                }
+                Column {
+                    visible: root.state === "WindowList"
+                    width: parent.width
+                    spacing: Style.space(8)
+                    Text {
+                        width: parent.width
+                        text: "Choose a window to focus"
+                        color: Color.muted
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.body * 0.9
+                    }
+                    Repeater {
+                        model: root.status.window_list || []
+                        Rectangle {
+                            required property var modelData
+                            width: parent.width
+                            height: windowDetails.implicitHeight + Style.space(24)
+                            radius: Style.space(8)
+                            color: listedWindowMouse.containsMouse
+                                ? Qt.alpha(Color.accent, 0.22) : Qt.alpha(Color.foreground, 0.07)
+                            border.width: 1
+                            border.color: listedWindowMouse.containsMouse
+                                ? Qt.alpha(Color.accent, 0.8) : Qt.alpha(Color.foreground, 0.10)
+                            Column {
+                                id: windowDetails
+                                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: Style.space(12) }
+                                spacing: Style.space(4)
+                                Text {
+                                    width: parent.width
+                                    text: modelData.title
+                                    textFormat: Text.PlainText
+                                    color: Color.foreground
+                                    font.family: Style.font.family
+                                    font.pixelSize: Style.font.body * 1.05
+                                    font.bold: true
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    width: parent.width
+                                    text: "Workspace " + modelData.workspace + "  ·  " + modelData.app
+                                    textFormat: Text.PlainText
+                                    color: Color.muted
+                                    font.family: Style.font.family
+                                    font.pixelSize: Style.font.body * 0.85
+                                    elide: Text.ElideRight
+                                }
+                            }
+                            MouseArea {
+                                id: listedWindowMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.action("focus-listed-window", modelData.address)
+                            }
+                        }
+                    }
                 }
                 Column {
                     visible: root.state === "Correction" && !!root.status.correction
@@ -371,6 +502,7 @@ BarWidget {
                     }
                 }
                 Row {
+                    visible: root.state !== "WindowList"
                     spacing: Style.space(8)
                     Button {
                         text: "History"

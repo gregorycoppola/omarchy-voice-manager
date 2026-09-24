@@ -1,3 +1,4 @@
+import personal_store
 """Windowless runtime routing, confirmation identity, and lifecycle checks."""
 import json
 from pathlib import Path
@@ -34,7 +35,7 @@ class RuntimeTests(unittest.TestCase):
         execute = self.transcribe('open dis cord')
         execute.assert_called_once_with('discord', None, None)
         self.assertEqual(self.app.state['intent']['arguments']['application'], 'discord')
-        self.assertEqual(json.loads((self.data / 'aliases.json').read_text())['aliases'], {'open dis cord': 'discord'})
+        self.assertEqual(personal_store.load(self.data / 'aliases.json')['aliases'], {'open dis cord': 'discord'})
         self.assertEqual(self.app.state['state'], 'Ready')
         self.assertGreater(self.app.state['completed_at'], 0)
         self.assertFalse(self.app.busy)

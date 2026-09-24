@@ -1,3 +1,4 @@
+import personal_store
 import json
 from pathlib import Path
 import tempfile
@@ -57,10 +58,10 @@ class TerminalCloseTests(unittest.TestCase):
             self.assertTrue(settings.confirm_terminal_close)
             settings.set_confirm_terminal_close(False)
             self.assertFalse(Settings(path).confirm_terminal_close)
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
-            path.write_text('broken')
+            self.assertEqual(personal_store.database_path(path).stat().st_mode & 0o777, 0o600)
+            personal_store.save(path, {'confirm_terminal_close': 'broken'})
             settings = Settings(path)
             self.assertTrue(settings.confirm_terminal_close)
             with self.assertRaises(ValueError):
                 settings.set_confirm_terminal_close(False)
-            self.assertEqual(path.read_text(), 'broken')
+            self.assertEqual(personal_store.load(path)['confirm_terminal_close'], 'broken')

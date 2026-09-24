@@ -1,3 +1,4 @@
+import personal_store
 """Composition, semantic ambiguity, and compatibility of finite command grammars."""
 from dataclasses import replace
 from pathlib import Path
@@ -80,12 +81,12 @@ class GrammarTests(unittest.TestCase):
 
     def test_legacy_aliases_gain_structure_without_rewriting_or_learning(self):
         self.matcher.learn('open dis cord', 'discord')
-        before = self.matcher.path.read_bytes()
+        before = personal_store.load(self.matcher.path)
         result = self.matcher.parse('open dis cord')
         self.assertEqual(result.method, 'alias')
         self.assertEqual(result.intent, STRUCTURED_INTENTS['discord'])
         self.matcher.parse('open git hubs')
-        self.assertEqual(self.matcher.path.read_bytes(), before)
+        self.assertEqual(personal_store.load(self.matcher.path), before)
 
     def test_new_browser_expansions_share_existing_semantics(self):
         for prefix in ('open', 'launch', 'focus', 'switch to'):

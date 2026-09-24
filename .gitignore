@@ -6,3 +6,11 @@ local/
 *.egg-info/
 
 .playwright-mcp/
+
+# Local command history is PII; never track databases or their sidecars.
+*.sqlite
+*.sqlite3
+*.sqlite*
+*.db
+*.db-*
+command-history*

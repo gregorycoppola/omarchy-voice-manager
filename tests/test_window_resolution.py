@@ -45,6 +45,37 @@ class ResolutionTests(unittest.TestCase):
             self.assertIsNone(r.advance())
             self.assertEqual(r.resolved[slot], OTHER)
 
+    def test_browser_visibility_uniqueness_for_close_open_and_tile(self):
+        visible = dict(BROWSER, visible=True, hidden=False)
+        hidden = dict(OTHER, visible=False, hidden=True,
+                      workspace={'id': -99, 'name': 'special:skipper-tile-1'})
+        for phrase, slot in [('close the browser', 'window'),
+                             ('open the browser', 'window'),
+                             ('open the browser and tile', 'second'),
+                             ('tile this window and the browser', 'second')]:
+            intent = self.matcher.parse(phrase).intent
+            context = {'active': TERM, 'clients': [TERM, visible, hidden]}
+            r = WindowResolution(intent, context)
+            # A focus/visibility change after capture cannot change the choice.
+            context['clients'][1] = dict(visible, visible=False)
+            self.assertIsNone(r.advance(), phrase)
+            self.assertEqual(r.resolved[slot], visible)
+            lone_hidden = WindowResolution(intent, {'active': TERM, 'clients': [TERM, hidden]})
+            self.assertIsNone(lone_hidden.advance(), phrase)
+            self.assertEqual(lone_hidden.resolved[slot], hidden)
+
+    def test_multiple_visible_or_multiple_hidden_browsers_ask(self):
+        for visible in (True, False):
+            clients = [dict(BROWSER, visible=visible, hidden=not visible),
+                       dict(OTHER, visible=visible, hidden=not visible)]
+            r = self.resolution(clients=[TERM] + clients)
+            self.assertEqual(r.advance().candidates, tuple(clients))
+
+    def test_unknown_visibility_does_not_hide_ambiguous_candidate(self):
+        clients = [dict(BROWSER, visible=True), OTHER]
+        r = self.resolution(clients=[TERM] + clients)
+        self.assertEqual(r.advance().candidates, tuple(clients))
+
     def test_missing_and_duplicate_references_do_not_execute(self):
         for phrase, error in [('tile this window and the browser', 'No open window'),
                               ('tile this window and this window', 'same window')]:

@@ -1,7 +1,7 @@
 import json
 import unittest
 from subprocess import CompletedProcess
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from os_actions import parse_command, browser_window, execute_command, move_to_main_screen, main_monitor
 from command_catalog import SITES
@@ -176,6 +176,17 @@ class CommandTests(unittest.TestCase):
             self.assertEqual(parse_command(phrase), "windows:tile")
         self.assertIsNone(parse_command("do not show all windows"))
 
+    def test_list_open_windows_is_read_only_and_includes_other_workspaces(self):
+        clients = [{"class": "omawrite", "initialClass": "omawrite", "title": "REVIEW.md - Omawrite", "address": "0x2", "workspace": {"name": "3"}},
+                   {"class": "foot", "title": "Project", "address": "0x1", "workspace": {"name": "2"}},
+                   {"class": "io.github.gregorycoppola.Skipper", "address": "0x3", "workspace": {"name": "2"}}]
+        with patch('os_actions.run', return_value=json.dumps(clients)) as run:
+            result = execute_command('windows:list')
+        self.assertIn('[2] foot — Project', result)
+        self.assertIn('[3] omawrite — REVIEW.md - Omawrite', result)
+        self.assertNotIn('Skipper', result)
+        run.assert_called_once_with(['hyprctl', 'clients', '-j'])
+
     def test_show_windows_legacy_command_tiles_instead_of_opening_menu(self):
         context = {'active': {'workspace': {'id': 1}}, 'clients': []}
         with patch('os_actions.capture_window_context', return_value=context), \
@@ -199,6 +210,9 @@ class CommandTests(unittest.TestCase):
         for phrase, site in [("Bring up Gmail.", "gmail"), ("open g mail", "gmail"),
                              ("bring up GitHub", "github"), ("OPEN  GIT HUB!", "github")]:
             self.assertEqual(parse_command(phrase), "site:" + site)
+        for phrase, site in [("open another github tab", "github"),
+                             ("open a new g mail tab", "gmail")]:
+            self.assertEqual(parse_command(phrase), "site-new:" + site)
         for phrase in ["open gmail and github", "do not open github", "open github.com",
                        "bring up example.com", "open gmail please"]:
             self.assertIsNone(parse_command(phrase))
@@ -262,17 +276,19 @@ class CommandTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "no usable"):
             main_monitor([{"name": "DP-1", "id": 1, "activeWorkspace": {"id": -1}}])
 
-    def test_site_uses_browser_tab_then_fullscreens_selected_browser(self):
+    def test_site_uses_existing_browser_tab_without_changing_its_layout(self):
         window = {"class": "chromium", "address": "0x123"}
-        with patch("os_actions.run", side_effect=[MONITORS, json.dumps(window)]), \
-             patch("os_actions.execute_command") as ensure, \
+        with patch("os_actions.run", return_value=json.dumps([window])), \
              patch("os_actions.connection.bring_up", return_value={"reused": True}) as tabs, \
-             patch("os_actions.present_browser") as present:
+             patch("os_actions.present_browser") as present, \
+             patch("os_actions.move_to_main_screen") as move, \
+             patch("os_actions.maximize_foreground") as maximize:
             from os_actions import present_site
             self.assertEqual(present_site("github"), "Reused GitHub tab")
-            ensure.assert_called_once_with("browser")
             tabs.assert_called_once_with(SITES["github"])
-            present.assert_called_once_with(window, fullscreen=True)
+            present.assert_not_called()
+            move.assert_not_called()
+            maximize.assert_not_called()
 
     def test_arbitrary_website_id_rejected_before_os_access(self):
         with patch("os_actions.run") as run:
@@ -280,11 +296,28 @@ class CommandTests(unittest.TestCase):
                 execute_command("site:https://example.com")
             run.assert_not_called()
 
-    def test_site_requires_external_before_launch(self):
-        with patch("os_actions.run", return_value="[]"), patch("os_actions.subprocess.Popen") as launch:
-            with self.assertRaisesRegex(RuntimeError, "connected"):
-                execute_command("site:gmail")
-            launch.assert_not_called()
+    def test_another_site_tab_does_not_reuse_an_existing_site_tab(self):
+        window = {"class": "chromium", "address": "0x123"}
+        with patch("os_actions.run", return_value=json.dumps([window])), \
+             patch("os_actions.connection.bring_up") as reuse, \
+             patch("os_actions.connection.open_another", return_value={"reused": False}) as another:
+            self.assertEqual(execute_command("site-new:github"), "Opened another GitHub tab")
+        reuse.assert_not_called()
+        another.assert_called_once_with(SITES["github"])
+
+    def test_site_launches_without_requiring_an_external_display_or_layout(self):
+        window = {"class": "chromium", "address": "0x123"}
+        launcher = Mock()
+        launcher.poll.return_value = None
+        with patch("os_actions.Path.is_file", return_value=True), \
+             patch("os_actions.launch_desktop", return_value=launcher) as launch, \
+             patch("os_actions.run", side_effect=["[]", json.dumps([window])]) as run, \
+             patch("os_actions.connection.bring_up", return_value={"reused": False}) as tabs:
+            self.assertEqual(execute_command("site:gmail"), "Opened Gmail tab")
+        launch.assert_called_once()
+        tabs.assert_called_once_with(SITES["gmail"])
+        self.assertEqual([call.args[0] for call in run.call_args_list],
+                         [["hyprctl", "clients", "-j"], ["hyprctl", "clients", "-j"]])
 
 
 if __name__ == "__main__":

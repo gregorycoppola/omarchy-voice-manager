@@ -1,8 +1,7 @@
 """Explicit, reversible phrase corrections; independent of automatic aliases."""
+import personal_store
 from datetime import datetime, timezone
-import json
 from pathlib import Path
-import tempfile
 
 from command_catalog import STRUCTURED_INTENTS
 from grammar_engine import normalize
@@ -15,7 +14,7 @@ class Corrections:
         self.events = []
         self.error = None
         try:
-            data = json.loads(self.path.read_text())
+            data = personal_store.load(self.path)
             if data.get('version') != 1 or not isinstance(data.get('rules'), dict) or not isinstance(data.get('events'), list):
                 raise ValueError('Invalid corrections file')
             for phrase, rule in data['rules'].items():
@@ -28,6 +27,10 @@ class Corrections:
                         raise ValueError('Invalid wording correction')
                 elif rule.get('command') not in STRUCTURED_INTENTS:
                     raise ValueError('Invalid correction intent')
+            for rule in data['rules'].values():
+                command = rule.get('command')
+                if rule.get('kind') != 'wording' and command in STRUCTURED_INTENTS and 'canonical_plan' in rule and rule['canonical_plan'] != STRUCTURED_INTENTS[command].canonical_plan():
+                    raise ValueError('Saved correction changed canonical meaning; review personal overrides')
             self.rules, self.events = data['rules'], data['events']
         except FileNotFoundError:
             pass
@@ -39,7 +42,7 @@ class Corrections:
         if not phrase or not meant.strip() or command not in STRUCTURED_INTENTS:
             raise ValueError('Enter the words you meant and choose an intended action.')
         rule = dict(heard=heard, said=said.strip() if said else meant.strip(), meant=meant.strip(), command=command,
-                    intent=STRUCTURED_INTENTS[command].to_dict(), recording=recording,
+                    intent=STRUCTURED_INTENTS[command].to_dict(), canonical_plan=STRUCTURED_INTENTS[command].canonical_plan(), recording=recording,
                     updated_at=datetime.now(timezone.utc).isoformat())
         self._write(self.rules | {phrase: rule}, dict(action='save', phrase=phrase,
                     previous=self.rules.get(phrase), correction=rule))
@@ -50,7 +53,7 @@ class Corrections:
         if not phrase or not said.strip() or not meant.strip() or not result.intent or result.method not in ('exact', 'alias'):
             raise ValueError('Enter the spoken words and a command with a clear intended action.')
         rule = dict(kind='wording', heard=heard, said=said.strip(), meant=meant.strip(),
-                    command=result.command, intent=result.intent.to_dict(), label=result.selected.label,
+                    command=result.command, intent=result.intent.to_dict(), canonical_plan=result.canonical_plan, label=result.selected.label,
                     recording=recording, updated_at=datetime.now(timezone.utc).isoformat())
         self._write(self.rules | {phrase: rule}, dict(action='save', phrase=phrase,
                     previous=self.rules.get(phrase), correction=rule))
@@ -65,15 +68,5 @@ class Corrections:
             raise ValueError(self.error)
         event['timestamp'] = datetime.now(timezone.utc).isoformat()
         events = self.events + [event]
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        temporary = None
-        try:
-            with tempfile.NamedTemporaryFile(mode='w', dir=self.path.parent, delete=False) as stream:
-                temporary = Path(stream.name)
-                json.dump(dict(version=1, rules=rules, events=events), stream, ensure_ascii=False, indent=2)
-                stream.write('\n')
-            temporary.replace(self.path)
-        finally:
-            if temporary:
-                temporary.unlink(missing_ok=True)
+        personal_store.save(self.path, dict(version=1, rules=rules, events=events))
         self.rules, self.events = rules, events

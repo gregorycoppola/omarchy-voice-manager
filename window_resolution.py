@@ -33,7 +33,7 @@ class WindowQuestion:
 
 def needs_window_resolution(intent):
     return bool(intent and (intent.type in ('tile_pair', 'tile_current_window_with_browser',
-                    'open_browser_and_tile', 'open_browser_fullscreen')
+                    'open_browser_and_tile', 'open_browser_fullscreen', 'close_browser_tabs')
                 or (intent.type == 'close_window' and dict(intent.arguments)['application'] != 'terminal')))
 
 
@@ -44,7 +44,7 @@ class WindowResolution:
         if intent.type == 'close_window':
             application = dict(intent.arguments)['application']
             reference = {'browser': 'the browser', 'files': 'the file browser',
-                         'x': 'X', 'discord': 'Discord'}[application]
+                         'x': 'X', 'discord': 'Discord', 'tensaku': 'Tensaku'}[application]
             self.references = (('window', reference),)
         self.context = deepcopy(context or {})
         self.resolved = {}
@@ -61,9 +61,17 @@ class WindowResolution:
         name = name.removeprefix('the ')
         if name in ('browser', 'chrome', 'chromium', 'firefox'):
             classes = BROWSERS if name == 'browser' else ({'firefox', 'org.mozilla.firefox'} if name == 'firefox' else {'chromium', 'google-chrome', 'google-chrome-stable', 'chrome'})
-            return tuple(c for c in self.windows if c.get('class', '').lower() in classes)
+            matches = tuple(c for c in self.windows if c.get('class', '').lower() in classes)
+            # Resolve generic browser references from the recording snapshot.
+            # Missing visibility metadata must not silently exclude candidates.
+            if name == 'browser' and all(type(c.get('visible')) is bool for c in matches):
+                visible = tuple(c for c in matches if c['visible'] and not c.get('hidden', False))
+                if visible:
+                    return visible
+            return matches
         app = {'file browser': 'files', 'file manager': 'files', 'files': 'files',
-               'x': 'x', 'twitter': 'x', 'discord': 'discord'}.get(name)
+               'x': 'x', 'twitter': 'x', 'discord': 'discord',
+               'tensaku': 'tensaku', 'image viewer': 'tensaku'}.get(name)
         if app:
             return tuple(c for c in self.windows if c.get('class') in APPS[app]['classes'])
         if name == 'terminal':

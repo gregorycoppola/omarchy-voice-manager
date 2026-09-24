@@ -6,6 +6,7 @@ import re
 import subprocess
 
 from command_catalog import TERMINAL_CLASSES, WINDOW_RULES
+from dataset_source import PROVIDER
 from grammar_engine import Word, compile_grammar, normalize
 
 
@@ -18,7 +19,8 @@ def window_names(title):
     title = re.sub(r'^\s*\[[^]]*\]\s*', '', title)
     title = re.sub(r'^[^\w]+', '', title)
     pieces = [part.strip() for part in title.split('|') if part.strip()]
-    statuses = {'action required', 'working', 'thinking', 'idle', 'ready'}
+    policy = PROVIDER['language_policy']['window_names']
+    statuses = set(policy['ignored_statuses'])
     pieces = [piece for piece in pieces if spoken(piece) not in statuses]
     if not pieces:
         return '', ()
@@ -33,13 +35,13 @@ def window_names(title):
     task_tokens = spoken(pieces[0]).split()
     for count in range(1, len(task_tokens)):
         prefix = ' '.join(task_tokens[:count])
-        forms.extend(f'{prefix} {noun}' for noun in ('terminal', 'window', 'codex'))
+        forms.extend(f'{prefix} {noun}' for noun in policy['prefix_nouns'])
     for name in dict.fromkeys(names):
         if not name or len(name) > 180:
             continue
-        forms.extend((name, f'{name} terminal', f'{name} window'))
+        forms.extend(pattern.format(name=name) for pattern in policy['forms'])
         if len(pieces) >= 2:
-            forms.extend((f'{name} codex', f'codex {name}'))
+            forms.extend(pattern.format(name=name) for pattern in policy['task_forms'])
     return label, tuple(dict.fromkeys(forms))
 
 

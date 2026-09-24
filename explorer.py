@@ -10,10 +10,14 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gio, GLib, Gtk
 
-from command_catalog import EXPANSIONS, INTENTS, RULES, SCHEMAS, STRUCTURED_INTENTS, VOCABULARY, WINDOW_RULES
+from command_catalog import EXPANSIONS, GRAMMAR, INTENTS, RULES, SCHEMAS, STRUCTURED_INTENTS, VOCABULARY, WINDOW_RULES
 from intent_matching import IntentMatcher
 from settings import Settings
+from actions_ui import ActionsPage
 from window_vocabulary import live_windows, inject_windows
+from installed_apps import discover_installed_apps, reserved_app_forms
+from intent_dataset_bridge import IntentDatasetBridge
+from dataset_source import CATALOG, DATASET_ROOT, DATASET_REVISION
 
 
 def label(text, style=None):
@@ -44,8 +48,19 @@ def clear(box):
 
 
 def intent_text(intent):
-    arguments = ", ".join(f"{key}={value}" for key, value in intent.arguments)
-    return f"{intent.type}({arguments})"
+    return json.dumps(intent.canonical_plan(), ensure_ascii=False, indent=2)
+
+
+def render_shared_intent(box, name):
+    definition = CATALOG.intents[name]
+    box.append(label(name, 'title-1'))
+    box.append(label(definition['description']))
+    box.append(label('Arguments', 'title-3'))
+    box.append(label(json.dumps(definition['arguments_schema'], indent=2), 'monospace'))
+    box.append(label('Examples', 'title-3'))
+    for example in definition['examples']:
+        box.append(label(example['text'], 'heading'))
+        box.append(label(json.dumps(example['arguments'], indent=2), 'monospace'))
 
 
 class CatalogPage(Gtk.Paned):
@@ -148,6 +163,14 @@ def render_schema(box, name):
         box.append(label("\n".join(INTENTS[command]['phrases'])))
 
 
+def render_installed_app(box, app):
+    box.append(label(app.name, 'title-1'))
+    box.append(label(f'Desktop ID: {app.desktop_id}', 'monospace'))
+    box.append(label(f'Launcher: {app.path}', 'dim-label'))
+    box.append(label('Exact command phrases', 'title-3'))
+    box.append(label('\n'.join(f'open {form}\nlaunch {form}' for form in app.forms), 'monospace'))
+
+
 class Explorer(Gtk.Application):
     def __init__(self, alias_path=None):
         super().__init__(application_id="io.github.gregorycoppola.Skipper.Explorer",
@@ -159,10 +182,17 @@ class Explorer(Gtk.Application):
         self.tutorial = None
         data = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
         self.alias_path = Path(alias_path) if alias_path else data / "skipper/aliases.json"
+        try:
+            self.intent_dataset = IntentDatasetBridge()
+            self.intent_dataset_error = None
+        except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            self.intent_dataset = None
+            self.intent_dataset_error = str(exc)
         self.window = None
         self.last_result = None
         self.player = None
         self.window_snapshot = inject_windows(None)
+        self.apps_snapshot = discover_installed_apps(reserved_forms=reserved_app_forms(GRAMMAR))
         self.windows_refreshing = False
         self.windows_timer = None
         self.connect('shutdown', self.stop_playback)
@@ -220,6 +250,7 @@ class Explorer(Gtk.Application):
         intro = column(spacing=6)
         intro.append(label("Explore the language", "title-1"))
         intro.append(label(f"{len(RULES) + len(WINDOW_RULES)} rules · fixed vocabulary + live window names", "dim-label"))
+        intro.append(label(f"Dataset: {DATASET_ROOT.name} · {DATASET_REVISION}", "dim-label"))
         root.append(intro)
         self.stack = Gtk.Stack(vexpand=True, hexpand=True)
         switcher = Gtk.StackSwitcher(stack=self.stack, halign=Gtk.Align.CENTER)
@@ -240,7 +271,16 @@ class Explorer(Gtk.Application):
              ' '.join(SCHEMAS[name])) for name in SCHEMAS
         ] + [(rule.intent_type, 'Live window binding', rule.intent_type, 'window terminal codex')
              for rule in WINDOW_RULES], self.render_intent_schema)
-        self.stack.add_titled(self.intents_page, "intents", "Intents")
+        self.stack.add_titled(self.intents_page, "intents", "Executor bindings")
+        shared = CatalogPage([
+            (name, definition['description'], name, ' '.join(e['text'] for e in definition['examples']))
+            for name, definition in sorted(CATALOG.intents.items())
+        ], render_shared_intent)
+        self.stack.add_titled(shared, 'shared_intents', 'Shared intents')
+        self.apps_page = CatalogPage([
+            (app.name, app.desktop_id, app, ' '.join(app.forms)) for app in self.apps_snapshot.apps
+        ], render_installed_app)
+        self.stack.add_titled(self.apps_page, 'apps', 'Installed apps')
         playground = column()
         playground.append(label("Try a command", "title-1"))
         playground.append(label("See how words become an intent. Testing here does not run actions or learn phrases.", "dim-label"))
@@ -266,6 +306,8 @@ class Explorer(Gtk.Application):
         self.preferences_box = column()
         self.stack.add_titled(scroll(self.preferences_box), "settings", "Settings & phrases")
         self.refresh_preferences()
+        self.actions_page = ActionsPage(self.alias_path.with_name('actions.json'))
+        self.stack.add_titled(scroll(self.actions_page), 'actions', 'Named actions')
         self.window.set_child(root)
         self.window.set_focus(self.rules_page.search)
         self.window.present()
@@ -462,12 +504,14 @@ class Explorer(Gtk.Application):
         box = self.result_box
         if matcher.error:
             box.append(label(matcher.error, "error"))
+        if matcher.dataset_error:
+            box.append(label(matcher.dataset_error, "dim-label"))
         if window_error:
             box.append(label('Live windows unavailable: ' + window_error, 'dim-label'))
         box.append(label(result.status.capitalize(), "title-2"))
         if result.selected:
             box.append(label(result.selected.label, "title-3"))
-            box.append(label(json.dumps(result.intent.to_dict(), indent=2), "monospace"))
+            box.append(label(json.dumps(result.canonical_plan, indent=2), "monospace"))
             box.append(label(f"Match: {result.method} · Heard as: {result.selected.phrase}", "dim-label"))
         if result.reason:
             box.append(label(result.reason))
@@ -484,6 +528,31 @@ class Explorer(Gtk.Application):
             for expansion in evidence['expansions']:
                 bindings = ', '.join(f"{key}={value}" for key, value in expansion['bindings'].items())
                 box.append(label(expansion['pattern'] + (f" → {bindings}" if bindings else ''), "monospace"))
+        box.append(label("Research dataset", "title-3"))
+        box.append(label("Candidate meanings only; this comparison does not add executable commands.", "dim-label"))
+        if self.intent_dataset_error:
+            box.append(label("Dataset unavailable: " + self.intent_dataset_error, "dim-label"))
+        elif self.intent_dataset:
+            preview = self.intent_dataset.preview(self.entry.get_text())
+            if preview.status == "single":
+                box.append(label(preview.intent_ids[0], "monospace"))
+                origin = ", ".join(dict.fromkeys(phrase.origin for phrase in preview.phrases))
+                box.append(label((preview.evidence or "Exact illustrative phrase") +
+                                 (" · " + origin if origin else "") +
+                                 (f" · Source rule command: {preview.source_command}" if preview.source_command else ""),
+                                 "dim-label"))
+            elif preview.status == "sequence":
+                box.append(label(" → ".join(preview.intent_ids), "monospace"))
+                box.append(label((preview.evidence or "") +
+                                 (f" · Source rule command: {preview.source_command}" if preview.source_command else ""),
+                                 "dim-label"))
+            elif preview.status == "ambiguous":
+                box.append(label("Ambiguous dataset wording: " + ", ".join(preview.intent_ids), "dim-label"))
+            elif preview.status == "unlabeled_sequence":
+                box.append(label("Clauses: " + " → ".join(preview.clauses), "monospace"))
+                box.append(label("The dataset has no intent labels for this full phrase.", "dim-label"))
+            else:
+                box.append(label("No exact dataset example for this wording.", "dim-label"))
 
 
 if __name__ == "__main__":

@@ -8,6 +8,8 @@ import subprocess
 import threading
 import time
 from browser_connection import connection
+from desktop_commands import DESKTOP_COMMANDS, execute_desktop
+from installed_apps import InstalledApp
 
 from command_catalog import APPS, GRAMMAR, SITES, TERMINAL_CLASSES
 from intent_matching import normalize
@@ -44,6 +46,17 @@ def launch_desktop(desktop):
                                stderr=subprocess.DEVNULL, start_new_session=True)
     threading.Thread(target=process.wait, daemon=True).start()
     return process
+
+
+def open_installed_app(app: InstalledApp):
+    """Launch only the desktop entry selected by the current app vocabulary."""
+    if not app.path.is_file():
+        raise RuntimeError(f'{app.name} is no longer installed. Try the command again.')
+    launcher = launch_desktop(app.path)
+    time.sleep(.1)
+    if launcher.poll() not in (None, 0):
+        raise RuntimeError(f'{app.name} launcher failed')
+    return f'Opening {app.name}'
 
 
 def focus(window):
@@ -91,6 +104,8 @@ def move_to_main_screen(window):
 
 
 def execute_command(command):
+    if command in DESKTOP_COMMANDS:
+        return execute_desktop(command, run)
     if command == "terminal:new":
         return open_terminal()
     if command in APPS:
@@ -101,6 +116,10 @@ def execute_command(command):
         return close_app(command.removeprefix("close:"))
     if command in ("windows", "windows:tile"):
         return tile_open_windows(capture_window_context())
+    if command == "windows:list":
+        return list_open_windows()
+    if command.startswith("site-new:"):
+        return present_site(command.removeprefix("site-new:"), new_tab=True)
     if command.startswith("site:"):
         return present_site(command.removeprefix("site:"))
     if command not in ("browser", "browser_fullscreen"):
@@ -129,6 +148,53 @@ def execute_command(command):
             raise RuntimeError('Chrome launcher failed before a browser window appeared')
         time.sleep(0.15)
     raise RuntimeError("Launch requested, but no browser window appeared within 10 seconds")
+
+
+def list_open_windows():
+    """Return every mapped user window, across workspaces, without changing it."""
+    clients = json.loads(run(["hyprctl", "clients", "-j"]))
+    windows = [c for c in clients if c.get('mapped', True)
+               and c.get('class') not in ('io.github.gregorycoppola.Skipper',)
+               and c.get('initialClass') not in ('io.github.gregorycoppola.Skipper',)
+               and re.fullmatch(r"0x[0-9a-fA-F]+", c.get('address', ''))]
+    windows.sort(key=lambda c: (str(c.get('workspace', {}).get('name', c.get('workspace', {}).get('id', ''))),
+                                c.get('focusHistoryID', 99999), c.get('title', '')))
+    if not windows:
+        return 'No open windows.'
+    lines = []
+    for window in windows:
+        workspace = window.get('workspace', {}).get('name', window.get('workspace', {}).get('id', '?'))
+        app = window.get('initialClass') or window.get('class') or 'Unknown app'
+        title = window.get('title') or app
+        lines.append(f'[{workspace}] {app} — {title}')
+    return f'{len(lines)} open window{ "s" if len(lines) != 1 else ""}:\n' + '\n'.join(lines)
+
+
+def open_window_entries():
+    """Return safe, presentation-ready identities for the window chooser."""
+    clients = json.loads(run(['hyprctl', 'clients', '-j']))
+    windows = [c for c in clients if c.get('mapped', True)
+               and c.get('class') != 'io.github.gregorycoppola.Skipper'
+               and c.get('initialClass') != 'io.github.gregorycoppola.Skipper'
+               and re.fullmatch(r'0x[0-9a-fA-F]+', c.get('address', ''))]
+    windows.sort(key=lambda c: (str(c.get('workspace', {}).get('name', c.get('workspace', {}).get('id', ''))),
+                                c.get('focusHistoryID', 99999), c.get('title', '')))
+    return [dict(address=c['address'], app=c.get('initialClass') or c.get('class') or 'Unknown app',
+                 title=c.get('title') or c.get('initialClass') or c.get('class') or 'Unknown app',
+                 workspace=str(c.get('workspace', {}).get('name', c.get('workspace', {}).get('id', '?'))))
+            for c in windows]
+
+
+def focus_listed_window(address):
+    """Focus a live window selected from the chooser; address is syntax-checked."""
+    if not isinstance(address, str) or not re.fullmatch(r'0x[0-9a-fA-F]+', address):
+        raise ValueError('Invalid window selection')
+    clients = json.loads(run(['hyprctl', 'clients', '-j']))
+    window = next((c for c in clients if c.get('address') == address and c.get('mapped', True)), None)
+    if window is None:
+        raise RuntimeError('That window has already closed')
+    focus(window)
+    return 'Focused ' + (window.get('title') or window.get('class') or 'window')
 
 
 def prepare_browser_context(context, *, require_focused=False):
@@ -684,19 +750,59 @@ def close_selected_window(target):
     return 'Asked the selected window to close. Check it for a confirmation.'
 
 
-def present_site(key):
+def close_browser_tabs(target):
+    """Clear tabs only after native identity and extension focus agree."""
+    from window_resolution import identity
+    if target.get('class', '').lower() not in {'chromium', 'google-chrome', 'google-chrome-stable', 'chrome'}:
+        raise RuntimeError('Closing tabs requires the connected Chrome/Chromium browser')
+    if (not re.fullmatch(r'0x[0-9a-fA-F]+', target.get('address', ''))
+            or not target.get('pid') or not target.get('stableId')):
+        raise RuntimeError('Browser window identity unavailable')
+
+    def verify():
+        active = json.loads(run(['hyprctl', 'activewindow', '-j']))
+        if identity(active) != identity(target) or not active.get('mapped', True):
+            raise RuntimeError('The selected browser changed or lost focus. No tabs were closed.')
+
+    def bring_forward():
+        clients = json.loads(run(['hyprctl', 'clients', '-j']))
+        current = next((c for c in clients if identity(c) == identity(target) and c.get('mapped', True)), None)
+        if current is None:
+            raise RuntimeError('The selected browser closed or changed. No tabs were closed.')
+        focus(current)
+        verify()
+
+    result = connection.reset_tabs(bring_forward, verify)
+    return f"Closed {result['closed']} tabs; one blank tab remains."
+
+
+def present_site(key, *, new_tab=False):
     if key not in SITES:
         raise ValueError("Unsupported website command")
     site = SITES[key]
-    main_monitor(json.loads(run(["hyprctl", "monitors", "-j"])))
-    # Ensure the regular browser exists before connecting to its extension.
-    execute_command("browser")
-    selected = connection.bring_up(site)
-    deadline = time.monotonic() + 3
-    while time.monotonic() < deadline:
-        active = json.loads(run(["hyprctl", "activewindow", "-j"]))
-        if browser_window([active]):
-            present_browser(active, fullscreen=True)
-            return f"{'Reused' if selected['reused'] else 'Opened'} {site['name']} tab"
-        time.sleep(0.05)
-    raise RuntimeError("Tab selected, but the browser window did not become active")
+    # A site request is tab navigation, not a layout request. Preserve an
+    # existing browser's workspace, size, fullscreen state, and tiling. When
+    # Chromium is closed, its normal launcher/compositor policy decides how
+    # the new browser window is placed.
+    window = browser_window(json.loads(run(["hyprctl", "clients", "-j"])))
+    if window is None:
+        candidates = [Path.home() / ".local/share/applications/chromium.desktop",
+                      Path("/usr/share/applications/chromium.desktop"),
+                      Path("/usr/share/applications/google-chrome.desktop")]
+        desktop = next((p for p in candidates if p.is_file()), None)
+        if not desktop:
+            raise RuntimeError("No installed Chrome/Chromium application launcher found")
+        launcher = launch_desktop(desktop)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            window = browser_window(json.loads(run(["hyprctl", "clients", "-j"])))
+            if window:
+                break
+            if launcher.poll() not in (None, 0):
+                raise RuntimeError('Chrome launcher failed before a browser window appeared')
+            time.sleep(0.15)
+        else:
+            raise RuntimeError("Launch requested, but no browser window appeared within 10 seconds")
+    selected = connection.open_another(site) if new_tab else connection.bring_up(site)
+    action = 'Opened another' if new_tab else ('Reused' if selected['reused'] else 'Opened')
+    return f"{action} {site['name']} tab"

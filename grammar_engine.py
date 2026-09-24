@@ -16,6 +16,11 @@ class Intent:
     def to_dict(self):
         return {"schema_version": 1, "type": self.type, "arguments": dict(self.arguments)}
 
+    def canonical_plan(self):
+        """Provider-neutral intent instances, validated by the external catalog."""
+        from dataset_source import CATALOG
+        return CATALOG.canonical_plan('skipper', self.type, dict(self.arguments))
+
 
 @dataclass(frozen=True)
 class Word:
@@ -89,6 +94,7 @@ def compile_grammar(rules, vocabulary, schemas, *, allow_ambiguous=False):
                 if any(value not in schema[key] for key, value in arguments):
                     raise ValueError(f"Unsupported argument value for {rule.intent_type}: {arguments}")
                 intent = Intent(rule.intent_type, arguments)
+                intent.canonical_plan()
                 for forms in product(*(word.forms for word in words)):
                     substitutions = dict(zip(slots, forms))
                     phrase = normalize(SLOT.sub(lambda match: substitutions[match[1]], pattern))

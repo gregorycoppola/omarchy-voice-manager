@@ -1,0 +1,16 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const context = vm.createContext({});
+vm.runInContext(fs.readFileSync('config/skipper-bar/CommandSearch.js', 'utf8'), context);
+const search = (q) => Array.from(context.search(['tile the browsers', 'tile the terminals', 'open browser'], q));
+assert.deepEqual(search('tile term'), ['tile the terminals']);
+assert.deepEqual(search('tlbr'), ['tile the browsers']);
+assert.equal(search('browser')[0], 'open browser');
+assert.deepEqual(search('zzzz'), []);
+assert.equal(search('')[0], 'tile the browsers');
+console.log('History ranking: passed');
+const commands = Array.from({length: 30}, (_, i) => 'command ' + i);
+assert.deepEqual(Array.from(context.search(commands, '')), commands.slice(0, 10));
+assert.equal(context.search(commands, 'command 29')[0], 'command 29');
+assert.equal(context.search(commands, 'command').length, 10);

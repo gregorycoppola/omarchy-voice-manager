@@ -14,6 +14,7 @@ class CloseAppPhraseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             matcher = IntentMatcher(Path(directory) / 'aliases.json')
             for app, names in [('x', ('x', 'twitter')),
+                               ('tensaku', ('tensaku', 'image viewer')),
                                ('files', ('file browser', 'file manager', 'files', 'nautilus'))]:
                 for name in names:
                     for phrase in (f'close {name}', f'close the {name}',
@@ -24,6 +25,23 @@ class CloseAppPhraseTests(unittest.TestCase):
                         self.assertEqual(parse_command(phrase), f'close:{app}')
                         self.assertEqual(dict(result.intent.arguments)['application'], app)
             self.assertIsNone(matcher.parse('do not close the file browser window').command)
+            self.assertIsNone(matcher.parse('do not close the image viewer').command)
+
+    def test_image_viewer_resolves_app_not_browser_title(self):
+        from window_resolution import WindowResolution
+        browser = dict(address='0x1', pid=1, stableId='one', title='Tensaku',
+                       **{'class': 'chromium'})
+        viewer = dict(address='0x2', pid=2, stableId='two', title='Screenshot',
+                      **{'class': 'dev.tensaku.Tensaku'})
+        with tempfile.TemporaryDirectory() as directory:
+            matcher = IntentMatcher(Path(directory) / 'aliases.json')
+            for phrase in ('close tensaku', 'close image viewer'):
+                intent = matcher.parse(phrase).intent
+                resolution = WindowResolution(intent, {'clients': [browser, viewer]})
+                self.assertIsNone(resolution.advance())
+                self.assertEqual(resolution.resolved['window'], viewer)
+                with self.assertRaisesRegex(RuntimeError, 'No open window'):
+                    WindowResolution(intent, {'clients': [browser]}).advance()
 
     def test_files_closes_only_most_recent_nautilus(self):
         clients = [dict(address='0x1', **{'class': 'chromium'}, title='Files', focusHistoryID=0),
@@ -76,6 +94,8 @@ class CloseAppPhraseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             matcher = IntentMatcher(Path(directory) / 'aliases.json')
             for phrase, cls in [('close the browser', 'chromium'),
+                                ('close tensaku', 'dev.tensaku.Tensaku'),
+                                ('close the image viewer window', 'dev.tensaku.Tensaku'),
                                 ('close the x window', 'chrome-x.com__-Default'),
                                 ('close the file browser window', 'org.gnome.Nautilus')]:
                 result = matcher.parse(phrase)

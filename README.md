@@ -337,8 +337,10 @@ Stable intent IDs, display labels, and built-in phrases are generated into `INTE
 [command_catalog.py](command_catalog.py), beside the fixed website URL registry.
 `GRAMMAR` is generated from the same rules. Browse **Grammar** in Explorer for
 built-in phrases, or **Settings & phrases** to review aliases and **Forget** a mistake.
-Aliases persist in `~/.local/share/skipper/aliases.json` (respecting `XDG_DATA_HOME`),
-using a versioned JSON format and private file permissions. They stay outside Git.
+Aliases persist in the private SQLite database at
+`~/.local/state/skipper/command-history.sqlite3` (respecting `XDG_STATE_HOME`).
+Legacy `aliases.json` files are imported once and retained as private backups.
+Personal data stays outside Git with owner-only permissions.
 This teaches the command matcher; it does not retrain the speech recognition model.
 Starting another recording, retrying, or selecting history dismisses a pending suggestion.
 
@@ -370,6 +372,7 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 | close chrome / close chromium / close google chrome | Close one normal Chrome/Chromium window, including its tabs |
 | open discord / bring up discord / focus discord / switch to discord | Launch Discord if closed, otherwise maximize and focus its existing app window |
 | show all windows / show all open windows / show all open window | Restore and tile all windows on the captured workspace, just like “tile all windows” |
+| list open windows / list the open windows / what windows are open | Show every open window across all workspaces without changing its layout or focus |
 
 All Skipper open/bring-up commands now use the same presentation policy: move the
 selected or newly created window to DP-1, maximize it with normal controls visible,
@@ -428,19 +431,30 @@ Gmail/GitHub tab closing and arbitrary window-name closing are not included.
 
 The explicit spellings “g mail” and “git hub” are accepted too.
 
-Website commands now operate on **normal browser tabs**:
+Website commands now operate on **normal Chromium browser tabs**:
 
 1. Find an HTTPS tab whose hostname exactly matches the registered site.
 2. Reuse it without reloading. If there are duplicates, prefer the focused
    browser window, then the most recently accessed matching tab.
 3. If no matching tab exists, create one in the focused normal browser window,
    or the most recently used normal window. Open a normal browser window if needed.
-4. Activate the tab and maximize its browser on DP-1 with tabs and address bar visible.
+4. Activate the tab while preserving its browser window's workspace, size,
+   fullscreen state, and tiling.
 
 Private windows, standalone app windows from the earlier implementation, and
 extension-only control windows are excluded. Existing app windows are left intact.
 Pending navigations count as matching tabs to avoid duplicates during page loads.
-Both “open” and “bring up” currently follow these same rules.
+Both “open” and “bring up” currently follow these same rules. A website request
+is navigation, not a presentation request: it never moves, maximizes, tiles, or
+fullscreens an existing browser. If Chromium is closed, Skipper launches it and
+lets the compositor's normal new-window policy decide whether it fits the
+current tile layout or opens on its own. Say an explicit browser layout command
+such as **“open the browser and tile”** or **“open the browser in full screen”**
+when that presentation is wanted.
+
+Say **“open another GitHub tab”** (or **“open a new Gmail tab”**) to create a
+new tab even when that website is already open. This is a separate intent from
+**“open GitHub,”** which always prefers reusing an existing matching tab.
 
 Tab control uses the already installed Playwright extension (0.4.0) and the pinned
 local Playwright MCP runtime from `codex-browser-tools` (0.0.80). Skipper sends fixed
@@ -452,6 +466,14 @@ This machine is configured; other installations need their own extension connect
 Skipper keeps a connection open after the first website command; an extension control
 tab supports that connection. Closing Skipper stops its connection process.
 A connection failure reports an error rather than opening duplicate fallback tabs.
+
+The intended multi-browser selection and clarification policy is documented in
+[Website routing and browser resolution](docs/browser-site-routing.md). The
+current adapter is Chromium-only; the document distinguishes its existing
+reuse/new-tab/new-window behavior from the planned “which browser?” flow.
+Notes from the reviewed voice-app reference clones, including a deterministic
+tab-switching recommendation, are in
+[Browser and tab notes](docs/other-voice-app-browser-notes.md).
 
 To add a website, add its fixed HTTPS URL, display name, and exact hostname to
 `SITES`. The destination vocabulary and schema include it automatically; all
@@ -509,6 +531,31 @@ matches, run without asking you to repeat their wording. If only the target
 window is ambiguous, the dropdown asks which window instead.
 
 **Super + Shift + R** opens a centered written-command box on the active monitor.
+
+The box shows recent recognized commands from your local diagnostics history,
+including speech and keyboard input. Type a fragment such as `tile term` to fuzzy
+match “tile the terminals.” Up/Down selects a match, Tab (or a click) recalls it
+for editing, and Enter runs the selected match. Ctrl+Enter runs exactly the text
+you typed. With an empty box, choose a recent command with the arrow keys. Escape
+cancels. Recalled wording is parsed again against the current desktop context;
+old window addresses are never replayed. History indicates recognition, not
+successful execution, and normal confirmation rules still apply.
+
+History is private local data (PII), stored in
+`~/.local/state/skipper/command-history.sqlite3` (or `$XDG_STATE_HOME/skipper/`).
+The directory is owner-only (0700), and the database is owner-only (0600).
+It is outside the checkout; Git ignores databases and sidecars as a safeguard.
+Every recognized invocation, including repeats from speech and typing, is saved.
+The dropdown shows the ten most recently used distinct commands when empty and
+continuously ranks up to ten fuzzy matches from all stored wording as you type.
+The original diagnostics log is imported once, including older entries; no fake
+history is seeded. Rows record recognition attempts, not verified execution:
+failed or cancelled actions may appear. Stored wording is reparsed on recall.
+Recordings and existing diagnostic logs remain separate local private data.
+To use keyboard commands without loading Parakeet, launch the runtime with
+`SKIPPER_TEXT_ONLY=1 .venv/bin/python runtime.py`. Speech stays unavailable in
+that process; restart normally to load the speech model.
+
 It stays open while you type, including after clicking outside or pressing the
 shortcut again. Only Enter submits; Escape cancels. It reserves no workspace space.
 Super + R remains hold-to-talk. The three layers are speech recognition,
@@ -550,7 +597,8 @@ Corrections take effect on the next command without restarting or training a mod
 **Remove correction** restores normal parsing. The picker currently covers the
 fixed command catalog; it does not save identities of individual named windows.
 Corrections and their edit/removal audit are saved outside the repo in
-`~/.local/share/skipper/corrections.json` (under `$XDG_DATA_HOME` if set).
+`~/.local/state/skipper/command-history.sqlite3` (under `$XDG_STATE_HOME` if set).
+Legacy `corrections.json` files are imported once and retained as private backups.
 Original audio/transcripts are not overwritten when correcting a command.
 
 Command diagnostics are stored outside the checkout at
@@ -665,8 +713,8 @@ a change if this shell version retains the previous component in its cache.
 ### Tile two specific windows
 
 Say **“tile this window and the browser”**. `tile_current_window_with_browser(first, second)` is a dedicated intent that resolves
-“this window” from the focus captured when recording starts. One open browser
-resolves automatically; several browsers produce a picker with window titles
+“this window” from the focus captured when recording starts. Browser selection
+prefers visible windows as described below; ambiguous candidates produce a picker with window titles
 and workspace numbers. Choose a button to continue, or cancel. Starting a new
 recording cancels the pending picker. Spoken answers to picker questions are not
 yet supported.
@@ -688,6 +736,25 @@ another reference source without changing the picker or tiling action.
 
 ### Close a particular app window
 
+**“Close all tabs”**, **“close all browser tabs”**, **“close all tabs in the
+browser”**, or **“close all tabs on the browser”** clears the selected browser
+window and leaves one active `about:blank` tab. **“Close the browser”** still
+closes the window itself. Tab clearing uses the visible-browser uniqueness
+rule below and asks which window when ambiguous. It brings the selected window
+forward, creates the blank tab first, and closes its previous tabs, including
+pinned tabs. Other browser windows are left alone.
+
+Tab clearing requires Chrome/Chromium and the configured local browser extension
+connection. Unsupported browsers, private windows, stale targets, and mismatched
+focus stop the command. A connection error may happen after some tabs closed;
+Skipper reports it and does not automatically retry. It does not inspect page
+contents or send browsing data to an LLM. These phrases require an exact match.
+
+Say **“close Tensaku”** or **“close image viewer”** to close the Tensaku
+screenshot annotation app. Both names target its exact app identity; browser
+pages with those titles are not selected. Multiple Tensaku windows produce
+the same window picker described below.
+
 Say or type **“close the browser”**, **“close the X window”**, or
 **“close the file browser window”**. “Close the file manager window” and
 “close Files” also target Nautilus. X matches the installed X/Twitter app,
@@ -700,6 +767,15 @@ work confirmation can still keep its window open.
 
 ### Open the browser with a layout
 
+For **“the browser”**, Skipper first considers browser windows visible on your
+displays when you start the command. One visible browser is selected even if
+others are hidden; several visible browsers produce a picker. With none visible,
+one open browser is selected, or several hidden browsers produce a picker.
+If visibility information is unavailable, Skipper considers all browser windows.
+This applies to opening, closing, and browser tiling commands. Opening a hidden
+browser brings it onto the captured workspace; closing targets the selected
+window. Window identity is checked again before acting.
+
 Chromium is the default browser Skipper launches when none is open. Common
 misspellings such as “brwoser” are accepted in these opening commands.
 
@@ -710,6 +786,87 @@ misspellings such as “brwoser” are accepted in these opening commands.
   fullscreen on the captured workspace.
 - **“Open the browser”** defaults to fullscreen.
 
-If several browsers are open, choose one in the picker. The tiling command keeps
+If browser selection is ambiguous, choose one in the picker. The tiling command keeps
 its original focused window even when launching the browser changes focus.
 Both commands work through speech and the centered typing box.
+
+
+### Volume, brightness, and media
+
+These commands work through speech and the centered typing box. They accept the
+listed wording exactly; they are not guessed from similar phrases.
+
+| Say or type | Action |
+| --- | --- |
+| volume up / turn the volume up / louder | Raise output volume by 5 percentage points, capped at 100% |
+| volume down / turn the volume down / quieter | Lower output volume by 5 percentage points |
+| mute / mute sound | Set output mute on |
+| unmute / unmute sound | Set output mute off |
+| brightness up / increase brightness / brighter | Raise brightness on the captured display |
+| brightness down / decrease brightness / dimmer | Lower brightness on the captured display |
+| play music / resume music | Request playback from the desktop media service |
+| pause music / pause playback | Request pause |
+| next song / next track | Request the next track |
+| previous song / previous track | Request the previous track |
+
+Mute and unmute set the requested state, so repeating either does not toggle it.
+Volume uses Omarchy's output routing, including its physical-sink resolution for
+DSP outputs. Its volume adjustment also unmutes output, matching the desktop's
+volume keys. Brightness uses Omarchy's hardware-aware increments (smaller near
+minimum brightness); changing focus after starting a command does not retarget it.
+Media actions report an error when no player handles the request. These commands
+require the installed Omarchy audio/brightness commands, `pactl`, and the Omarchy
+shell media service; errors appear in Skipper's normal status display.
+
+### Named actions
+
+Open **Skipper Explorer → Named actions** to create, edit, or remove a named
+shortcut. Enter a name and an exact phrase, choose a supported action, review its
+meaning, then save. For example, **Quiet time** can map **“make it quiet”** to
+**Mute sound**. Saving never executes the action. The phrase works immediately
+through speech, typed input, and Explorer's parse-only preview.
+
+Named actions select one existing typed command. They retain its window picker,
+original captured context, and terminal-close confirmation. They do not contain
+shell scripts, schedules, or chains of commands. Built-in phrases, duplicate
+phrases, negations, and phrases already used by learned aliases or speech
+corrections are rejected. Custom phrases are exact-only and are never trained by
+fuzzy matching. Use **Edit** to change an existing action and **Remove** to forget it.
+
+Actions live in their own namespace in the private SQLite database at
+`~/.local/state/skipper/command-history.sqlite3` (respecting `XDG_STATE_HOME`).
+Writes are transactional and owner-readable/writable. Malformed data or a changed
+saved intent stops parsing with an explanation instead of executing an unintended
+meaning. Legacy `actions.json` files are imported once and retained as private
+backups. Back up the database with your other Skipper user data.
+
+These features were inspired by [Genesis](https://github.com/ronald2wing/Omarchy-Genesis)
+and implemented in Skipper's own grammar, executor, and Explorer. No Genesis code
+or dependencies are bundled.
+
+### Open installed apps
+
+Skipper reads the visible `.desktop` launchers in your XDG application directories
+each time it interprets a command. Say or type **“open LocalSend”**, **“launch
+Moonlight”**, or **“open Document Viewer”** to launch one of those apps. The
+Explorer's **Installed apps** page lists the names currently available and their
+exact command phrases.
+
+This discovery is exact-only: Skipper does not fuzzy-match app names, learn them,
+or use an app name as a window title. It excludes hidden launchers, terminal
+emulators, entries whose `TryExec` program is absent, D-Bus-only entries, and
+names shared by more than one launcher. Existing Skipper wording keeps priority;
+for example, **“open Chrome”** remains Skipper's browser command. If an app is
+installed, removed, renamed, or hidden, the next command sees the new state.
+
+Skipper launches the selected desktop file through `gio launch`, without passing
+speech text as shell arguments. It reports that the launcher started; applications
+whose desktop files do not create a normal window may still manage their own
+startup or show an error separately.
+
+## Shared dataset and private SQLite overrides
+
+See [data ownership, lookup precedence, migration, and installation](docs/data-ownership.md).
+The public dataset is https://github.com/gregorycoppola/omarchy-voice-dataset.
+Personal aliases, corrections, named actions, and preferences now use the same
+private SQLite database as command history. Legacy JSON files are migration backups.

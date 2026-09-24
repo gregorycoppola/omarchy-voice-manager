@@ -77,6 +77,23 @@ with tempfile.TemporaryDirectory() as directory:
             assert app.windows_page.rows[0].key.label == 'Changed task | demo'
             app.update_windows(inject_windows(None), None)
             assert not app.windows_page.rows
+            app.stack.set_visible_child_name('actions')
+            page = app.actions_page
+            page.name.set_text('Quiet time')
+            page.phrase.set_text('make it quiet')
+            page.choice.set_selected(page.commands.index('volume:mute'))
+            page.save()
+            assert IntentMatcher(path).parse('make it quiet').command == 'volume:mute'
+            from custom_actions import CustomActions
+            saved = CustomActions(path.with_name('actions.json'))
+            key, action = next(iter(saved.actions.items()))
+            page.edit(key, action)
+            page.phrase.set_text('music please')
+            page.choice.set_selected(page.commands.index('media:play'))
+            page.save()
+            assert IntentMatcher(path).parse('music please').command == 'media:play'
+            page.remove(key)
+            assert not CustomActions(path.with_name('actions.json')).actions
             assert 'gui' not in sys.modules
             assert 'os_actions' not in sys.modules
             assert 'skipper' not in sys.modules

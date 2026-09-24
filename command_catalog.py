@@ -1,169 +1,32 @@
-"""Authored command rules, vocabulary and schemas; derived compatibility views."""
-import hashlib
-import json
-
+"""Skipper adapter views of the external intent dataset. No authored wording lives here."""
+from dataset_source import PROVIDER, DATASET_REVISION
 from grammar_engine import Rule, Word, compile_grammar
 
-TERMINAL_CLASSES = {"foot", "footclient", "alacritty", "kitty", "org.wezfurlong.wezterm", "com.mitchellh.ghostty"}
 
-# These commands accept authored phrases only, never fuzzy or learned wording.
-EXACT_ONLY_COMMANDS = {"terminals:hide", "apps:hide", "window:hide", "windows:tile_pair", "windows:tile_current_browser", "browser:open_tile", "browser:open_fullscreen"}
-# Apps can compete on similarity, but historical aliases must not bypass scoring.
-NO_LEARN_COMMANDS = EXACT_ONLY_COMMANDS | {"apps:tile"}
-
-# Compiled against a fresh window vocabulary at recording start, not at import.
-MOVE_PATTERNS = tuple(f'move {article}<window> to {other}{screen}'
-                      for article in ('', 'the ')
-                      for other in ('other ', 'the other ') for screen in ('screen', 'monitor', 'window'))
-
-WINDOW_RULES = (
-    Rule("focus_window", ("focus <window>", "focus the <window>",
-                          "focus on <window>", "focus on the <window>",
-                          "switch to <window>", "switch to the <window>",
-                          "go to <window>", "go to the <window>"),
-         "focus_window", (("window", "$window"),), "focus-window:{window}", "Focus {window}"),
-    Rule("close_named_window", ("close <window>", "close the <window>"),
-         "close_named_window", (("window", "$window"),), "close-window:{window}", "Close {window}"),
-    Rule("move_named_window", MOVE_PATTERNS, "move_named_window",
-         (("window", "$window"), ("monitor", "other")),
-         "move-window:{window}", "Move {window} to the other screen"),
-    Rule("maximize_named_window", ("maximize <window>", "maximize the <window>"),
-         "maximize_named_window", (("window", "$window"), ("monitor", "current")),
-         "maximize-window:{window}", "Maximize {window}"),
-)
-
-SITES = {
-    "gmail": {"name": "Gmail", "url": "https://mail.google.com/", "host": "mail.google.com"},
-    "github": {"name": "GitHub", "url": "https://github.com/", "host": "github.com"},
-}
-
-# Installed desktop apps are matched by exact class, never by window title.
-APPS = {
-    "files": {
-        "name": "Files",
-        "classes": {"org.gnome.Nautilus", "nautilus", "Nautilus"},
-        "desktop_files": ("org.gnome.Nautilus.desktop",),
-    },
-    "discord": {
-        "name": "Discord",
-        "classes": {"discord", "Discord", "chrome-discord.com__channels_@me-Default"},
-        "desktop_files": ("Discord.desktop", "discord.desktop"),
-    },
-    "x": {
-        "name": "X (Twitter)",
-        "classes": {"chrome-x.com__-Default", "chrome-twitter.com__-Default"},
-        "desktop_files": ("X.desktop", "Twitter.desktop", "twitter.desktop"),
-    },
-}
+def load_rule(row):
+    return Rule(row['id'], tuple(row['patterns']), row['intent_type'],
+                tuple(tuple(item) for item in row['arguments']), row['command'],
+                row['label'], row.get('scope', 'global'))
 
 
-# Non-terminals are reusable across every rule that names them.
-BROWSER = Word("browser", "Chrome", ("chrome", "chromium", "google chrome"))
-APP_WORDS = (Word("discord", "Discord", ("discord",)), Word("x", "X (Twitter)", ("x", "twitter")))
-DESTINATION_FORMS = {"gmail": ("gmail", "g mail"), "github": ("github", "git hub")}
-VOCABULARY = {
-    "destination": tuple(Word(key, site["name"], DESTINATION_FORMS.get(key, (key,)))
-                         for key, site in SITES.items()),
-    "browser": (BROWSER,),
-    "browser_target": (Word("browser", "Browser", ("browser", "the browser", "chrome", "chromium", "google chrome")),),
-    "app": APP_WORDS,
-    "window_app": (BROWSER,) + APP_WORDS,
-    "close_app": (Word("browser", "Browser", BROWSER.forms + ("browser",)),) + APP_WORDS + (
-        Word("files", "Files", ("file browser", "file manager", "files", "nautilus")),),
-}
-
-# Argument values are registry IDs or explicit targeting/presentation policies.
-SCHEMAS = {
-    "open_destination": {"destination": tuple(SITES)},
-    "open_application": {"application": ("browser", "discord", "x"),
-                         "presentation": ("normal", "maximized", "fullscreen")},
-    "create_terminal": {},
-    "close_window": {"application": ("browser", "discord", "x", "terminal", "files"),
-                     "selection": ("unique_or_choose", "most_recent", "current")},
-    "maximize_window": {"application": ("browser", "discord", "x", "any"),
-                        "selection": ("most_recent", "current"),
-                        "monitor": ("main", "current")},
-    "move_window": {"selection": ("current",), "monitor": ("other",)},
-    "move_application": {"application": ("browser", "discord", "x"),
-                         "selection": ("most_recent",), "monitor": ("other",)},
-    "open_browser_and_tile": {"first": ("this window",), "second": ("the browser",)},
-    "open_browser_fullscreen": {"window": ("the browser",)},
-    "tile_current_window_with_browser": {"first": ("this window",), "second": ("the browser",)},
-    "tile_windows": {"workspace": ("current",)},
-    "tile_terminals": {"workspace": ("current",)},
-    "tile_browsers": {"workspace": ("current",)},
-    "tile_apps": {"workspace": ("current",)},
-    "hide_windows": {"workspace": ("current",), "category": ("terminals", "apps")},
-    "hide_window": {"selection": ("current",)},
-}
-
-RULES = (
-    Rule("open_destination", ("open <destination>", "bring up <destination>"),
-         "open_destination", (("destination", "$destination"),), "site:{destination}", "Open {destination}"),
-    Rule("open_browser", ("open <browser>", "launch <browser>", "focus <browser>", "switch to <browser>"),
-         "open_application", (("application", "$browser"), ("presentation", "maximized")), "browser", "Open Chrome"),
-    Rule("present_browser", ("bring up <browser>",), "open_application",
-         (("application", "$browser"), ("presentation", "maximized")),
-         "browser_fullscreen", "Bring up Chrome with tabs visible"),
-    Rule("open_browser_and_tile", ("open <browser_target> and tile", "open <browser_target> and tile it"),
-         "open_browser_and_tile", (("first", "this window"), ("second", "the browser")),
-         "browser:open_tile", "Open the browser and tile"),
-    Rule("open_browser_fullscreen", ("open the browser", "open browser",
-         "open <browser_target> in full screen", "open <browser_target> in fullscreen",
-         "open <browser_target> full screen", "open <browser_target> fullscreen"),
-         "open_browser_fullscreen", (("window", "the browser"),),
-         "browser:open_fullscreen", "Open the browser in full screen"),
-    Rule("open_app", ("open <app>", "bring up <app>", "focus <app>", "switch to <app>"), "open_application",
-         (("application", "$app"), ("presentation", "maximized")), "{app}", "Open {app}"),
-    Rule("close_app", ("close <close_app>", "close the <close_app>",
-                       "close <close_app> window", "close the <close_app> window"), "close_window",
-         (("application", "$close_app"), ("selection", "unique_or_choose")),
-         "close:{close_app}", "Close {close_app} window"),
-    Rule("move_app", tuple(p.replace('<window>', '<window_app>') for p in MOVE_PATTERNS),
-         "move_application", (("application", "$window_app"), ("selection", "most_recent"), ("monitor", "other")),
-         "move-app:{window_app}", "Move {window_app} to the other screen"),
-    Rule("maximize_app", ("maximize <window_app>",), "maximize_window",
-         (("application", "$window_app"), ("selection", "most_recent"), ("monitor", "current")),
-         "maximize:{window_app}", "Maximize {window_app} window"),
-    Rule("create_terminal", ("open a new terminal", "open a terminal", "open terminal", "open new terminal"),
-         "create_terminal", (), "terminal:new", "Open a new terminal"),
-    Rule("close_terminal", ("close terminal", "close the terminal", "close a terminal"), "close_window",
-         (("application", "terminal"), ("selection", "most_recent")), "close:terminal", "Close the most recent terminal"),
-    Rule("close_current_terminal", ("close this terminal",), "close_window",
-         (("application", "terminal"), ("selection", "current")), "close:terminal_current", "Close this terminal"),
-    Rule("maximize_current_window", ("maximize this window", "maximize the current window"), "maximize_window",
-         (("application", "any"), ("selection", "current"), ("monitor", "current")),
-         "maximize:current_window", "Maximize this window"),
-    Rule("move_window", ("move to other screen", "move window to other screen", "move to the other screen",
-                         "move window to the other screen", "move this window to the other screen"),
-         "move_window", (("selection", "current"), ("monitor", "other")), "move:other_screen", "Move window to the other screen"),
-    Rule("show_windows", ("show all windows", "show all open windows", "show all open window"),
-         "tile_windows", (("workspace", "current"),), "windows:tile", "Tile open windows"),
-    Rule("tile_current_window_with_browser", ("tile this window and the browser",
-         "tile this window and browser", "tile the current window and the browser"),
-         "tile_current_window_with_browser",
-         (("first", "this window"), ("second", "the browser")),
-         "windows:tile_current_browser", "Tile this window and the browser"),
-    Rule("tile_windows", ("tile open windows", "tile all open windows", "tile windows", "tile all windows"),
-         "tile_windows", (("workspace", "current"),), "windows:tile", "Tile open windows"),
-    Rule("tile_terminals", ("tile all the terminals", "tile all terminals", "tile terminals",
-                            "tile the terminals", "tile open terminals", "tile all open terminals"),
-         "tile_terminals", (("workspace", "current"),), "terminals:tile",
-         "Tile terminals and minimize other windows"),
-    Rule("tile_browsers", ("tile all browsers", "tile all the browsers", "tile browsers",
-                           "tile the browsers", "tile open browsers", "tile all browser windows"),
-         "tile_browsers", (("workspace", "current"),), "browsers:tile",
-         "Tile browsers and minimize other windows"),
-    Rule("hide_terminals", ("hide all terminals",), "hide_windows",
-         (("workspace", "current"), ("category", "terminals")), "terminals:hide", "Hide all terminals"),
-    Rule("hide_apps", ("hide all apps",), "hide_windows",
-         (("workspace", "current"), ("category", "apps")), "apps:hide", "Hide all non-terminal apps"),
-    Rule("hide_current_window", ("hide this window",), "hide_window",
-         (("selection", "current"),), "window:hide", "Hide this window"),
-    Rule("tile_apps", ("tile all apps", "tile the apps"),
-         "tile_apps", (("workspace", "current"),), "apps:tile",
-         "Tile non-terminal apps and minimize terminals"),
-)
+TERMINAL_CLASSES = set(PROVIDER['terminal_classes'])
+SITES = PROVIDER['sites']
+APPS = {key: dict(value, classes=set(value['classes']),
+                  desktop_files=tuple(value['desktop_files']))
+        for key, value in PROVIDER['apps'].items()}
+VOCABULARY = {name: tuple(Word(word['id'], word['label'], tuple(word['forms']))
+                          for word in words)
+              for name, words in PROVIDER['vocabulary'].items()}
+BROWSER = VOCABULARY['browser'][0]
+APP_WORDS = VOCABULARY['app']
+SCHEMAS = {name: {key: tuple(values) for key, values in arguments.items()}
+           for name, arguments in PROVIDER['executor_schemas'].items()}
+RULES = tuple(load_rule(row) for row in PROVIDER['rules'])
+WINDOW_RULES = tuple(load_rule(row) for row in PROVIDER['window_rules'])
+INSTALLED_APP_RULES = tuple(load_rule(row) for row in PROVIDER['installed_app_rules'])
+MOVE_PATTERNS = next(rule.patterns for rule in WINDOW_RULES if rule.id == 'move_named_window')
+EXACT_ONLY_COMMANDS = set(PROVIDER['exact_only_commands'])
+NO_LEARN_COMMANDS = set(PROVIDER['no_learn_commands'])
 
 EXPANSIONS = compile_grammar(RULES, VOCABULARY, SCHEMAS)
 # Compatibility views keep current execution IDs and version-1 learned aliases working.
@@ -179,14 +42,9 @@ for expansion in EXPANSIONS:
         entry["phrases"].append(expansion.phrase)
     GRAMMAR[expansion.phrase] = expansion.command
 
-# Legacy execution IDs in previously saved aliases and corrections.
-STRUCTURED_INTENTS['windows'] = STRUCTURED_INTENTS['windows:tile']
-INTENTS['windows'] = {'label': 'Tile open windows', 'phrases': []}
-STRUCTURED_INTENTS['windows:tile_pair'] = STRUCTURED_INTENTS['windows:tile_current_browser']
-INTENTS['windows:tile_pair'] = {'label': 'Tile this window and the browser', 'phrases': []}
+# Compatibility execution IDs remain adapter details, defined by the dataset.
+for alias, target in PROVIDER['compatibility_aliases'].items():
+    STRUCTURED_INTENTS[alias] = STRUCTURED_INTENTS[target]
+    INTENTS[alias] = {'label': INTENTS[target]['label'], 'phrases': []}
 
-GRAMMAR_REVISION = hashlib.sha256(json.dumps([
-    {"phrase": e.phrase, "rule": e.rule_id, "pattern": e.pattern,
-     "bindings": e.bindings, "intent": e.intent.to_dict(), "command": e.command}
-    for e in EXPANSIONS
-], sort_keys=True).encode()).hexdigest()[:16]
+GRAMMAR_REVISION = DATASET_REVISION

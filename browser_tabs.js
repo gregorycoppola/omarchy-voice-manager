@@ -32,4 +32,26 @@ async function bringUpSite(site) {
   return {reused, tabId: selected.id, windowId: selected.windowId};
 }
 
-if (typeof module !== 'undefined') module.exports = {bringUpSite};
+// This is the explicit “open another <site> tab” path. It intentionally does
+// not look for a matching tab, because an existing one must not be reused.
+async function openAnotherSiteTab(site) {
+  const windows = (await chrome.windows.getAll({populate: true, windowTypes: ['normal']}))
+    .filter(w => !w.incognito && w.tabs.some(t => !t.url?.startsWith('chrome-extension://')))
+    .sort((a, b) => Number(Boolean(b.focused)) - Number(Boolean(a.focused))
+      || Math.max(0, ...b.tabs.map(t => t.lastAccessed || 0))
+       - Math.max(0, ...a.tabs.map(t => t.lastAccessed || 0)) || a.id - b.id);
+  let tab;
+  if (windows.length) {
+    tab = await chrome.tabs.create({windowId: windows[0].id, url: site.url, active: true});
+  } else {
+    const window = await chrome.windows.create({url: site.url, type: 'normal', focused: true});
+    tab = window.tabs[0];
+  }
+  await chrome.tabs.update(tab.id, {active: true});
+  await chrome.windows.update(tab.windowId, {focused: true});
+  const selected = await chrome.tabs.get(tab.id);
+  if (!selected.active) throw new Error('Could not activate website tab');
+  return {reused: false, tabId: selected.id, windowId: selected.windowId};
+}
+
+if (typeof module !== 'undefined') module.exports = {bringUpSite, openAnotherSiteTab};

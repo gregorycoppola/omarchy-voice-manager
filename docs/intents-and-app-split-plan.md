@@ -13,6 +13,12 @@ below. The compact bar popover and windowless runtime are
 now implemented, with recording history/settings in Explorer. Paired intent
 history and grammar editing are still pending.
 
+Implementation progress, September 24: the independent public intent dataset
+now supplies Skipper grammar, schemas, vocabulary, and executor bindings. Setup
+installs a pinned snapshot; personal preferences and history stay in local SQLite.
+See [intent-dataset-integration.md](intent-dataset-integration.md). Additional
+provider adapters and general multi-intent execution remain future work.
+
 ## Product direction
 
 Skipper becomes a small, everyday voice interface. Its primary surface is a

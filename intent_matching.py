@@ -1,15 +1,17 @@
 """Exact intent aliases and confidence-filtered fuzzy matching; no extra model."""
+import personal_store
 from difflib import SequenceMatcher
 from dataclasses import dataclass
 import json
-import os
 import re
 from pathlib import Path
-import tempfile
 
 from command_catalog import GRAMMAR, INTENTS, EXPANSIONS, STRUCTURED_INTENTS, GRAMMAR_REVISION, EXACT_ONLY_COMMANDS, NO_LEARN_COMMANDS
 from grammar_engine import Intent, normalize
 from corrections import Corrections
+from custom_actions import CustomActions
+from intent_dataset_aliases import load_approved_aliases
+from dataset_source import CATALOG, DATASET_REVISION, PROVIDER
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,7 @@ class Candidate:
 
     def to_dict(self):
         return {"intent": self.intent.to_dict(), "label": self.label, "matched_phrase": self.phrase,
+                "canonical_plan": self.intent.canonical_plan(),
                 "similarity": round(self.score, 4), "source": self.source,
                 "rules": list(dict.fromkeys(e.rule_id for e in self.evidence
                                              if e.phrase == self.phrase and e.intent == self.intent)),
@@ -49,8 +52,13 @@ class ParseResult:
     def command(self):
         return self.selected.command if self.selected else None
 
+    @property
+    def canonical_plan(self):
+        return self.intent.canonical_plan() if self.intent else []
+
     def to_dict(self):
         return {"text": self.text, "normalized": normalize(self.text), "status": self.status,
+                "catalog_revision": DATASET_REVISION, "canonical_plan": self.canonical_plan,
                 "grammar_revision": GRAMMAR_REVISION,
                 "method": self.method, "intent": self.intent.to_dict() if self.intent else None,
                 "reason": self.reason, "correction": self.correction,
@@ -62,8 +70,14 @@ class IntentMatcher:
         self.path = Path(path)
         self.aliases = {}
         self.error = None
+        self.dataset_aliases = {}
+        self.dataset_error = None
         try:
-            data = json.loads(self.path.read_text())
+            self.dataset_aliases = load_approved_aliases()
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            self.dataset_error = f"Could not load reviewed dataset phrases: {exc}"
+        try:
+            data = personal_store.load(self.path)
             if not isinstance(data, dict) or data.get("version") != 1 or not isinstance(data.get("aliases"), dict):
                 raise ValueError("Invalid alias file format")
             for phrase, intent in data["aliases"].items():
@@ -71,6 +85,11 @@ class IntentMatcher:
                     raise ValueError("Invalid phrase or intent in alias file")
                 if phrase in GRAMMAR and GRAMMAR[phrase] != intent:
                     raise ValueError("Alias conflicts with a built-in command")
+                if phrase in self.dataset_aliases and self.dataset_aliases[phrase] != intent:
+                    raise ValueError("Alias conflicts with a reviewed dataset command")
+            for phrase, plan in data.get('canonical_plans', {}).items():
+                if phrase in data['aliases'] and STRUCTURED_INTENTS[data['aliases'][phrase]].canonical_plan() != plan:
+                    raise ValueError('Saved alias changed meaning; review personal overrides')
             self.aliases = {phrase: command for phrase, command in data["aliases"].items()
                             if command not in NO_LEARN_COMMANDS}
         except FileNotFoundError:
@@ -80,15 +99,39 @@ class IntentMatcher:
 
     def exact(self, text):
         phrase = normalize(text)
-        return GRAMMAR.get(phrase) or self.aliases.get(phrase)
+        return GRAMMAR.get(phrase) or self.dataset_aliases.get(phrase) or self.aliases.get(phrase)
 
     def suggest(self, text):
         result = self.parse(text)
         return result.command if result.method == "fuzzy" else None
 
+    def parse_instance(self, instance, extra_expansions=()):
+        """Adapt validated LLM/API output only when an installed binding matches it.
+
+        This does not execute anything. The runtime's normal target resolution
+        and confirmation flow is still required for the returned candidate.
+        """
+        CATALOG.validate_instance(instance)
+        matches = {}
+        for expansion in EXPANSIONS + tuple(extra_expansions):
+            plan = expansion.intent.canonical_plan()
+            if plan == [instance]:
+                matches.setdefault(expansion.intent, Candidate(
+                    expansion.command, expansion.intent, expansion.phrase, 1.0,
+                    'structured', expansion.label, (expansion,)))
+        if len(matches) == 1:
+            candidate = next(iter(matches.values()))
+            return ParseResult('', 'matched', 'structured', candidate, (candidate,))
+        return ParseResult('', 'ambiguous' if matches else 'unrecognized',
+                           candidates=tuple(matches.values()),
+                           reason='No unique installed executor binding for these arguments.')
+
     def parse(self, text, extra_expansions=(), *, use_corrections=True):
         """Parse one snapshot, retaining competing dynamic slot bindings."""
         phrase = normalize(text)
+        custom = CustomActions(self.path.with_name('actions.json'))
+        if custom.error:
+            return ParseResult(text, 'unrecognized', reason=custom.error)
         corrections = Corrections(self.path.with_name('corrections.json'))
         if corrections.error:
             return ParseResult(text, 'unrecognized', reason=corrections.error)
@@ -118,9 +161,10 @@ class IntentMatcher:
                                reason='Exact phrase explicitly corrected by the user.', correction=correction)
         # Correct known browser misspellings only inside an otherwise exact
         # authored opening/tiling command. Do not fuzzy-match its action words.
-        browser_spelling = re.sub(r'\b(?:brwoser|brwoswer|brower|browesr)\b', 'browser', phrase)
+        spelling = PROVIDER['language_policy']['browser_spelling']
+        browser_spelling = re.sub(r'\b(?:' + '|'.join(re.escape(word) for word in spelling['forms']) + r')\b', spelling['replacement'], phrase)
         spelling_command = GRAMMAR.get(browser_spelling) if browser_spelling != phrase else None
-        if spelling_command in ('browser:open_tile', 'browser:open_fullscreen', 'windows:tile_current_browser'):
+        if spelling_command in spelling['commands']:
             intent = STRUCTURED_INTENTS[spelling_command]
             candidate = Candidate(spelling_command, intent, browser_spelling,
                                   SequenceMatcher(None, phrase, browser_spelling).ratio(), 'spelling',
@@ -130,15 +174,18 @@ class IntentMatcher:
                                reason='Browser spelling corrected within an exact command.')
         # Authored, specific intents take precedence over the generic pair frame.
         specific = GRAMMAR.get(phrase)
-        if specific == 'windows:tile_current_browser':
+        if specific in PROVIDER['language_policy']['specific_before_free_text']:
             intent = STRUCTURED_INTENTS[specific]
             candidate = Candidate(specific, intent, phrase, 1.0, 'grammar', INTENTS[specific]['label'],
                                   tuple(e for e in EXPANSIONS if e.phrase == phrase and e.intent == intent))
             return ParseResult(text, 'matched', 'exact', candidate, (candidate,))
-        pair = re.fullmatch(r'tile (.+?) and (.+)', phrase)
+        pair_rule = PROVIDER['free_text_rules'][0]
+        pair_pattern = re.escape(pair_rule['pattern']).replace(r'<first>', '(.+?)').replace(r'<second>', '(.+)')
+        pair = re.fullmatch(pair_pattern, phrase)
         if pair and not set(phrase.split()) & {"no", "not", "never", "don't", "dont", "cancel"}:
-            intent = Intent('tile_pair', (('first', pair[1]), ('second', pair[2])))
-            candidate = Candidate('windows:tile_pair', intent, phrase, 1.0, 'grammar', 'Tile two windows',
+            intent = Intent(pair_rule['intent_type'], (('first', pair[1]), ('second', pair[2])))
+            intent.canonical_plan()
+            candidate = Candidate(pair_rule['command'], intent, phrase, 1.0, 'grammar', pair_rule['label'],
                                   tuple(e for e in EXPANSIONS if e.phrase == phrase and e.intent == intent))
             return ParseResult(text, 'matched', 'exact', candidate, (candidate,))
         # An incomplete pair must never fall back to tiling every window.
@@ -151,16 +198,26 @@ class IntentMatcher:
             evidence = tuple(e for e in expansions if e.phrase == wording and e.intent == intent)
             entries.append(Candidate(command, intent, wording, 1.0,
                 "grammar" if wording in GRAMMAR else "alias", INTENTS.get(command, {}).get('label', command), evidence))
+        for wording, command in self.dataset_aliases.items():
+            if command not in STRUCTURED_INTENTS:
+                continue
+            entries.append(Candidate(command, STRUCTURED_INTENTS[command], wording, 1.0,
+                                     "dataset_approved", INTENTS[command]['label']))
+        for action in custom.actions.values():
+            command = action['command']
+            entries.append(Candidate(command, STRUCTURED_INTENTS[command], action['phrase'],
+                                     1.0, 'custom', action['name']))
         for expansion in extra_expansions:
             entries.append(Candidate(expansion.command, expansion.intent, expansion.phrase, 1.0,
-                                     'window', expansion.label, (expansion,)))
+                                     'installed_app' if expansion.command.startswith('desktop-app:') else 'window',
+                                     expansion.label, (expansion,)))
         exact = {candidate.intent: candidate for candidate in entries if candidate.phrase == phrase}
         if len(exact) > 1:
             return ParseResult(text, 'ambiguous', candidates=tuple(exact.values()),
                                reason='This phrase names more than one meaning. Use a more specific window title.')
         if exact:
             candidate = next(iter(exact.values()))
-            method = 'alias' if candidate.source == 'alias' else 'exact'
+            method = 'alias' if candidate.source in ('alias', 'custom') else 'exact'
             return ParseResult(text, 'matched', method, candidate, (candidate,))
         if phrase.split()[:1] == ['hide']:
             return ParseResult(text, 'unrecognized', reason='Hide commands require their exact built-in phrase.')
@@ -177,7 +234,7 @@ class IntentMatcher:
         # recent terminal just because its name is absent or poorly recognized.
         named_close = re.fullmatch(r'close (?:the )?.+ (?:terminal|window|codex)', phrase)
         for candidate in entries:
-            if candidate.command in EXACT_ONLY_COMMANDS:
+            if candidate.command in EXACT_ONLY_COMMANDS or candidate.source in ('custom', 'installed_app'):
                 continue
             if named_close and candidate.intent.type != 'close_named_window':
                 continue
@@ -219,19 +276,8 @@ class IntentMatcher:
     def _save(self, aliases):
         if self.error:
             raise ValueError(self.error)
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        name = None
-        try:
-            with tempfile.NamedTemporaryFile(mode="w", dir=self.path.parent, delete=False) as handle:
-                name = Path(handle.name)
-                json.dump({"version": 1, "aliases": aliases}, handle, indent=2, sort_keys=True)
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            name.replace(self.path)
-        finally:
-            if name is not None:
-                name.unlink(missing_ok=True)
+        personal_store.save(self.path, {'version': 1, 'aliases': aliases,
+                           'canonical_plans': {phrase: STRUCTURED_INTENTS[command].canonical_plan() for phrase, command in aliases.items()}})
         self.aliases = aliases
 
     def learn(self, text, intent):
@@ -240,6 +286,11 @@ class IntentMatcher:
             raise ValueError("Unknown intent or empty phrase")
         if intent in NO_LEARN_COMMANDS:
             raise ValueError("This command does not accept learned aliases; use a built-in phrase")
+        custom = CustomActions(self.path.with_name('actions.json'))
+        if custom.error:
+            raise ValueError(custom.error)
+        if any(a['phrase'] == phrase for a in custom.actions.values()):
+            raise ValueError('Phrase belongs to a custom action')
         existing = self.exact(phrase)
         if existing and existing != intent:
             raise ValueError("Phrase already belongs to another intent")

@@ -1,0 +1,9 @@
+{
+  "schema_version": 2,
+  "path": "../omarchy-voice-dataset",
+  "provider": "skipper",
+  "release": {
+    "repository": "https://github.com/gregorycoppola/omarchy-voice-dataset.git",
+    "commit": "b6628e30c2e0ce48cb193436f1911b4c3f1bb650"
+  }
+}

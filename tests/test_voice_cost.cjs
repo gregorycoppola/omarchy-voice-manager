@@ -1,0 +1,23 @@
+const assert = require('node:assert/strict');
+const { models, estimate } = require('../docs/voice-managers/cost-model.js');
+const s = { commands: 100, days: 30, audioSeconds: 3, textInput: 500,
+  textOutput: 20, cachePercent: 0, extraPercent: 0 };
+const run = (id, patch = {}) => estimate(models.find(m => m.id === id), {...s, ...patch});
+const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-12, `${actual} != ${expected}`);
+close(run('local').monthly, 0);
+close(run('nano').monthly, 0.375);
+close(run('mini').monthly, 1.395);
+close(run('jev').monthly, 0.063);
+close(run('remote-two-stage').monthly, 2.07);
+close(run('realtime-mini').monthly, 1.944);
+close(run('realtime').monthly, 10.32);
+close(run('mini', {cachePercent:100}).perAttempt, 0.0001275);
+close(run('realtime-mini', {cachePercent:100}).audio, 0.0003);
+close(run('jev', {cachePercent:100}).monthly, 0.063);
+close(run('mini', {extraPercent:50}).monthly, 1.395 * 1.5);
+close(run('realtime', {commands:0}).monthly, 0);
+close(run('realtime', {audioSeconds:0}).audio, 0);
+assert.throws(() => run('mini', {cachePercent:101}), RangeError);
+assert.throws(() => run('mini', {textInput:NaN}), RangeError);
+assert.throws(() => run('mini', {extraPercent:-1}), RangeError);
+console.log('Cost model: rate arithmetic, caching, audio, extra attempts, and invalid inputs passed.');

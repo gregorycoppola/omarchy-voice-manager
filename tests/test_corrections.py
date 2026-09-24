@@ -1,3 +1,4 @@
+import personal_store
 import json
 from pathlib import Path
 import tempfile
@@ -28,7 +29,7 @@ class CorrectionTests(unittest.TestCase):
         store.forget('tile the terminals')
         self.assertEqual(self.matcher.parse('tile the terminals').command, 'terminals:tile')
         self.assertEqual([e['action'] for e in Corrections(self.path).events], ['save', 'remove'])
-        self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(personal_store.database_path(self.path).stat().st_mode & 0o777, 0o600)
 
     def test_explicit_choice_can_correct_exact_only_action_without_automatic_learning(self):
         Corrections(self.path).save('hide that stuff', 'hide all apps', 'apps:hide')

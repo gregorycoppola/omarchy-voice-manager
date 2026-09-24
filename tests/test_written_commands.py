@@ -45,6 +45,16 @@ class WrittenTests(unittest.TestCase):
         self.assertEqual(self.app.state['written'], 'open chrome')
         self.assertIsNone(self.app.pending_written)
 
+    def test_recognized_invocations_saved_and_available_on_reopen(self):
+        for text in ['open chrome', 'open discord', 'open chrome']:
+            self.app.type_command()
+            with patch.object(self.app, 'execute', return_value='Opened'):
+                self.submit(text)
+        self.app.type_command()
+        self.assertEqual(self.app.state['written_entry']['history'], ['open chrome', 'open discord'])
+        with self.app.command_store.connect() as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM commands').fetchone()[0], 3)
+
     def test_written_bypasses_speech_corrections_and_does_not_train_speech_aliases(self):
         Corrections(self.root / 'corrections.json').save('open chrome', 'hide all apps', 'apps:hide')
         self.app.type_command()
