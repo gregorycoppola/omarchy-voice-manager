@@ -13,11 +13,28 @@ from installed_apps import InstalledApp
 
 from command_catalog import APPS, GRAMMAR, SITES, TERMINAL_CLASSES
 from intent_matching import normalize
+from settings import Settings
+from personal_store import DEFAULT_DATA
 
 BROWSER_CLASSES = {"chromium", "google-chrome", "google-chrome-stable", "chrome"}
 DEFAULT_BROWSER_DESKTOP = "chromium.desktop"
 MAIN_MONITOR = os.environ.get("SKIPPER_MAIN_MONITOR", "")
 TERMINAL_CLOSE_INTENTS = {"close:terminal", "close:terminal_current"}
+
+
+def layout_exclusion():
+    """Load private exact app-class exclusions once per layout operation."""
+    settings = Settings(DEFAULT_DATA / 'settings.json')
+    if settings.error:
+        raise RuntimeError(settings.error)
+    excluded = set(settings.layout_excluded_classes)
+    return lambda window: bool(excluded.intersection(
+        (window.get('class'), window.get('initialClass'))))
+
+
+def require_layout_allowed(window):
+    if layout_exclusion()(window):
+        raise RuntimeError('This window is excluded from layout changes in your personal settings.')
 
 
 def parse_command(text):
@@ -64,9 +81,47 @@ def focus(window):
     if not re.fullmatch(r"0x[0-9a-fA-F]+", address):
         raise ValueError("Invalid Hyprland window address")
     run(["hyprctl", "dispatch", f'hl.dsp.focus({{ window = "address:{address}" }})'])
-    active = json.loads(run(["hyprctl", "activewindow", "-j"]))
-    if active.get("address") != address:
-        raise RuntimeError("Browser found, but Hyprland did not focus it")
+    deadline = time.monotonic() + .4
+    while True:
+        active = json.loads(run(["hyprctl", "activewindow", "-j"]))
+        if active.get("address") == address:
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Hyprland did not focus the selected window")
+        time.sleep(.05)
+
+
+def raise_for_focus(window, clients):
+    """Put a tiled target in the floating stack when floats cover its workspace."""
+    address = window['address']
+    workspace = window.get('workspace', {}).get('id')
+    if (not window.get('floating') and isinstance(workspace, int) and workspace > 0
+            and any(c.get('address') != address and c.get('floating')
+                    and c.get('mapped', True) and c.get('visible', True)
+                    and c.get('workspace', {}).get('id') == workspace for c in clients)):
+        run(['hyprctl', 'dispatch',
+             f'hl.dsp.window.float({{ action = "on", window = "address:{address}" }})'])
+    run(['hyprctl', 'dispatch',
+         f'hl.dsp.window.alter_zorder({{ mode = "top", window = "address:{address}" }})'])
+    focus(window)
+
+
+def switch_workspace(workspace):
+    """Switch the focused monitor to one of the supported numbered workspaces."""
+    if type(workspace) is not int or not 1 <= workspace <= 10:
+        raise ValueError('Choose workspace 1 through 10.')
+    current = json.loads(run(['hyprctl', 'activeworkspace', '-j']))
+    if current.get('id') == workspace:
+        return f'Already on workspace {workspace}.'
+    run(['hyprctl', 'dispatch', f'hl.dsp.focus({{ workspace = "{workspace}" }})'])
+    deadline = time.monotonic() + .4
+    while True:
+        current = json.loads(run(['hyprctl', 'activeworkspace', '-j']))
+        if current.get('id') == workspace:
+            return f'Switched to workspace {workspace}.'
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f'Could not confirm workspace {workspace} became active.')
+        time.sleep(.05)
 
 
 def present_browser(window, fullscreen):
@@ -90,6 +145,7 @@ def main_monitor(monitors):
 
 
 def move_to_main_screen(window):
+    require_layout_allowed(window or {})
     monitor = main_monitor(json.loads(run(["hyprctl", "monitors", "-j"])))
     address = window["address"]
     if not re.fullmatch(r"0x[0-9a-fA-F]+", address):
@@ -170,22 +226,47 @@ def list_open_windows():
     return f'{len(lines)} open window{ "s" if len(lines) != 1 else ""}:\n' + '\n'.join(lines)
 
 
-def open_window_entries():
+def open_window_entries(terminals_only=False, browsers_only=False, application=None):
     """Return safe, presentation-ready identities for the window chooser."""
     clients = json.loads(run(['hyprctl', 'clients', '-j']))
     windows = [c for c in clients if c.get('mapped', True)
                and c.get('class') != 'io.github.gregorycoppola.Skipper'
                and c.get('initialClass') != 'io.github.gregorycoppola.Skipper'
                and re.fullmatch(r'0x[0-9a-fA-F]+', c.get('address', ''))]
+    if terminals_only:
+        windows = [c for c in windows if is_terminal(c)]
+    if browsers_only:
+        from window_resolution import BROWSERS
+        windows = [c for c in windows if c.get('class', '').lower() in BROWSERS]
+    if application is not None:
+        windows = matching_app_windows(windows, application)
     windows.sort(key=lambda c: (str(c.get('workspace', {}).get('name', c.get('workspace', {}).get('id', ''))),
                                 c.get('focusHistoryID', 99999), c.get('title', '')))
-    return [dict(address=c['address'], app=c.get('initialClass') or c.get('class') or 'Unknown app',
+    entries = [dict(address=c['address'], pid=c.get('pid'), stableId=c.get('stableId'),
+                 **{'class': c.get('class')}, app=c.get('initialClass') or c.get('class') or 'Unknown app',
                  title=c.get('title') or c.get('initialClass') or c.get('class') or 'Unknown app',
                  workspace=str(c.get('workspace', {}).get('name', c.get('workspace', {}).get('id', '?'))))
             for c in windows]
+    if terminals_only:
+        from window_vocabulary import inject_windows
+        vocabulary = inject_windows({'clients': windows})
+        owners = {}
+        for word in vocabulary.words:
+            for form in word.forms:
+                owners.setdefault(form, set()).add(word.id)
+        by_address = {vocabulary.targets[word.id]['address']: word for word in vocabulary.words}
+        for entry in entries:
+            word = by_address.get(entry['address'])
+            entry['spoken_names'] = sorted((form for form in word.forms if len(owners[form]) == 1),
+                                            key=lambda form: (len(form), form)) if word else []
+            entry['names_note'] = ('Spoken names: ' + ' · '.join(entry['spoken_names'][:3])
+                                   if entry['spoken_names'] else
+                                   'No unique spoken name; click to focus.' if word else
+                                   'No spoken name available; click to focus.')
+    return entries
 
 
-def focus_listed_window(address):
+def focus_listed_window(address, expected=None):
     """Focus a live window selected from the chooser; address is syntax-checked."""
     if not isinstance(address, str) or not re.fullmatch(r'0x[0-9a-fA-F]+', address):
         raise ValueError('Invalid window selection')
@@ -193,7 +274,9 @@ def focus_listed_window(address):
     window = next((c for c in clients if c.get('address') == address and c.get('mapped', True)), None)
     if window is None:
         raise RuntimeError('That window has already closed')
-    focus(window)
+    if expected and any(window.get(k) != expected.get(k) for k in ('pid', 'class', 'stableId')):
+        raise RuntimeError('That window was replaced. List the windows again.')
+    raise_for_focus(window, clients)
     return 'Focused ' + (window.get('title') or window.get('class') or 'window')
 
 
@@ -264,7 +347,8 @@ def capture_window_context():
             # workspace so a later tiling command can restore its windows.
             workspace = json.loads(run(['hyprctl', 'activeworkspace', '-j']))
             active = {'workspace': workspace, 'monitor': workspace.get('monitorID')}
-        return {"active": active, "clients": json.loads(run(["hyprctl", "clients", "-j"]))}
+        return {"active": active, "clients": json.loads(run(["hyprctl", "clients", "-j"])),
+                "monitors": json.loads(run(["hyprctl", "monitors", "-j"]))}
     except Exception:
         return None
 
@@ -306,6 +390,24 @@ def equal_grid(count, monitor):
     return rectangles
 
 
+def tile_on_monitor(category, number):
+    """Tile the selected display's active workspace, without moving other workspaces."""
+    monitors = sorted((m for m in json.loads(run(['hyprctl', 'monitors', '-j']))
+                       if not m.get('disabled') and m.get('mirrorOf', 'none') in ('none', None, '')),
+                      key=lambda m: m['id'])
+    if type(number) is not int or not 1 <= number <= len(monitors):
+        raise RuntimeError(f'Monitor {number} is not connected. Available monitors: ' +
+                           ', '.join(f"{i}: {m['name']}" for i, m in enumerate(monitors, 1)))
+    monitor = monitors[number - 1]
+    workspace = monitor.get('activeWorkspace', {})
+    if type(workspace.get('id')) is not int or workspace['id'] <= 0:
+        raise RuntimeError('That monitor has no active regular workspace.')
+    clients = json.loads(run(['hyprctl', 'clients', '-j']))
+    context = {'active': {'monitor': monitor['id'], 'workspace': workspace}, 'clients': clients}
+    message = tile_open_windows(context, category=category)
+    return f"{message} · Monitor {number} ({monitor['name']})"
+
+
 def tile_terminals(context):
     return tile_open_windows(context, category='terminals')
 
@@ -325,6 +427,7 @@ def tile_selected_windows(context, targets):
 
 
 def tile_open_windows(context, *, category='windows', selected_targets=None):
+    excluded = layout_exclusion()
     selectors = {
         'windows': lambda c: True,
         'terminals': is_terminal,
@@ -352,7 +455,7 @@ def tile_open_windows(context, *, category='windows', selected_targets=None):
                 or window.get('workspace', {}).get('name') == hidden_workspace)
 
     targets = [c for c in context.get("clients", [])
-               if belongs(c)
+               if belongs(c) and not excluded(c)
                and c.get("mapped", True)
                and c.get("class") != "io.github.gregorycoppola.Skipper"
                and c.get("initialClass") != "io.github.gregorycoppola.Skipper"
@@ -362,6 +465,8 @@ def tile_open_windows(context, *, category='windows', selected_targets=None):
     targets = [c for c in targets if selected(c)]
     empty_message = f"No open {category} to tile on this workspace"
     if selected_targets is not None:
+        if any(excluded(c) for c in selected_targets):
+            raise RuntimeError("A selected window is excluded from layout changes.")
         targets = list(selected_targets)
         others = []
     if not targets:
@@ -374,6 +479,7 @@ def tile_open_windows(context, *, category='windows', selected_targets=None):
         return belongs(current)
 
     valid = [t for t in targets if t["address"] in live
+             and not excluded(live[t["address"]])
              and live[t["address"]].get("mapped", True)
              and still_in_place(live[t['address']], t)
              and all(live[t["address"]].get(k) == t.get(k) for k in ("pid", "class", "stableId"))]
@@ -449,6 +555,8 @@ def tile_open_windows(context, *, category='windows', selected_targets=None):
 
 
 def hide_window_targets(targets, workspace, *, dismiss_hidden=False):
+    excluded = layout_exclusion()
+    targets = [t for t in targets if not excluded(t)]
     hidden_workspace = f'special:skipper-tile-{workspace}'
     skipped = 0
     minimized = 0
@@ -456,7 +564,7 @@ def hide_window_targets(targets, workspace, *, dismiss_hidden=False):
         address = target['address']
         current = next((c for c in json.loads(run(['hyprctl', 'clients', '-j']))
                         if c.get('address') == address), None)
-        if (current is None or not current.get('mapped', True)
+        if (current is None or excluded(current) or not current.get('mapped', True)
                 or current.get('workspace', {}).get('id') != workspace
                 or any(current.get(k) != target.get(k) for k in ('pid', 'class', 'stableId'))):
             skipped += 1
@@ -477,6 +585,83 @@ def hide_window_targets(targets, workspace, *, dismiss_hidden=False):
                 run(['hyprctl', 'dispatch', f'hl.dsp.workspace.toggle_special("skipper-tile-{workspace}")'])
                 break
     return minimized, skipped
+
+
+def show_selected_window(target):
+    """Restore a Skipper-hidden window to its original workspace and focus it."""
+    target = window_target({'active': target})
+    address = target['address']
+    def current_target():
+        clients = json.loads(run(['hyprctl', 'clients', '-j']))
+        current = next((c for c in clients
+                        if c.get('address') == address), None)
+        if (current is None or not current.get('mapped', True)
+                or any(current.get(k) != target.get(k) for k in ('pid', 'class', 'stableId'))):
+            raise RuntimeError('That window closed or changed. No other window was shown.')
+        return current, clients
+    current, clients = current_target()
+    origin = re.fullmatch(r'special:skipper-tile-([1-9][0-9]*)', current.get('workspace', {}).get('name', ''))
+    if origin:
+        workspace = int(origin[1])
+        run(['hyprctl', 'dispatch', f'hl.dsp.window.move({{ workspace = "{workspace}", follow = false, window = "address:{address}" }})'])
+        current, clients = current_target()
+        if current.get('workspace', {}).get('id') != workspace:
+            raise RuntimeError('Could not confirm the hidden window was restored.')
+    raise_for_focus(current, clients)
+    return 'Restored and focused the selected window' if origin else 'Focused the selected window'
+
+
+def matching_app_windows(windows, application):
+    """Resolve an app/category argument against exact known names or live classes."""
+    from window_resolution import BROWSERS
+    from window_vocabulary import spoken
+    name = normalize(application)
+    if name in ('windows', 'open windows', 'any'):
+        return list(windows)
+    if name in ('apps', 'applications'):
+        return [c for c in windows if not is_terminal(c)]
+    if name in ('terminal', 'terminals', 'terminal windows'):
+        return [c for c in windows if is_terminal(c)]
+    if name in ('browser', 'browsers', 'browser windows'):
+        return [c for c in windows if c.get('class', '').lower() in BROWSERS]
+    aliases = {'twitter':'x', 'file managers':'files', 'file manager':'files',
+               'file browser':'files', 'image viewer':'tensaku', 'image viewers':'tensaku'}
+    name = aliases.get(name, name)
+    if name in APPS:
+        return [c for c in windows if c.get('class') in APPS[name]['classes']]
+    classes = ({'chromium','google-chrome','google-chrome-stable','chrome'} if name in ('chrome','chromium')
+               else {'firefox','org.mozilla.firefox'} if name == 'firefox' else None)
+    if classes is not None:
+        return [c for c in windows if c.get('class', '').lower() in classes]
+    # App IDs are local data, never shell commands or substring/title guesses.
+    name = name.removesuffix(' windows').strip()
+    return [c for c in windows if any(name in (normalize(value), spoken(value), spoken(value.rsplit('.', 1)[-1]))
+                                     for value in (c.get('class') or '', c.get('initialClass') or '') if value)]
+
+
+def show_all_windows(context, application):
+    """Raise each matching captured window, restoring Skipper-hidden windows first."""
+    from grammar_engine import Intent
+    from window_resolution import WindowResolution
+
+    resolution = WindowResolution(Intent('show_all_application'), context)
+    targets = matching_app_windows(resolution.windows, application)
+    if not targets:
+        return f'No open {application} windows to show'
+    # End with the most recently used match on top, using the captured ordering.
+    targets = sorted(targets, key=lambda c: c.get('focusHistoryID', 99999), reverse=True)
+    shown = 0
+    failures = []
+    for target in targets:
+        try:
+            show_selected_window(target)
+            shown += 1
+        except RuntimeError as exc:
+            failures.append(str(exc))
+    message = f'Brought {shown} open {application} windows to the front'
+    if failures:
+        message += f' · Could not show {len(failures)} windows: {failures[0]}'
+    return message
 
 
 def hide_current_window(context):
@@ -515,6 +700,7 @@ def hide_windows(context, category):
 
 
 def maximize_foreground(target):
+    require_layout_allowed(target or {})
     target = window_target({'active': target or {}})
     clients = json.loads(run(['hyprctl', 'clients', '-j']))
     current = next((c for c in clients if c.get('address') == target['address']), None)
@@ -540,7 +726,34 @@ def maximize_current_window(target):
     return 'Maximized this window'
 
 
+def move_window_workspace(target, workspace):
+    if type(workspace) is not int or not 1 <= workspace <= 999999999:
+        raise ValueError('Use a positive workspace number.')
+    target = window_target({'active': target})
+    require_layout_allowed(target)
+    if not target.get('pid') or not target.get('stableId'):
+        raise RuntimeError('Could not identify the captured window safely.')
+    address = target['address']
+    def current_window():
+        current = next((c for c in json.loads(run(['hyprctl', 'clients', '-j']))
+                        if c.get('address') == address), None)
+        if (current is None or not current.get('mapped', True)
+                or any(current.get(k) != target.get(k) for k in ('pid', 'class', 'stableId'))):
+            raise RuntimeError('That window closed or changed. No other window was moved.')
+        return current
+    current = current_window()
+    if current.get('workspace', {}).get('id') == workspace:
+        return f'This window is already on workspace {workspace}.'
+    if len(current.get('grouped', [])) > 1:
+        run(['hyprctl', 'dispatch', f'hl.dsp.window.move({{ out_of_group = true, window = "address:{address}" }})'])
+    run(['hyprctl', 'dispatch', f'hl.dsp.window.move({{ workspace = "{workspace}", follow = false, window = "address:{address}" }})'])
+    if current_window().get('workspace', {}).get('id') != workspace:
+        raise RuntimeError('Could not confirm the window moved to the requested workspace.')
+    return f'Moved this window to workspace {workspace}.'
+
+
 def move_other_screen(target):
+    require_layout_allowed(target or {})
     target = window_target({"active": target})
     clients = json.loads(run(["hyprctl", "clients", "-j"]))
     current = next((c for c in clients if c.get("address") == target["address"]), None)
@@ -600,6 +813,40 @@ def terminal_close_target(intent, context):
     return dict(target)
 
 
+
+def all_terminal_targets(context):
+    """Freeze the complete terminal set from the command-start snapshot."""
+    if context is None or 'clients' not in context:
+        raise RuntimeError('Could not identify terminals when the command started. Try again.')
+    return list({c['address']: dict(c) for c in context['clients'] if is_terminal(c)}.values())
+
+
+def close_terminals(targets):
+    """Close only captured identities; preflight the whole batch before dispatch."""
+    if not targets:
+        return 'No open terminal windows.'
+    if any(not is_terminal(target) for target in targets):
+        raise ValueError('Invalid terminal target')
+    clients = json.loads(run(['hyprctl', 'clients', '-j']))
+    remaining = []
+    for target in targets:
+        current = next((c for c in clients if c.get('address') == target['address']), None)
+        if current is None:
+            continue
+        if not is_terminal(current) or any(current.get(k) != target.get(k) for k in ('pid', 'class', 'stableId')):
+            raise RuntimeError('A terminal changed. No windows were closed; try again.')
+        remaining.append(target)
+    requested = 0
+    for target in remaining:
+        try:
+            message = close_terminal(target)
+            if 'already closed' not in message:
+                requested += 1
+        except Exception as exc:
+            raise RuntimeError(f'Stopped after requesting {requested} terminal closes: {exc}') from exc
+    return f'Asked {requested} terminal windows to close. Respond to any confirmations they show.'
+
+
 def close_terminal(target):
     if not is_terminal(target):
         raise ValueError("Invalid terminal target")
@@ -614,19 +861,20 @@ def close_terminal(target):
 
 
 def focus_named_window(target):
-    """Focus the captured terminal identity; a changing title is not identity."""
-    if (not is_terminal(target) or not target.get('stableId') or not target.get('pid')
+    """Focus the captured window identity; a changing title is not identity."""
+    if (not target.get('class') or not target.get('stableId') or not target.get('pid')
             or not re.fullmatch(r'0x[0-9a-fA-F]+', target.get('address', ''))):
         raise ValueError('Invalid named window target')
     clients = json.loads(run(['hyprctl', 'clients', '-j']))
     current = next((c for c in clients if c.get('address') == target['address']), None)
-    if current is None or not is_terminal(current) or any(
+    if current is None or not current.get('mapped', True) or any(
             current.get(key) != target.get(key) for key in ('pid', 'class', 'stableId')):
-        raise RuntimeError('That terminal closed or was replaced. Try the command again.')
-    run(['hyprctl', 'dispatch',
-         f'hl.dsp.window.alter_zorder({{ mode = "top", window = "address:{current["address"]}" }})'])
-    focus(current)
-    return 'Focused ' + (target.get('voice_label') or 'terminal')
+        raise RuntimeError('That window closed or was replaced. Try the command again.')
+    if re.fullmatch(r'special:skipper-tile-[1-9][0-9]*', current.get('workspace', {}).get('name', '')):
+        show_selected_window(target)
+        return 'Focused ' + (target.get('voice_label') or 'window')
+    raise_for_focus(current, clients)
+    return 'Focused ' + (target.get('voice_label') or 'window')
 
 
 def open_terminal():
@@ -748,6 +996,33 @@ def close_selected_window(target):
             return 'Closed the selected window'
         time.sleep(.1)
     return 'Asked the selected window to close. Check it for a confirmation.'
+
+
+def open_url_in_browser_window(url, target):
+    """Open a new tab in one frozen native Chrome/Chromium window."""
+    from window_resolution import identity
+    from url_entry import normalize_url
+    url = normalize_url(url)
+    if (not isinstance(target, dict)
+            or target.get('class', '').lower() not in {'chromium', 'google-chrome', 'google-chrome-stable', 'chrome'}
+            or not re.fullmatch(r'0x[0-9a-fA-F]+', target.get('address', ''))
+            or not target.get('pid') or not target.get('stableId')):
+        raise RuntimeError('Choose a connected Chrome/Chromium window first')
+
+    def verify():
+        active = json.loads(run(['hyprctl', 'activewindow', '-j']))
+        if identity(active) != identity(target) or not active.get('mapped', True):
+            raise RuntimeError('Selected browser changed or lost focus; website was not opened')
+
+    def bring_forward():
+        clients = json.loads(run(['hyprctl', 'clients', '-j']))
+        current = next((c for c in clients if identity(c) == identity(target) and c.get('mapped', True)), None)
+        if current is None:
+            raise RuntimeError('Selected browser closed or changed; website was not opened')
+        focus(current)
+        verify()
+
+    return connection.open_url_in_window(url, bring_forward, verify)
 
 
 def close_browser_tabs(target):

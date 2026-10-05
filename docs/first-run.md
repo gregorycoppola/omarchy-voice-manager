@@ -1,68 +1,33 @@
-# First local run — September 13, 2026
+# First run
 
-Successfully ran the Parakeet TDT 0.6B v3 INT8 community ONNX conversion on an
-Apple M2 MacBook Pro (13-inch, 2022), ARM Linux / Omarchy,
-kernel `7.1.13-2-1-ARCH`, Python 3.14.7.
+Skipper 0.3.1 starts with a text command picker. It does not load a speech model
+or record microphone audio.
 
-## Memory and storage
+## Install
 
-Before setup, `free -h` reported 7.4 GiB usable physical RAM, 2.0 GiB used,
-5.4 GiB available, and no swap. Disk had 35 GiB available.
-The selected model files total about 639 MiB on disk.
+Follow the plugin installation commands in [README](../README.md). Setup creates
+a virtual environment using system PyGObject/Cairo and validates the intent
+dataset bundled inside the plugin. No second repository is downloaded. Developers can set `OMARCHY_INTENT_DATASET=/path/to/dataset`
+when both setting up and running Skipper to use an explicit external checkout.
 
-This machine's measured peak process RSS for an 11-second clip was
-**1285.6 MiB (1.26 GiB)**, including model loading and transcription. This is
-not a universal RAM requirement: longer audio, batching, other runtimes and
-precision settings change it. Reserve roughly 2 GiB as an initial planning
-allowance for short dictation and measure again as the app grows.
+## Try the picker
 
-For context, an independent report in the
-[sherpa-onnx tracker](https://github.com/k2-fsa/sherpa-onnx/issues/2626)
-measured 1.23 GB for loading an INT8 Parakeet model on iOS. That was a different
-platform/runtime; the result above is our actual Linux measurement.
+1. Press Super+R when the optional shortcut is installed.
+2. Choose a verb or type a command. Tab accepts the highlighted choice.
+3. Continue through argument levels. Enter runs a completed command.
+4. Back/Shift+Tab returns; Escape cancels.
 
-## Speech test
+Open → file initially shows local recent-file history. Typing searches filenames
+in the home directory. Switch offers workspaces, audio outputs, and microphones.
+Enable/Disable offers explicit system states; Connect/Disconnect lists paired
+Bluetooth devices. Unavailable backends are reported in the picker.
 
-Input: 11-second JFK speech sample from
-[whisper.cpp](https://github.com/ggml-org/whisper.cpp/blob/1da4dc82fa7996d4edda05890dca65aeceaafd6d/samples/jfk.wav).
-The downloaded sample is local and ignored, not included in this repository.
-SHA-256: `59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e`.
+## Local data
 
-Configuration: CPUExecutionProvider, four intra-op threads, one inter-op thread,
-INT8 encoder and decoder, pinned model revision in `model-manifest.json`.
+Command history and settings stay outside the source checkout. File-search results
+and recent-file paths can contain private information; do not share runtime status
+files or history databases. See [data ownership](data-ownership.md).
 
-| Measurement | Result |
-| --- | --- |
-| Model loading | 0.833 seconds |
-| Transcription | 0.417 seconds |
-| Audio duration / transcription time | 26.38× |
-| Peak process RSS | 1285.6 MiB |
-
-Output:
-
-> And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.
-
-Words matched the familiar sample. This is a functional smoke test, not a
-representative accuracy evaluation or a cold-disk startup benchmark.
-Loading and transcription timings exclude Python startup and imports.
-
-The test replaced Python socket connect/connect_ex/getaddrinfo with functions
-that raise on use and ran Skipper through `runpy`; it passed. Skipper also sets
-`HF_HUB_OFFLINE=1`, uses explicit local model paths and a CPU-only provider.
-This validates the exercised path without Python network access; it is not an
-OS-level network sandbox.
-
-The input-boundary test passed for stereo audio, unsupported sample rate, empty
-audio, and audio exceeding 30 seconds. No microphone recording has been tested
-yet. No background service or desktop shortcut was installed.
-
-## Next hands-on test
-
-```bash
-cd ~/Projects/skipper
-.venv/bin/python skipper.py record --seconds 10
-```
-
-Wait for “Speak now,” then speak a short sentence, including a few names or
-technical terms. Inspect the transcript and the timing report. This is the
-next test before building a persistent model service and push-to-talk interface.
+Voice input through an optional external adapter remains planned. Previously saved
+recordings can still be played in History; custom recognition and retranscription
+are no longer part of Skipper.

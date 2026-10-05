@@ -22,9 +22,8 @@ class UnknownCorrectionTests(unittest.TestCase):
             self.addCleanup(context.stop)
 
     def unknown(self, text='towel these with internet'):
-        with patch('runtime.save_transcript', return_value=(text, {})), \
-             patch.object(self.app, 'execute') as execute:
-            self.app.transcribe(self.root / 'test.wav', {}, commands=True)
+        with patch.object(self.app, 'execute') as execute:
+            self.app.interpret(text, {}, commands=True, source='speech')
         execute.assert_not_called()
         return self.app.state['correction']['token']
 
@@ -53,10 +52,9 @@ class UnknownCorrectionTests(unittest.TestCase):
 
     def test_recognized_commands_never_request_word_correction(self):
         for text in ('open chrome', 'open dis cord'):
-            with patch('runtime.save_transcript', return_value=(text, {})), \
-                 patch.object(self.app, 'execute', return_value='Done') as execute, \
+            with patch.object(self.app, 'execute', return_value='Done') as execute, \
                  patch.object(self.app, 'offer_correction') as offer:
-                self.app.transcribe(self.root / 'test.wav', {}, commands=True)
+                self.app.interpret(text, {}, commands=True, source='speech')
             execute.assert_called_once()
             offer.assert_not_called()
 

@@ -6,9 +6,11 @@ import os
 from pathlib import Path
 import re
 import shutil
+import shlex
+import subprocess
 
 from grammar_engine import Word, compile_grammar, normalize
-from command_catalog import INSTALLED_APP_RULES
+from command_catalog import INSTALLED_APP_RULES, GRAMMAR
 
 
 @dataclass(frozen=True)
@@ -69,7 +71,55 @@ def reserved_app_forms(grammar):
             for prefix in ('open ', 'launch ') if phrase.startswith(prefix)}
 
 
-def discover_installed_apps(*, roots=None, reserved_forms=()):
+def app_suggestions(apps):
+    """Group discoverable launch phrases into one selector row per command."""
+    rows = {}
+    for expansion in apps.expansions:
+        row = rows.setdefault(expansion.command, dict(
+            command=expansion.command, text=expansion.phrase, forms=[], optionalOpen=True))
+        if expansion.phrase not in row['forms']:
+            row['forms'].append(expansion.phrase)
+    for app in apps.apps:
+        row = rows.get('desktop-app:' + app.desktop_id)
+        if row is not None:
+            row['text'] = 'open ' + app.name
+    result = list(rows.values())
+    terminal_id = configured_terminal_id()
+    terminal = apps.targets.get(terminal_id)
+    if terminal is not None:
+        result.insert(0, dict(command='terminal:new', text='open terminal',
+                             forms=['open terminal', 'open a terminal', 'open new terminal',
+                                    'open a new terminal'], optionalOpen=True,
+                             description='Default terminal: ' + terminal.name))
+    return result
+
+
+def configured_terminal_id():
+    """Ask the default-terminal resolver without launching a terminal."""
+    if not shutil.which('xdg-terminal-exec'):
+        return None
+    try:
+        result = subprocess.run(['xdg-terminal-exec', '--print-id'], capture_output=True,
+                                text=True, timeout=2)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode:
+        return None
+    return result.stdout.strip().split(':', 1)[0].removesuffix('.desktop')
+
+
+def app_window_names():
+    """Use explicit launcher window classes, never browser title guesses."""
+    names = {}
+    for app in discover_installed_apps(reserved_forms=reserved_app_forms(GRAMMAR)).apps:
+        entry = _entry(app.path)
+        window_class = entry.get('StartupWMClass', '').strip() if entry is not None else ''
+        if window_class:
+            names.setdefault(window_class, []).append(app)
+    return {key: apps[0] for key, apps in names.items() if len(apps) == 1}
+
+
+def discover_installed_apps(*, roots=None, reserved_forms=(), for_picker=False):
     """Return launchable desktop entries with unambiguous spoken names only."""
     candidates = []
     for desktop_id, path in _desktop_paths(application_dirs() if roots is None else roots).items():
@@ -79,13 +129,23 @@ def discover_installed_apps(*, roots=None, reserved_forms=()):
         if entry.get('Hidden', '').lower() == 'true' or entry.get('NoDisplay', '').lower() == 'true':
             continue
         categories = set(entry.get('Categories', '').split(';'))
-        if (entry.get('Terminal', '').lower() == 'true' or entry.get('DBusActivatable', '').lower() == 'true'
-                or 'TerminalEmulator' in categories):
+        if (not for_picker and (entry.get('Terminal', '').lower() == 'true'
+                or entry.get('DBusActivatable', '').lower() == 'true'
+                or 'TerminalEmulator' in categories)):
             continue
         executable = entry.get('TryExec', '').strip()
         if executable and not shutil.which(executable):
             continue
-        forms = _forms(entry, desktop_id)
+        if for_picker:
+            try:
+                executable = shlex.split(entry.get('Exec', ''))[0]
+            except (ValueError, IndexError):
+                continue
+            if not shutil.which(executable):
+                continue
+        forms = (tuple(dict.fromkeys(filter(None, (normalize(entry.get('Name', '')),
+                                                   _spoken(entry.get('Name', ''))))))
+                 if for_picker else _forms(entry, desktop_id))
         if forms:
             candidates.append(InstalledApp(desktop_id, entry.get('Name', '').strip(), path, forms))
     reserved = set(reserved_forms)

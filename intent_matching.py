@@ -43,6 +43,7 @@ class ParseResult:
     candidates: tuple[Candidate, ...] = ()
     reason: str | None = None
     correction: dict | None = None
+    launch_options: dict | None = None
 
     @property
     def intent(self):
@@ -62,6 +63,7 @@ class ParseResult:
                 "grammar_revision": GRAMMAR_REVISION,
                 "method": self.method, "intent": self.intent.to_dict() if self.intent else None,
                 "reason": self.reason, "correction": self.correction,
+                "launch_options": self.launch_options,
                 "candidates": [c.to_dict() for c in self.candidates]}
 
 
@@ -179,6 +181,52 @@ class IntentMatcher:
             candidate = Candidate(specific, intent, phrase, 1.0, 'grammar', INTENTS[specific]['label'],
                                   tuple(e for e in EXPANSIONS if e.phrase == phrase and e.intent == intent))
             return ParseResult(text, 'matched', 'exact', candidate, (candidate,))
+        if phrase not in GRAMMAR and not set(phrase.split()) & {"no", "not", "never", "don't", "dont", "cancel"}:
+            for rule in PROVIDER['free_text_rules']:
+                if rule.get('argument') != 'application':
+                    continue
+                for pattern in sorted(rule['patterns'], key=len, reverse=True):
+                    match = re.fullmatch(re.escape(pattern).replace('<application>', '(.{1,80})'), phrase)
+                    if not match:
+                        continue
+                    application = match[1].strip()
+                    if not application:
+                        continue
+                    intent = Intent(rule['intent_type'], (('application', application),))
+                    intent.canonical_plan()
+                    candidate = Candidate(rule['command'].format(application=application), intent,
+                                          phrase, 1.0, 'grammar', rule['label'])
+                    return ParseResult(text, 'matched', 'exact', candidate, (candidate,))
+        for rule in PROVIDER.get('numeric_rules', []):
+            for pattern in rule['patterns']:
+                match = re.fullmatch(re.escape(pattern).replace('<workspace>', r'([1-9][0-9]{0,8})'), phrase)
+                if match and phrase not in GRAMMAR:
+                    intent = Intent(rule['intent_type'], (('workspace', match[1]),))
+                    intent.canonical_plan()
+                    candidate = Candidate(rule['command'].format(workspace=match[1]), intent,
+                                          phrase, 1.0, 'grammar', rule['label'])
+                    return ParseResult(text, 'matched', 'exact', candidate, (candidate,))
+        # Resolve named workspace destinations only from this capture's exact
+        # focus vocabulary. Never fall back to moving the current window.
+        named_workspace = re.fullmatch(r'move (.+) to workspace ([1-9][0-9]{0,8})', phrase)
+        if named_workspace and phrase not in GRAMMAR:
+            name, workspace = named_workspace.groups()
+            matches = {}
+            for expansion in extra_expansions:
+                if expansion.intent.type != 'focus_window' or expansion.phrase != 'focus ' + name:
+                    continue
+                key = dict(expansion.intent.arguments)['window']
+                intent = Intent('move_named_window_workspace', (('window', key), ('workspace', workspace)))
+                intent.canonical_plan()
+                matches[key] = Candidate(f'move-window-workspace:{key}:{workspace}', intent,
+                    phrase, 1.0, 'window', f'Move {name} to workspace {workspace}')
+            candidates = tuple(matches.values())
+            if len(candidates) == 1:
+                return ParseResult(text, 'matched', 'exact', candidates[0], candidates)
+            return ParseResult(text, 'ambiguous' if candidates else 'unrecognized',
+                               candidates=candidates, reason='Name one open window to move.')
+        if phrase not in GRAMMAR and phrase.startswith('move ') and 'workspace' in phrase.split():
+            return ParseResult(text, 'unrecognized', reason='Name a positive workspace number, for example “move this window to workspace 3”.')
         pair_rule = PROVIDER['free_text_rules'][0]
         pair_pattern = re.escape(pair_rule['pattern']).replace(r'<first>', '(.+?)').replace(r'<second>', '(.+)')
         pair = re.fullmatch(pair_pattern, phrase)
@@ -235,6 +283,8 @@ class IntentMatcher:
         named_close = re.fullmatch(r'close (?:the )?.+ (?:terminal|window|codex)', phrase)
         for candidate in entries:
             if candidate.command in EXACT_ONLY_COMMANDS or candidate.source in ('custom', 'installed_app'):
+                continue
+            if phrase.startswith('focus ') and candidate.intent.type != 'focus_window':
                 continue
             if named_close and candidate.intent.type != 'close_named_window':
                 continue

@@ -16,7 +16,6 @@ class RuntimeTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.data = Path(directory.name)
         self.app = VoiceRuntime(self.data, self.data / 'status.json')
-        self.app.model = object()
         self.app.busy = True
         self.idle = patch('runtime.GLib.idle_add', side_effect=lambda fn, *args: fn(*args))
         self.idle.start()
@@ -26,9 +25,8 @@ class RuntimeTests(unittest.TestCase):
         self.addCleanup(popup.stop)
 
     def transcribe(self, text, commands=True, context=None):
-        with patch('runtime.save_transcript', return_value=(text, {})), \
-             patch.object(self.app, 'execute', return_value='Done') as execute:
-            self.app.transcribe(self.data / 'test.wav', context, commands)
+        with patch.object(self.app, 'execute', return_value='Done') as execute:
+            self.app.interpret(text, context, commands, source='speech')
         return execute
 
     def test_fuzzy_parse_saves_before_running_and_preserves_structure(self):
@@ -68,20 +66,12 @@ class RuntimeTests(unittest.TestCase):
             self.transcribe('finish this', context={'active': target}).assert_not_called()
         self.assertEqual(self.app.state['state'], 'Confirm')
 
-    def test_failed_action_releases_busy_and_accepts_the_next_recording(self):
-        with patch('runtime.save_transcript', return_value=('open chrome', {})), \
-             patch.object(self.app, 'execute', side_effect=RuntimeError('Launcher failed')):
-            self.app.transcribe(self.data / 'test.wav', {}, True)
+    def test_failed_action_releases_busy_and_accepts_the_next_command(self):
+        with patch.object(self.app, 'execute', side_effect=RuntimeError('Launcher failed')):
+            self.app.interpret('open chrome', {}, True, source='speech')
         self.assertEqual(self.app.state['state'], 'Error')
         self.assertFalse(self.app.busy)
-        self.assertIsNone(self.app.recorder)
-        with patch('runtime.capture_window_context', return_value={}), \
-             patch.object(self.app, 'focused_monitor', return_value='DP-1'), \
-             patch('runtime.subprocess.Popen'), patch('runtime.threading.Thread'), \
-             patch('runtime.GLib.timeout_add'):
-            self.app.press()
-        self.assertEqual(self.app.state['state'], 'Recording')
-        self.assertTrue(self.app.busy)
+        self.transcribe('open chrome').assert_called_once()
 
     def test_confirmation_retains_target_and_rejects_stale_approval(self):
         target = {'class': 'foot', 'address': '0x123', 'pid': 1, 'title': 'Busy terminal'}
@@ -111,20 +101,6 @@ class RuntimeTests(unittest.TestCase):
             self.app.confirm(token)
             thread.assert_not_called()
 
-    def test_capture_precedes_popup_reveal(self):
-        self.app.busy = False
-        events = []
-        process = Mock()
-        process.poll.return_value = None
-        with patch('runtime.capture_window_context', side_effect=lambda: events.append('capture') or {}), \
-             patch.object(self.app, 'focused_monitor', return_value='DP-1'), \
-             patch('runtime.subprocess.Popen', return_value=process), \
-             patch('runtime.threading.Thread'), patch('runtime.GLib.timeout_add'), \
-             patch.object(self.app, 'publish', side_effect=lambda: events.append('publish')):
-            self.app.start_recording()
-        self.assertEqual(events, ['capture', 'publish'])
-        self.app.release()
-        process.send_signal.assert_called_once_with(signal.SIGINT)
 
     def test_quit_waits_for_processing_and_then_stops(self):
         with patch.object(self.app, 'quit') as quit, patch('runtime.connection.close'):
@@ -134,9 +110,20 @@ class RuntimeTests(unittest.TestCase):
             quit.assert_called_once()
         self.assertEqual(self.app.state['state'], 'Stopped')
 
-    def test_missing_recording_and_traversal_retry_are_ignored(self):
-        self.app.busy = False
-        with patch('runtime.threading.Thread') as thread:
-            for stem in ('../outside', '/tmp/outside', 'missing'):
-                self.app.retry(stem)
-            thread.assert_not_called()
+
+    def test_yes_no_only_answer_matching_pending_confirmation(self):
+        target = {'class': 'foot', 'address': '0x123', 'pid': 1, 'title': 'Busy terminal'}
+        self.app.offer_confirmation('close:terminal', target, 'close terminal', False)
+        token = self.app.pending[0]
+        with patch.object(self.app, 'confirm') as confirm:
+            self.app.answer_confirmation('stale', 'yes')
+            confirm.assert_not_called()
+            self.app.answer_confirmation(token, 'yesterday')
+            confirm.assert_not_called()
+            self.assertEqual(self.app.state['state'], 'Confirm')
+            self.app.busy = True
+            self.app.interpret('yes please', {'confirmation_token': token}, source='speech')
+            confirm.assert_called_once_with(token)
+        self.app.answer_confirmation(token, 'no')
+        self.assertIsNone(self.app.pending)
+        self.assertEqual(self.app.state['state'], 'Ready')

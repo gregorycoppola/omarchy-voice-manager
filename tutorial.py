@@ -1,18 +1,18 @@
-"""A lightweight, read-only introduction to Skipper's voice commands."""
+"""A lightweight, read-only introduction to Skipper's desktop commands."""
 import gi
 gi.require_version('Gtk', '4.0')
 from gi.repository import Gtk
 
-# Canonical spoken examples are checked against the command catalog in tests.
+# Canonical command examples are checked against the command catalog in tests.
 LESSONS = (
-    ('Start here', 'Speak, release, and check the result',
+    ('Start here', 'Type, choose arguments, and run',
      'Start Skipper from its taskbar dropdown and wait for Ready. With the default shortcut installed, '
-     'hold Super (Command) + R, say one command, then release. Skipper transcribes after you release. '
-     'The dropdown shows what it heard and the action it chose.',
+     'press Super + R, type a command, and use Tab to choose its arguments. Enter runs the completed command. '
+     'The dropdown shows the available commands and arguments.',
      (('show all windows', 'Open a window picker. Select a window to bring it forward.'),),
      'To try a command, focus the app you want to work with first. Reading this tutorial does not run any commands.'),
     ('Arrange windows', 'Choose what you want to see',
-     'Tiling uses the workspace focused when you start speaking. You can switch views repeatedly; '
+     'Tiling uses the workspace focused when you open the picker. You can switch views repeatedly; '
      'Skipper remembers windows hidden by an earlier view on that workspace.',
      (('tile all terminals', 'Tile terminals and hide other apps.'),
       ('tile all browsers', 'Tile browser windows and hide everything else.'),
@@ -22,11 +22,12 @@ LESSONS = (
     ('Hide and restore', 'Put windows away without closing them',
      'Hide commands put windows out of view while their programs keep running. They do not run the tiling step '
      'or restore windows you already hid.',
-     (('hide this window', 'Hide the window focused when you start speaking.'),
+     (('hide this window', 'Hide the window focused when you open the picker.'),
+      ('minimize this window', 'Put that same window away without closing it.'),
       ('hide all terminals', 'Hide terminals on that workspace.'),
       ('hide all apps', 'Hide non-terminal apps on that workspace.'),
       ('tile all windows', 'Restore hidden windows and arrange them in a grid.')),
-     'Use these hide phrases exactly. Focus another app before saying “hide this window”, or you will hide this tutorial.'),
+     'Use these phrases exactly. Focus another app before choosing “hide this window” or “minimize this window”, or you will hide this tutorial.'),
     ('Open and move', 'Bring an app into view',
      'Supported apps must already be installed. Window commands work locally; opening a website may need '
      'network access. Gmail and GitHub tab commands also need the optional browser connection.',
@@ -35,10 +36,10 @@ LESSONS = (
       ('open discord', 'Open or bring forward Discord.'),
       ('maximize this window', 'Maximize the window you were using.'),
       ('move this window to the other screen', 'Move that window to another connected screen.')),
-     '“This window” is captured when recording starts. Moving to another screen requires at least two screens.'),
+     '“This window” is captured when the picker opens. Moving to another screen requires at least two screens.'),
     ('Terminal names', 'Pick a terminal by its title',
      'Skipper uses terminal titles and project names to identify windows. For a terminal whose title contains '
-     '“My project”, you can say “focus my project”, “maximize my project”, or '
+     '“My project”, you can type “focus my project”, “maximize my project”, or '
      '“move my project to the other screen”. These are examples: use a name from your own terminal titles.',
      (),
      'If several terminals share a project name, use a more specific task title. Explorer’s Live windows page '
@@ -46,11 +47,11 @@ LESSONS = (
     ('Close and troubleshoot', 'Check the target before closing',
      'Closing can stop programs in a terminal. Skipper asks for confirmation when it detects running programs '
      'or cannot determine their state, unless you turned that preference off.',
-     (('close this terminal', 'Close the terminal focused when you start speaking.'),
+     (('close this terminal', 'Close the terminal focused when you open the picker.'),
       ('close terminal', 'Close the most recently used terminal across workspaces.'),
       ('close chrome', 'Ask a Chrome / Chromium window to close.')),
      'If a command goes wrong, open History in the dropdown. Edit the words you meant, select the intended action, '
-     'and save a correction for next time. Use Explorer to inspect commands and learned phrases. Say one command at a time. Quit in the dropdown stops Skipper’s '
+     'and save a correction for next time. Use Explorer to inspect commands and learned phrases. Use Add step to queue commands. Quit in the dropdown stops Skipper’s '
      'background process; closing this tutorial does not.'),
 )
 
@@ -79,7 +80,7 @@ class TutorialWindow(Gtk.ApplicationWindow):
         for side in ('top', 'bottom', 'start', 'end'):
             getattr(root, 'set_margin_' + side)(20)
         root.append(text_label('Your desktop, by voice', 'title-1'))
-        root.append(text_label('A quick guide to speaking with Skipper.', 'dim-label'))
+        root.append(text_label('A quick guide to choosing commands with Skipper.', 'dim-label'))
         self.stack = Gtk.Stack(vexpand=True, hexpand=True)
         self.stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
         body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20, vexpand=True)

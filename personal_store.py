@@ -11,7 +11,7 @@ from command_store import CommandStore
 
 DEFAULT_DATA = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local/share')) / 'skipper'
 DEFAULT_STATE = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'skipper'
-SECTIONS = {'aliases.json': ('aliases', dict), 'corrections.json': ('rules', dict),
+SECTIONS = {'websites.json': ('sites', list), 'aliases.json': ('aliases', dict), 'corrections.json': ('rules', dict),
             'actions.json': ('actions', dict), 'settings.json': ('confirm_terminal_close', bool)}
 
 

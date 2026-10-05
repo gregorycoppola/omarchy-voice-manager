@@ -188,5 +188,60 @@ class BrowserConnection:
                 self.close()
                 raise
 
+    def open_url_in_window(self, url, focus_target, verify_target):
+        """Create a tab only after native and extension window focus agree."""
+        from url_entry import normalize_url
+        url = normalize_url(url)
+        with self.lock:
+            try:
+                if self.process is None or self.process.poll() is not None:
+                    self.close()
+                    self.connect()
+                script = (ROOT / 'browser_open.js').read_text()
+
+                def invoke(phase, window_id=None):
+                    code = '''async (page) => {
+                        const prefix = PREFIX;
+                        const phase = PHASE;
+                        let control = page.context().pages().find(p => p.url().startsWith(prefix));
+                        if (!control && phase === 'prepare') {
+                            control = await page.context().newPage();
+                            await control.goto(prefix + 'status.html');
+                        }
+                        if (!control) throw new Error('Browser control page closed');
+                        if (phase === 'prepare') return {prepared: true};
+                        return await control.evaluate(async ({phase, windowId, url}) => {
+                            SCRIPT
+                            return phase === 'inspect' ? await inspectWebsiteWindow()
+                                : await openWebsiteInWindow(windowId, url);
+                        }, {phase, windowId: WINDOW_ID, url: URL_VALUE});
+                    }'''.replace('PREFIX', json.dumps(EXTENSION)).replace('PHASE', json.dumps(phase)).replace('SCRIPT', script).replace('WINDOW_ID', json.dumps(window_id)).replace('URL_VALUE', json.dumps(url))
+                    result = self.request('tools/call', dict(name='browser_run_code_unsafe', arguments={'code': code}))
+                    for content in result.get('content', []):
+                        if content.get('type') == 'text':
+                            section = content['text'].split('### Result\n', 1)
+                            if len(section) == 2:
+                                value, _ = json.JSONDecoder().raw_decode(section[1].lstrip())
+                                if isinstance(value, dict):
+                                    return value
+                    raise RuntimeError('Browser did not confirm the website operation')
+
+                if invoke('prepare').get('prepared') is not True:
+                    raise RuntimeError('Browser control page unavailable')
+                focus_target()
+                selected = invoke('inspect')
+                if type(selected.get('windowId')) is not int:
+                    raise RuntimeError('Browser window identity unavailable')
+                verify_target()
+                result = invoke('open', selected['windowId'])
+                if (result.get('windowId') != selected['windowId']
+                        or type(result.get('tabId')) is not int or result.get('opened') is not True):
+                    raise RuntimeError('Browser did not confirm opening the website')
+                return result
+            except Exception:
+                # Never retry a mutation: a timed-out call may have opened its tab.
+                self.close()
+                raise
+
 
 connection = BrowserConnection()

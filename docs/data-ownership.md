@@ -6,7 +6,10 @@
   grammar/vocabulary/bindings, browser spelling forms, rule priority, and window-name forms.
 - Skipper owns parsing algorithms, desktop discovery, executable handlers,
   safety/confirmation rules, UI, and persistence. A dataset addition cannot invent
-  an executor. Dynamic window names and identities come from the current desktop.
+  an executor. Skipper's workspace-switch adapter activates the shared catalog's
+  `workspace.switch` template for the existing 1–10 workspace vocabulary until
+  the provider snapshot supplies that binding. Dynamic window names and identities
+  come from the current desktop.
 - Personal aliases, corrections (including their audit trail), named shortcuts,
   preferences, and command history live in SQLite outside every Git checkout.
 
@@ -39,24 +42,28 @@ shared intent data and are not uploaded.
 4. Confidence-filtered fuzzy parsing. Named shortcuts and installed-app names are
    exact-only; destructive/sensitive command guards and confirmations still apply.
 
-The history dropdown has its own fuzzy *search*: it suggests previous wording,
-then submits the selected text to this same parser. It never replays a saved target.
+The written-command dropdown searches supported intent phrases and current dynamic
+commands. Saved command wording remains in SQLite and never becomes a menu source;
+counts of resolved typed commands rank supported suggestions by frequency.
+Selecting a suggestion submits its text to the same parser; it never replays a saved target.
 
 ## Installation
 
 The Omarchy manifest and setup command are in this application repository.
-`python plugin_setup.py install --shortcut --autostart` fetches the public dataset
-commit pinned in `dataset-reference.json`, validates it, installs it under
-`~/.local/share/skipper/intent-dataset`, prepares the Python environment and speech
-model, and installs both Super+R and Super+Shift+R shortcuts. SQLite is initialized
-for the installing user; no developer history is distributed.
+`python plugin_setup.py install --shortcut --autostart` validates the bundled
+intent dataset, prepares the Python environment, initializes local SQLite, and
+installs launchers plus the optional Super+R shortcut and login integration.
+No speech model or second GitHub repository is downloaded.
 
-`--dataset /path/to/checkout` selects an explicit dataset instead. `--text-only`
-skips the speech-model download; launch with `SKIPPER_TEXT_ONLY=1` for keyboard mode.
-The runtime resolves an explicit `OMARCHY_INTENT_DATASET` first, the development
-sibling checkout second, and the installed snapshot third. Normal command handling
-never fetches GitHub. Dataset upgrades happen during explicit setup, preserve one
-previous snapshot, and require a runtime restart.
+The runtime uses `bundled/intents` inside its own checkout. Updating the plugin
+updates the bundle with it; restart Skipper to load the new version. Old copies
+under `~/.local/share/skipper/intent-dataset` are preserved but no longer selected.
+Sibling checkouts are never selected implicitly.
 
-The dataset is public. Application development still stays private; publishing
-an updated application plugin remains a separate public snapshot release.
+Developers can set `OMARCHY_INTENT_DATASET=/absolute/path` explicitly for setup
+and runtime. This trusted override loads both catalog data and Python reader code
+from that path. The former `--dataset` setup flag is replaced by this environment
+variable; normal users need neither.
+
+Shared source is maintained separately, while every application release ships a
+compatible licensed snapshot. Personal data is never included in that bundle.

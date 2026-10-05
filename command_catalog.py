@@ -1,5 +1,5 @@
 """Skipper adapter views of the external intent dataset. No authored wording lives here."""
-from dataset_source import PROVIDER, DATASET_REVISION
+from dataset_source import CATALOG, PROVIDER, DATASET_REVISION
 from grammar_engine import Rule, Word, compile_grammar
 
 
@@ -20,12 +20,22 @@ VOCABULARY = {name: tuple(Word(word['id'], word['label'], tuple(word['forms']))
 BROWSER = VOCABULARY['browser'][0]
 APP_WORDS = VOCABULARY['app']
 SCHEMAS = {name: {key: tuple(values) for key, values in arguments.items()}
-           for name, arguments in PROVIDER['executor_schemas'].items()}
-RULES = tuple(load_rule(row) for row in PROVIDER['rules'])
+          for name, arguments in PROVIDER['executor_schemas'].items()}
+# The shared catalog defines workspace.switch, while this provider snapshot has
+# no executor binding yet. Activate its two direct templates for the same 1–10
+# workspace vocabulary already used by move_window_workspace.
+_switch_patterns = tuple(row['pattern'].lower().replace('<workspace>', '<workspace_number>')
+                         for row in reversed(CATALOG.intents['workspace.switch']['grammar'][:2]))
+SCHEMAS['switch_workspace'] = {'workspace': tuple(word.id for word in VOCABULARY['workspace_number'])}
+RULES = tuple(load_rule(row) for row in PROVIDER['rules']) + (
+    Rule('switch_workspace', _switch_patterns, 'switch_workspace',
+         (('workspace', '$workspace_number'),), 'workspace:switch:{workspace_number}',
+         'Switch to workspace {workspace_number}'),)
 WINDOW_RULES = tuple(load_rule(row) for row in PROVIDER['window_rules'])
 INSTALLED_APP_RULES = tuple(load_rule(row) for row in PROVIDER['installed_app_rules'])
 MOVE_PATTERNS = next(rule.patterns for rule in WINDOW_RULES if rule.id == 'move_named_window')
 EXACT_ONLY_COMMANDS = set(PROVIDER['exact_only_commands'])
+EXACT_ONLY_COMMANDS.update(f'workspace:switch:{number}' for number in SCHEMAS['switch_workspace']['workspace'])
 NO_LEARN_COMMANDS = set(PROVIDER['no_learn_commands'])
 
 EXPANSIONS = compile_grammar(RULES, VOCABULARY, SCHEMAS)
@@ -48,3 +58,10 @@ for alias, target in PROVIDER['compatibility_aliases'].items():
     INTENTS[alias] = {'label': INTENTS[target]['label'], 'phrases': []}
 
 GRAMMAR_REVISION = DATASET_REVISION
+
+# One suggestion per executable command, with every supported form searchable.
+_suggestion_order = list(dict.fromkeys(PROVIDER.get('suggested_commands', []) + list(INTENTS)))
+COMMAND_SUGGESTIONS = [dict(command=command, text=INTENTS[command]['phrases'][0],
+                            forms=list(INTENTS[command]['phrases']))
+                       for command in _suggestion_order
+                       if command in INTENTS and INTENTS[command]['phrases']]

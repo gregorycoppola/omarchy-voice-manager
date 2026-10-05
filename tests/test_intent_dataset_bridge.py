@@ -16,7 +16,7 @@ class IntentDatasetBridgeTests(unittest.TestCase):
         cls.bridge = IntentDatasetBridge()
 
     def test_referenced_dataset_and_synthetic_phrase(self):
-        self.assertEqual(len(self.bridge.outcomes), 223)
+        self.assertEqual(len(self.bridge.outcomes), 227)
         result = self.bridge.preview("Please open the browser.")
         self.assertEqual(result.status, "single")
         self.assertEqual(result.intent_ids, ("browser.open",))

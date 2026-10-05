@@ -26,5 +26,5 @@ shell.write_text(json.dumps(data,indent=2)+'\n')
 launcher = str(root/'launch.sh').replace('\\','\\\\').replace('"','\\"').replace('`','\\`').replace('$','\\$').replace('%','%%')
 autostart = config/'autostart/skipper.desktop'
 autostart.parent.mkdir(parents=True,exist_ok=True)
-autostart.write_text('[Desktop Entry]\nType=Application\nName=Skipper\nComment=Background voice commands\nExec="'+launcher+'"\nTerminal=false\n')
+autostart.write_text('[Desktop Entry]\nType=Application\nName=Skipper\nComment=Background desktop commands\nExec="'+launcher+'"\nTerminal=false\n')
 print(f'Installed Skipper bar widget. Shell config backup: {backup}')

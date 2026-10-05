@@ -1,0 +1,195 @@
+{
+  "schema_version": 2,
+  "status": "illustrative_sequences_not_execution_results",
+  "description": "Ordered command requests refer to individual intent IDs and utterance variants. A source macro may use shorter spoken clauses than the standalone variants.",
+  "sequences": [
+    {
+      "id": "skipper.browser_open_tile_pair",
+      "utterance": "open the browser and tile",
+      "connector": "and",
+      "composition": "source_macro",
+      "evidence": "source_declared",
+      "steps": [
+        {
+          "intent": "browser.open",
+          "variant": 1,
+          "id": "open_browser",
+          "arguments": {
+            "browser": "default",
+            "presentation": "normal"
+          }
+        },
+        {
+          "intent": "window.tile_pair",
+          "variant": 1,
+          "id": "step_2",
+          "arguments": {
+            "first": {
+              "kind": "current"
+            },
+            "second": {
+              "kind": "result",
+              "value": "open_browser.window"
+            },
+            "other_windows": "hide"
+          }
+        }
+      ],
+      "source_command": "browser:open_tile",
+      "bindings": {
+        "first_window": "original_focused",
+        "second_window": "browser",
+        "other_windows": "hide"
+      }
+    },
+    {
+      "id": "candidate.browser_open_tile_all",
+      "utterance": "Open the browser and tile open windows",
+      "connector": "and",
+      "composition": "joined_standalone_commands",
+      "evidence": "proposed_combination",
+      "steps": [
+        {
+          "intent": "browser.open",
+          "variant": 1,
+          "id": "step_1",
+          "arguments": {
+            "browser": "default",
+            "presentation": "fullscreen"
+          }
+        },
+        {
+          "intent": "window.tile",
+          "variant": 1,
+          "id": "step_2",
+          "arguments": {
+            "scope": "open_windows"
+          }
+        }
+      ],
+      "source_command": null,
+      "bindings": {
+        "workspace": "current"
+      }
+    },
+    {
+      "id": "candidate.browser_open_tile_all_then",
+      "utterance": "Open the browser, then tile open windows",
+      "connector": "then",
+      "composition": "joined_standalone_commands",
+      "evidence": "proposed_combination",
+      "steps": [
+        {
+          "intent": "browser.open",
+          "variant": 1,
+          "id": "step_1",
+          "arguments": {
+            "browser": "default",
+            "presentation": "fullscreen"
+          }
+        },
+        {
+          "intent": "window.tile",
+          "variant": 1,
+          "id": "step_2",
+          "arguments": {
+            "scope": "open_windows"
+          }
+        }
+      ],
+      "source_command": null,
+      "bindings": {
+        "workspace": "current"
+      }
+    },
+    {
+      "id": "candidate.browser_open_tile_all_lines",
+      "utterance": "Open the browser\nTile open windows",
+      "connector": "newline",
+      "composition": "joined_standalone_commands",
+      "evidence": "proposed_combination",
+      "steps": [
+        {
+          "intent": "browser.open",
+          "variant": 1,
+          "id": "step_1",
+          "arguments": {
+            "browser": "default",
+            "presentation": "fullscreen"
+          }
+        },
+        {
+          "intent": "window.tile",
+          "variant": 1,
+          "id": "step_2",
+          "arguments": {
+            "scope": "open_windows"
+          }
+        }
+      ],
+      "source_command": null,
+      "bindings": {
+        "workspace": "current"
+      }
+    },
+    {
+      "id": "candidate.browser_open_screenshot",
+      "utterance": "Open the browser and take a screenshot",
+      "connector": "and",
+      "composition": "joined_standalone_commands",
+      "evidence": "proposed_combination",
+      "steps": [
+        {
+          "intent": "browser.open",
+          "variant": 1,
+          "id": "step_1",
+          "arguments": {
+            "browser": "default",
+            "presentation": "fullscreen"
+          }
+        },
+        {
+          "intent": "system.screenshot",
+          "variant": 1,
+          "id": "step_2",
+          "arguments": {
+            "target": "screen"
+          }
+        }
+      ],
+      "source_command": null,
+      "bindings": {}
+    },
+    {
+      "id": "candidate.terminal_open_run",
+      "utterance": "Open a terminal and run the tests in this terminal",
+      "connector": "and",
+      "composition": "joined_standalone_commands",
+      "evidence": "proposed_combination",
+      "steps": [
+        {
+          "intent": "terminal.open",
+          "variant": 1,
+          "id": "step_1",
+          "arguments": {}
+        },
+        {
+          "intent": "terminal.run",
+          "variant": 1,
+          "id": "step_2",
+          "arguments": {
+            "target": {
+              "kind": "result",
+              "value": "step_1.window"
+            },
+            "command": "run the tests"
+          }
+        }
+      ],
+      "source_command": null,
+      "bindings": {
+        "terminal": "result_of_step_1"
+      }
+    }
+  ]
+}

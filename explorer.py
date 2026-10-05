@@ -176,7 +176,7 @@ class Explorer(Gtk.Application):
         super().__init__(application_id="io.github.gregorycoppola.Skipper.Explorer",
                          flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
         self.add_main_option('tutorial', 0, GLib.OptionFlags.NONE, GLib.OptionArg.NONE,
-                             'Open the voice-command tutorial', None)
+                             'Open the command tutorial', None)
         self.add_main_option('history', 0, GLib.OptionFlags.NONE, GLib.OptionArg.NONE,
                              'Open command history and corrections', None)
         self.tutorial = None
@@ -418,7 +418,6 @@ class Explorer(Gtk.Application):
         for title, callback in (
             ('Play', lambda *_: self.play_recording(path, feedback)),
             ('Copy text', lambda *_: self.window.get_clipboard().set(text)),
-            ('Transcribe again', lambda *_: self.retry_recording(path, feedback)),
             ('Open folder', lambda *_: Gio.AppInfo.launch_default_for_uri(path.parent.as_uri(), None)),
         ):
             button = Gtk.Button(label=title)
@@ -435,20 +434,11 @@ class Explorer(Gtk.Application):
         except OSError as exc:
             feedback.set_text(f'Could not play: {exc}')
 
-    def retry_recording(self, path, feedback):
-        try:
-            result = subprocess.run(['gapplication', 'action', 'io.github.gregorycoppola.Skipper',
-                                     'retry', GLib.Variant('s', path.stem).print_(False)],
-                                    capture_output=True, text=True, timeout=3)
-            feedback.set_text('Requested transcription. Skipper must be ready; refresh after it finishes.'
-                              if result.returncode == 0 else 'Start Skipper from the bar, then retry.')
-        except (OSError, subprocess.SubprocessError) as exc:
-            feedback.set_text(f'Could not request transcription: {exc}')
 
     def refresh_preferences(self, *_):
         box = self.preferences_box
         clear(box)
-        box.append(label('Voice settings', 'title-1'))
+        box.append(label('Command settings', 'title-1'))
         settings = Settings(self.alias_path.parent / 'settings.json')
         feedback = label(settings.error or '', 'dim-label')
         toggle = Gtk.CheckButton(label='Confirm before closing a terminal with running programs')
@@ -456,7 +446,7 @@ class Explorer(Gtk.Application):
         def changed(button):
             try:
                 settings.set_confirm_terminal_close(button.get_active())
-                feedback.set_text('Saved. Applies to the next voice command.')
+                feedback.set_text('Saved. Applies to the next command.')
             except (OSError, ValueError) as exc:
                 feedback.set_text(str(exc))
         toggle.connect('toggled', changed)

@@ -75,10 +75,21 @@ class CommandStore:
                                     event.get('input_source') or 'legacy', event.get('timestamp'), 'imported')
             db.execute('INSERT INTO migrations(name) VALUES (?)', ('diagnostics-v1',))
 
-    def recent(self):
-        """All distinct wording, ordered by last use, for interactive local matching."""
+    def recent_entries(self):
+        """Distinct wording plus its last recognized command, newest first."""
         with self.connect() as db:
-            return [row[0] for row in db.execute('''
-                SELECT text FROM commands WHERE id IN
+            return [dict(text=row[0], command=row[1]) for row in db.execute('''
+                SELECT text, command FROM commands WHERE id IN
                 (SELECT MAX(id) FROM commands GROUP BY normalized) ORDER BY id DESC
             ''')]
+
+    def recent(self):
+        return [row['text'] for row in self.recent_entries()]
+
+    def written_counts(self):
+        """Count recognized typed uses by resolved command, not by wording."""
+        with self.connect() as db:
+            return {command: count for command, count in db.execute('''
+                SELECT command, COUNT(*) FROM commands
+                WHERE source = 'written' GROUP BY command
+            ''')}

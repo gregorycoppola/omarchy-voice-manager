@@ -19,6 +19,34 @@ class Intent:
     def canonical_plan(self):
         """Provider-neutral intent instances, validated by the external catalog."""
         from dataset_source import CATALOG
+        if self.type == 'picker_tile_pair':
+            args = dict(self.arguments)
+            return CATALOG.validate_plan([{'intent': 'window.tile_pair', 'arguments': {
+                'first': {'kind': 'id', 'value': args['first']},
+                'second': {'kind': 'id', 'value': args['second']},
+                'other_windows': 'hide'}}])
+        if self.type.startswith('picker_'):
+            args = dict(self.arguments)
+            target = {'kind': 'current'} if args['window'] == 'current' else {'kind': 'id', 'value': args['window']}
+            verb = self.type.removeprefix('picker_')
+            if verb in ('move', 'show'):
+                plan = [{'intent': 'window.move_workspace', 'arguments': {
+                    'target': target, 'workspace': {'kind': 'id', 'value': args['workspace']}}}]
+                if verb == 'show':
+                    plan.append({'intent': 'window.focus', 'arguments': {'target': target}})
+            else:
+                operation = {'minimize': 'hide'}.get(verb, verb)
+                plan = [{'intent': 'window.' + operation, 'arguments': {'target': target}}]
+            return CATALOG.validate_plan(plan)
+        if self.type == 'move_named_window_workspace':
+            args = dict(self.arguments)
+            return CATALOG.validate_plan([{'intent': 'window.move_workspace', 'arguments': {
+                'target': {'kind': 'id', 'value': args['window']},
+                'workspace': {'kind': 'id', 'value': args['workspace']}}}])
+        if self.type == 'switch_workspace':
+            workspace = int(dict(self.arguments)['workspace'])
+            return CATALOG.validate_plan([{'intent': 'workspace.switch',
+                                           'arguments': {'workspace': workspace}}])
         return CATALOG.canonical_plan('skipper', self.type, dict(self.arguments))
 
 

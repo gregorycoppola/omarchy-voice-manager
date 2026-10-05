@@ -1,1 +1,2 @@
-onnx-asr[cpu,hub]==0.12.0
+# No pip dependencies. Uses system Python with PyGObject and Cairo.
+# Speech recognition will be supplied by an external adapter in a future phase.

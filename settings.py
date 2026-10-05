@@ -8,12 +8,19 @@ class Settings:
         self.path = Path(path)
         self.confirm_terminal_close = True
         self.error = None
+        self.layout_excluded_classes = []
+        self._data = {}
         try:
             data = personal_store.load(self.path)
             value = data['confirm_terminal_close']
             if type(value) is not bool:
                 raise ValueError('Invalid terminal confirmation preference')
             self.confirm_terminal_close = value
+            excluded = data.get('layout_excluded_classes', [])
+            if not isinstance(excluded, list) or any(not isinstance(c, str) or not c for c in excluded):
+                raise ValueError('Invalid layout exclusions')
+            self.layout_excluded_classes = excluded
+            self._data = data
         except FileNotFoundError:
             pass
         except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -22,5 +29,29 @@ class Settings:
     def set_confirm_terminal_close(self, value):
         if self.error:
             raise ValueError(self.error)
-        personal_store.save(self.path, {'confirm_terminal_close': bool(value)})
+        self._data['confirm_terminal_close'] = bool(value)
+        personal_store.save(self.path, self._data)
         self.confirm_terminal_close = bool(value)
+
+    def set_layout_excluded_classes(self, classes):
+        if self.error:
+            raise ValueError(self.error)
+        if not isinstance(classes, list) or any(not isinstance(c, str) or not c for c in classes):
+            raise ValueError('Invalid layout exclusions')
+        self._data.update(confirm_terminal_close=self.confirm_terminal_close,
+                          layout_excluded_classes=list(dict.fromkeys(classes)))
+        personal_store.save(self.path, self._data)
+        self.layout_excluded_classes = self._data['layout_excluded_classes']
+
+    @property
+    def screen_recording_monitor(self):
+        return self._data.get('screen_recording_monitor')
+
+    def set_screen_recording_monitor(self, monitor):
+        if self.error:
+            raise ValueError(self.error)
+        if monitor is not None and (not isinstance(monitor, str) or not monitor):
+            raise ValueError('Invalid recording monitor')
+        self._data.update(confirm_terminal_close=self.confirm_terminal_close,
+                          screen_recording_monitor=monitor)
+        personal_store.save(self.path, self._data)

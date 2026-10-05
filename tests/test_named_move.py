@@ -27,6 +27,28 @@ class NamedMoveTests(unittest.TestCase):
         self.context = {'active': self.chrome, 'clients': [self.explain, self.patch, self.chrome]}
         self.windows = inject_windows(self.context)
 
+    def test_named_workspace_moves_resolve_exact_target_and_execute(self):
+        for name, target in [('the explain terminal', self.explain), ('chromium', self.chrome), ('chrome', self.chrome), ('google chrome', self.chrome)]:
+            phrase = f'move {name} to workspace 42'
+            result = self.matcher.parse(phrase, self.windows.expansions)
+            self.assertEqual(result.intent.type, 'move_named_window_workspace')
+            self.assertEqual(result.canonical_plan[0]['arguments']['workspace']['value'], '42')
+            app = VoiceRuntime(self.data, self.data / 'status.json')
+            with patch('runtime.move_window_workspace', return_value='Moved') as move, \
+                 patch('runtime.GLib.idle_add', side_effect=lambda fn, *args: fn(*args)):
+                app.interpret(phrase, self.context)
+            self.assertEqual(move.call_args.args, (self.windows.targets[dict(result.intent.arguments)['window']], 42))
+            self.assertEqual(move.call_args.args[0]['address'], target['address'])
+
+    def test_named_workspace_invalid_missing_and_ambiguous_never_fall_back(self):
+        for phrase in ['move nonexistent to workspace 3', 'move chromium to workspace 0',
+                       'move chromium to workspace -1', 'move chromium to workspace 1000000000']:
+            self.assertIsNone(self.matcher.parse(phrase, self.windows.expansions).command)
+        duplicate = dict(self.chrome, address='0x4', stableId='duplicate')
+        windows = inject_windows({'clients': [self.chrome, duplicate]})
+        self.assertEqual(self.matcher.parse('move chromium to workspace 3', windows.expansions).status, 'ambiguous')
+        self.assertEqual(self.matcher.parse('move chromium window 2 to workspace 3', windows.expansions).status, 'matched')
+
     def test_terminal_names_articles_suffixes_and_fuzzy_spelling(self):
         for name, address in [('explain terminal', '0x1'), ('patch monitor terminal', '0x2'),
                               ('explan terminal', '0x1')]:
@@ -55,12 +77,10 @@ class NamedMoveTests(unittest.TestCase):
         self.assertEqual(result.intent.type, 'maximize_named_window')
         self.assertEqual(dict(result.intent.arguments)['monitor'], 'current')
         app = VoiceRuntime(self.data, self.data / 'status.json')
-        app.model = object()
-        with patch('runtime.save_transcript', return_value=('maximize the explain terminal', {})), \
-             patch('runtime.maximize_current_window', return_value='Maximized') as maximize, \
+        with patch('runtime.maximize_current_window', return_value='Maximized') as maximize, \
              patch('runtime.GLib.idle_add', side_effect=lambda fn, *args: fn(*args)), \
              patch.object(app, 'execute') as execute:
-            app.transcribe(self.data / 'test.wav', self.context, True)
+            app.interpret('maximize the explain terminal', self.context, True, source='speech')
         self.assertEqual(maximize.call_args.args[0]['address'], self.explain['address'])
         execute.assert_not_called()
         self.assertFalse(self.matcher.path.exists())
@@ -81,12 +101,10 @@ class NamedMoveTests(unittest.TestCase):
 
     def test_runtime_moves_named_capture_without_learning_or_closing(self):
         app = VoiceRuntime(self.data, self.data / 'status.json')
-        app.model = object()
-        with patch('runtime.save_transcript', return_value=('move the explan terminal to the other screen', {})), \
-             patch('runtime.move_other_screen', return_value='Moved') as move, \
+        with patch('runtime.move_other_screen', return_value='Moved') as move, \
              patch('runtime.GLib.idle_add', side_effect=lambda fn, *args: fn(*args)), \
              patch.object(app, 'execute') as execute:
-            app.transcribe(self.data / 'test.wav', self.context, True)
+            app.interpret('move the explan terminal to the other screen', self.context, True, source='speech')
         self.assertEqual(move.call_args.args[0]['address'], self.explain['address'])
         execute.assert_not_called()
         self.assertFalse(self.matcher.path.exists())

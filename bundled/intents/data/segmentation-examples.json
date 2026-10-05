@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "status": "source_declared_or_proposed_segmentation_not_live_validation",
+  "source": "../private/command_catalog.py",
+  "examples": [
+    {
+      "utterance": "open the browser",
+      "evidence": "source_declared",
+      "source_rule": "open_browser_fullscreen",
+      "source_command": "browser:open_fullscreen",
+      "segments": [
+        {"text": "open the browser", "intent": "browser.open"}
+      ],
+      "bindings": {"presentation": "fullscreen", "browser": "select_or_launch"}
+    },
+    {
+      "utterance": "open the browser and tile",
+      "evidence": "source_declared",
+      "source_rule": "open_browser_and_tile",
+      "source_command": "browser:open_tile",
+      "segments": [
+        {"text": "open the browser", "intent": "browser.open"},
+        {"text": "tile", "intent": "window.tile_pair"}
+      ],
+      "bindings": {"first_window": "original_focused", "second_window": "browser", "other_windows": "hide"}
+    },
+    {
+      "utterance": "open browser and tile it",
+      "evidence": "source_declared",
+      "source_rule": "open_browser_and_tile",
+      "source_command": "browser:open_tile",
+      "segments": [
+        {"text": "open browser", "intent": "browser.open"},
+        {"text": "tile it", "intent": "window.tile_pair"}
+      ],
+      "bindings": {"first_window": "original_focused", "second_window": "browser", "other_windows": "hide"}
+    },
+    {
+      "utterance": "tile this window and the browser",
+      "evidence": "source_declared",
+      "source_rule": "tile_current_window_with_browser",
+      "source_command": "windows:tile_current_browser",
+      "segments": [
+        {"text": "tile this window and the browser", "intent": "window.tile_pair"}
+      ],
+      "bindings": {"first_window": "original_focused", "second_window": "browser"}
+    },
+    {
+      "utterance": "tile open windows",
+      "evidence": "source_declared",
+      "source_rule": "tile_windows",
+      "source_command": "windows:tile",
+      "segments": [
+        {"text": "tile open windows", "intent": "window.tile"}
+      ],
+      "bindings": {"workspace": "current"}
+    },
+    {
+      "utterance": "open the browser\ntile open windows",
+      "evidence": "proposed_combination",
+      "source_rule": null,
+      "source_command": null,
+      "segments": [
+        {"text": "open the browser", "intent": "browser.open"},
+        {"text": "tile open windows", "intent": "window.tile"}
+      ],
+      "bindings": {"workspace": "current"}
+    },
+    {
+      "utterance": "open the browser and tile all windows",
+      "evidence": "proposed_combination",
+      "source_rule": null,
+      "source_command": null,
+      "segments": [
+        {"text": "open the browser", "intent": "browser.open"},
+        {"text": "tile all windows", "intent": "window.tile"}
+      ],
+      "bindings": {"workspace": "current"}
+    },
+    {
+      "utterance": "open the browser and tile the windows",
+      "evidence": "proposed_combination",
+      "source_rule": null,
+      "source_command": null,
+      "segments": [
+        {"text": "open the browser", "intent": "browser.open"},
+        {"text": "tile the windows", "intent": "window.tile"}
+      ],
+      "bindings": {"workspace": "current"}
+    }
+  ]
+}

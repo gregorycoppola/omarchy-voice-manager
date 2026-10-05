@@ -64,3 +64,13 @@ The policy above is therefore the implementation target, not a claim that every
 browser works today. Adding another browser requires its own local adapter and
 the same privacy rules; it must not fall back to scraping tabs from an
 unsupported browser.
+
+
+## Explicit website picker destinations
+
+The root picker now offers new-browser and existing-browser commands. The latter
+selects the captured focused Chrome/Chromium window, the sole supported browser,
+or asks which supported window to use. It opens arbitrary validated HTTP(S) URLs
+as new tabs through the extension, with native identity and extension-window
+checks. This is separate from the older fixed-site reuse rules above; other
+browser families remain unsupported for existing-window targeting.

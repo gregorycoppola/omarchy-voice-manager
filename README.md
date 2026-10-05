@@ -1,61 +1,33 @@
 # Skipper
 
-This is a very primitive voice-control prototype for Linux / Omarchy. I'm using
-it because it actually saves me some time, and I'm sharing it because it already
-works well enough to be useful to me. Think of it as a rough v0: better than
-having no voice controls, with plenty of room for a more sophisticated design.
-One could imagine it being way fancier, but this is just a practical start.
-This is an experiment I'm
-using and improving, not a polished or thoroughly tested product.
+Skipper is a desktop command app for Linux / Omarchy. The current interface is
+**text and dropdown menus first**. Voice remains a product goal, with recognition
+planned through an external provider such as Voxtype.
 
-## How it actually works
+## How it works now
 
-The algorithm is deliberately simple:
+1. Press **Super + R** to see verb groups. Type to narrow the shared prefixes; a unique matching branch expands automatically.
+2. With multiple choices, **Tab** accepts the highlighted option (the top one by default). **Shift + Tab** goes back. Final actions never run automatically.
+3. Press **Enter** to run a complete command. For an installed app, Enter opens a new window in this workspace; **Tab** continues through optional workspace and tiling choices. You can run after any choice. Use **Add step** to queue a sequence.
+4. Skipper resolves the intended action and window, applies confirmations, and
+   records the result in local command history.
 
-1. **Record a short command.** Hold the speaking shortcut, say something, and
-   release it. Skipper saves the audio and captures which window you were using.
-2. **Turn the audio into words.** A local Parakeet speech-recognition model
-   produces a transcript. Those are the words the model heard, which might
-   differ from what you said.
-3. **Look for a correction you previously saved.** If the same recognized
-   phrase comes up again, Skipper uses the full intent you chose for it.
-   Matching ignores capitalization, extra whitespace, and trailing sentence
-   punctuation. It does not recognize your voice or compare audio recordings.
-4. **Otherwise, match the words to the command catalog.** Try exact built-in
-   phrases and automatically learned aliases first. If there is no exact match,
-   score eligible phrases using Python's `difflib.SequenceMatcher`, keep the
-   best score for each distinct intent, and compare the winners. A fuzzy match
-   needs a score of at least 0.72 and a lead of at least 0.06 over the next intent.
-   Weak or ambiguous matches do nothing. Some commands have stricter matching
-   rules. These scores measure text similarity, not certainty about your meaning.
-5. **Run the selected action and keep a record.** An intent includes an operation
-   and its arguments, such as `tile_apps(workspace=current)`. Skipper calls the
-   corresponding implemented action, checks its target, and logs the result.
-   Existing confirmation rules still apply. Eligible fuzzy matches are also
-   remembered as phrase aliases; user corrections remain a separate layer.
+The picker uses an ordered subsequence filter, then a deeper text score on a
+shortlist. Frequency does not influence ranking yet. See the
+[matching notes](docs/command-matching-notes.md) and
+[argument picker design](docs/argument-picker-design.md).
 
-When it gets something wrong, **History** lets you connect three things:
+**Tile** and **List** begin with **all windows**, **all terminals**, then
+**all browsers**. **Tile → two specific windows…** lets you choose the first
+window by name, then a different second window. Enter runs the completed pair:
+both windows are tiled on the captured workspace and the other windows there
+are temporarily hidden. The first window does not have to be the focused one.
 
-| What was heard | Words you meant | Full intended action |
-| --- | --- | --- |
-| “Towel apps.” | “tile the apps” | `tile_apps(workspace=current)` — tile non-terminal apps and hide terminals |
-
-You can play the recording, edit the middle column, select the action in the
-third column, and click **Save correction**. **Match these words** can suggest
-an intent from your edited words, but you make the final choice. Saving records
-the mapping; it does not execute the action or change the original transcript.
-
-The next time the model produces “Towel apps,” that saved phrase maps directly
-to your chosen intent. The edited words are kept as your explanation of what
-you meant; they are not reparsed to choose a different action on each use.
-Different mishearings need their own corrections. You can edit or remove a
-mapping, and its changes are kept in a local audit history.
-
-That is the personalization: a small, editable lookup table. No model weights
-are updated, and no LLM decides what to do with each command. The system does
-not learn general language rules from your corrections. It is much simpler
-than what one could build, but a few useful commands and remembered corrections
-already save me enough effort to keep using it.
+Skipper no longer contains a microphone recorder, speech model loader, or custom
+transcription engine. A future voice adapter will feed text into the same command
+and argument system. See the [Voxtype plan](docs/voxtype-integration-plan.md).
+Existing recordings, transcripts, corrections, and model files are preserved;
+History can still play saved audio. Retranscription is not currently available.
 
 ## About this checkout
 
@@ -65,23 +37,16 @@ under those terms. It is provided without warranty, including any implied
 warranty of merchantability or fitness for a particular purpose. See [LICENSE](LICENSE)
 and [third-party notices](THIRD_PARTY_NOTICES.md).
 
-Current release: **0.1.0**. This checkout includes **0.2.0-dev** voice-command
-work. See [the changelog](CHANGELOG.md).
+Current release: **0.3.1**. See [the changelog](CHANGELOG.md).
 
-A local voice-command app for an M2 MacBook Pro running ARM Linux / Omarchy.
-Skipper lives in the menu bar: hold-to-talk opens a compact popup with microphone
-levels, recognized words, and the parsed intent. A windowless background process
-handles speech and actions. **Skipper Explorer** is the separate native app for
-language inspection, recording history, learned phrases, and settings.
-
-Uses NVIDIA Parakeet TDT 0.6B v3 through a community INT8 ONNX conversion and
-`onnx-asr`. Inference runs on the CPU. No NVIDIA GPU, cloud transcription,
-PyTorch, system package updates, or macOS frameworks are required.
+Skipper's windowless background process handles commands and actions. The menu
+bar provides its dropdown interface. **Skipper Explorer** is the separate native
+app for command inspection, saved history, learned phrases, and settings.
 
 ## Install as an Omarchy plugin
 
 Requires Omarchy Quattro with the Lua Hyprland API and Quickshell. Tested on
-Linux aarch64; x86_64 has not yet been tested. Speech runs locally on the CPU.
+Linux aarch64; x86_64 has not yet been tested. No speech backend is enabled in this development version.
 
 ```bash
 omarchy plugin add https://github.com/gregorycoppola/omarchy-voice-manager.git --enable
@@ -89,25 +54,46 @@ python ~/.config/omarchy/plugins/greg.skipper/plugin_setup.py install --shortcut
 ```
 
 Run setup yourself in a terminal: Omarchy does not run installation hooks.
-Setup downloads pinned Python dependencies and about 639 MiB of speech-model
-files. It installs them under `${XDG_DATA_HOME:-~/.local/share}/skipper`, outside
-of the plugin checkout. It needs system `python`, `gtk4`, `python-gobject`,
-`python-cairo`, PipeWire's `pw-record`, `hyprctl`, and `gapplication` (GLib).
+Setup creates a Python environment under `${XDG_DATA_HOME:-~/.local/share}/skipper`,
+outside the plugin checkout. It needs system `python`, `gtk4`, `python-gobject`,
+`python-cairo`, `hyprctl`, and `gapplication` (GLib). File search uses `fd`
+and `xdg-open`; audio defaults use `pactl`; system controls use `nmcli`, BlueZ,
+and Hyprsunset when available. It does not download speech
+models or install inference dependencies. The shared command dataset is bundled
+with the plugin; setup needs no second GitHub repository.
 Install missing system packages through Omarchy's package manager first.
 The widget has a **Start Skipper** button; setup does not start recording.
 
-`--shortcut` explicitly replaces **Super+R** with hold-to-talk. Omit it if you
+`--shortcut` assigns **Super+R** to the command picker. Omit it if you
 want to configure a different binding yourself using
-`config/hyprland-skipper-ptt.lua`. `--autostart` adds a login launcher; omit it
+`config/hyprland-skipper-written.lua`. `--autostart` adds a login launcher; omit it
 for manual startup. Existing conflicting Skipper files are refused unless you
 supply `--replace-existing`, which backs them up first. Setup preserves other
 bindings and stores a receipt so uninstall only removes its own integration.
 
-Application-opening commands prefer `DP-1` when connected, otherwise the focused
-screen (or the first available screen). Set `SKIPPER_MAIN_MONITOR` in the runtime's
-environment to require a specific output. Tiling and hiding use the captured
-workspace. Browser-tab reuse for Gmail/GitHub additionally needs the optional
-browser connection described below; other window commands do not require it.
+App-opening choices come from visible installed desktop entries with available
+launchers, using literal names such as **Chromium**, **Brave**, or **Foot**.
+An app missing from the current scan is not offered. **Open terminal** remains an
+alias for the installed configured terminal, alongside its literal app name. Tab after an app shows
+**in this workspace** first, then workspaces 1–10; Tab after a destination offers
+its normal layout or **tile with the other windows**. Enter runs at either stage.
+For example: `open Chromium in workspace 3 and tile`. Typed commands also accept
+positive workspace numbers up to nine digits.
+
+New windows are raised to the front and focused after placement or tiling.
+“This workspace” means the workspace captured when the picker opened. Skipper
+requests a new window and places only an identifiable new window; apps that reuse
+an existing window may open without being repositioned, with an explanation.
+Tiling respects personal layout exclusions. Browser-tab reuse for Gmail/GitHub
+still uses the optional browser connection described below.
+
+The bar dropdown has **Back**, **Forward**, and **Save view** controls for window
+layouts. Skipper records settled changes to open windows, including positions,
+sizes, workspaces, floating state, and fullscreen state. Back and Forward restore
+earlier arrangements; closed windows are skipped. Save view records the current
+arrangement immediately. History keeps up to 30 views for the current desktop
+session and survives a Skipper restart. Making a new arrangement after going Back
+replaces the Forward branch, like ordinary undo history.
 
 ### Update, disable, and remove
 
@@ -140,27 +126,21 @@ also want to remove saved data. No system packages are removed.
 
 ### Capabilities and privacy
 
-Skipper records microphone audio only during hold-to-talk, transcribes locally,
-and stores recordings/transcripts locally for history and retry. It reads window
-metadata, controls windows via Hyprland, launches installed apps, and inspects
-terminal process trees to decide whether closing needs confirmation. Its shortcut
-observes only R and Super key events. The optional browser connection can inspect
-and select browser tabs. Setup uses the network for Python packages and the
-pinned model; transcription itself does not use a cloud service. Plugins and the
-runtime run with your normal user permissions.
+Skipper reads window metadata, controls windows via Hyprland, launches installed
+apps, and inspects terminal process trees for closing confirmations. The optional
+browser connection can inspect and select browser tabs. Command history and old
+recordings remain local. Skipper does not capture microphone audio or run speech
+inference. The runtime runs with your normal user permissions.
 
 ## Development setup
 
 
 ```bash
 python -m venv --system-site-packages .venv
-.venv/bin/pip install -r requirements.lock
-.venv/bin/python skipper.py download
 python install_desktop.py
 ```
 
-Tested dependency versions are in `requirements.lock` (Python 3.14, Linux
-aarch64). `requirements.txt` records the direct dependency.
+There are currently no pip dependencies; requirements files document this.
 The GUI uses system GTK4, PyGObject and Cairo (`gtk4`, `python-gobject` and
 `python-cairo` on Arch),
 already present on this machine. System-site-packages exposes those bindings to
@@ -168,84 +148,21 @@ the environment without modifying installed system packages.
 The launcher installer adds Skipper to your per-user application menu and creates
 `~/.local/bin/skipper`. Keep the checkout at the same path after installation,
 or rerun the installer if you move it. `launch.sh` also works directly.
-The model download is pinned by revision in `model-manifest.json`; large weight
-files are SHA-256 verified. Model files occupy about 639 MiB and stay in ignored
-`models/`. Model download and dependency installation require internet access.
-
 ## Use
 
-Click **Tutorial** in Skipper's taskbar dropdown for a separate, six-part guide
-to hold-to-talk, tiling, hiding/restoring, opening/moving apps, terminal names,
-and closing windows. It does not record audio, execute example commands, or load
-a speech model. It is also available from Explorer's header or with
-`./launch-explorer.sh --tutorial`.
-
 Launch **Skipper** from the application launcher, run `skipper`, or use
-`./launch.sh`. Install the menu-bar widget and login launcher with
-`.venv/bin/python install_bar.py` (the installer backs up existing user config).
+`./launch.sh`. Press **Super + R** for the picker. Choose commands and arguments
+with the dropdown, then press Enter. Escape cancels without running anything.
 
-**Hold Super/Command + R to speak; release either key to transcribe.** A compact
-popup opens from the Skipper bar indicator on the focused monitor. It shows actual
-microphone amplitude, then the recognized words and parsed intent. It does not
-join the tiling layout or grab keyboard focus. Recognition completes after
-release; words do not stream during recording.
+Click **Tutorial** in the taskbar dropdown for a guide, or open **Explorer** to
+inspect commands, history, and settings. **Quit** finishes current work and stops
+the runtime; **Start Skipper** restarts it. Closing Explorer does not stop Skipper.
 
-After a successful action the popup closes **immediately**. The latest readable
-intent name stays to the **left of “Skipper”** in the menu bar until another intent replaces it.
-Unrecognized commands remain visible for 2.5 seconds and errors for six seconds.
-Terminal-close confirmations stay in the popup until answered or superseded by
-a new recording. Click the bar indicator to inspect the latest result manually;
-click it again or use × to dismiss. **Explorer** opens the separate management
-app. **Quit** finishes any current work and stops the runtime; **Start Skipper**
-restarts it.
+The runtime always starts without a speech model. `SKIPPER_TEXT_ONLY` and the
+installer's old `--text-only` flag are no longer needed. Voice input is planned,
+not enabled by a setting in this version.
 
-There is no main desktop window. Closing Explorer does not stop recording or
-commands. `./launch.sh --show` requests the voice popup from an existing runtime.
-The previous GTK voice window remains in `gui.py` for development checks only.
-
-Takes are limited to 30 seconds. A quick tap never toggles recording on. Releasing
-R or either Super key stops capture even if focus changes. The shortcut renews a
-200 ms recording lease; a lost release or compositor reload stops capture within
-about 700 ms. Late renewals cannot restart it. Wait for transcription/action
-completion before another take.
-
-The installed shortcut is `~/.config/hypr/skipper-ptt.lua`, loaded by
-`~/.config/hypr/bindings.lua`; its source is
-[config/hyprland-skipper-ptt.lua](config/hyprland-skipper-ptt.lua). It uses physical XKB
-codes for R (27) and left/right Super (133/134), sending typed D-Bus actions to
-the runtime. The desktop/bar installers do not install that shortcut.
-
-Audio (`.wav`), transcripts (`.txt`), and timing metadata (`.json`) are saved in
-`~/.local/share/skipper/recordings/` (respecting `XDG_DATA_HOME`). Explorer's
-**History** offers playback, Copy text, Transcribe again, and Open folder. Retry
-requires a ready Skipper runtime and never executes or learns a command. Audio is
-retained if transcription fails. Files remain until you delete them; nothing is
-automatically pasted into another application.
-
-For the command-line interface:
-
-```bash
-# A mono, 16-bit PCM, 16 kHz WAV, up to 30 seconds:
-.venv/bin/python skipper.py transcribe /path/to/clip.wav
-
-# Load the model, then record ten seconds from the default PipeWire microphone:
-.venv/bin/python skipper.py record --seconds 10
-```
-
-Wait for “Speak now” before speaking. Record mode requires `pw-record`, already
-installed on this machine. Audio is recorded to a temporary directory and removed
-when the command exits normally, errors, or is interrupted with Ctrl+C.
-Transcription uses local model files with Hugging Face offline mode enabled;
-the program has no audio upload code. Transcripts print to stdout, and timing
-and Linux peak process RAM measurements print to stderr. Nothing is pasted into
-another application automatically.
-
-The CLI reloads the model on each invocation; the background runtime keeps it loaded.
-INT8 can affect accuracy; test your own voice and technical terms.
-This prototype limits clips to 30 seconds because longer inputs can consume
-substantially more memory.
-
-## Deterministic voice commands (0.2.0-dev)
+## Desktop commands
 
 ### Grammar and intent explorer
 
@@ -291,12 +208,12 @@ concrete intent. Voice status now includes the parsed intent.
 
 ### Command behavior
 
-Named terminals are now a live vocabulary. Say **“focus skipper,” “switch to the
+Named terminals are now a live vocabulary. Enter **“focus skipper,” “switch to the
 skipper terminal,” “focus the monitor replug bug,”** or **“close the patch monitor
 terminal.”** `WINDOW_RULES` defines `focus <window>`, `switch to <window>`,
 `go to <window>`, `close <window>`, and `move <window> to the other screen`,
 with optional “the.” Move also accepts “other monitor.”
-The rules expand across the terminal windows captured when recording starts.
+The rules expand across the terminal windows captured when the picker opens.
 New/renamed/closed terminals are reflected on the next recording without
 restarting Skipper. Explorer's command tester fetches a fresh list on each test.
 
@@ -324,14 +241,10 @@ This live vocabulary covers terminal focus, close, move, and maximize.
 `monitor=current`. Custom nicknames are not included yet.
 
 **Command mode is permanent.**
-Hold Super + R throughout one allowed phrase, then release.
-The transcript and audio save first; a matching phrase then runs its fixed action.
-Built-in phrases and learned aliases run immediately on an exact normalized match.
-A sufficiently close match runs immediately and saves the heard phrase as an
-alternate for that intent. Skipper displays the matched command in its status;
-there is no “Did you mean” prompt. Learned phrases can be removed with **Forget**.
-Unrelated or ambiguous speech shows “Unrecognized command.” Audio and transcripts
-remain saved for review. Retrying a saved transcript never executes or learns a command.
+Enter one of these phrases in the command picker.
+The selected wording resolves to an intent and its arguments. Confirmations and
+captured-window identity checks still apply. Unknown input stays editable.
+Typing does not save automatic speech aliases or create audio recordings.
 
 Stable intent IDs, display labels, and built-in phrases are generated into `INTENTS` in
 [command_catalog.py](command_catalog.py), beside the fixed website URL registry.
@@ -342,7 +255,7 @@ Aliases persist in the private SQLite database at
 Legacy `aliases.json` files are imported once and retained as private backups.
 Personal data stays outside Git with owner-only permissions.
 This teaches the command matcher; it does not retrain the speech recognition model.
-Starting another recording, retrying, or selecting history dismisses a pending suggestion.
+Saved recordings remain available for playback; retranscription is retired.
 
 | Allowed phrase | Action |
 | --- | --- |
@@ -353,7 +266,6 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 | open chrome | Launch Chromium or focus an existing browser window |
 | bring up chrome | Launch/focus Chromium and maximize with tabs visible |
 | launch chrome | Same |
-| focus chrome | Same |
 | switch to chrome | Same |
 | open chromium | Same |
 | bring up chromium | Launch/focus Chromium and maximize with tabs visible |
@@ -361,23 +273,24 @@ Starting another recording, retrying, or selecting history dismisses a pending s
 | bring up google chrome | Launch/focus Chromium and maximize with tabs visible |
 | open gmail / bring up gmail | Bring up Gmail |
 | open github / bring up github | Bring up GitHub |
-| open x / bring up x / focus x / switch to twitter | Launch X’s installed app or maximize and focus its existing window; x and twitter work with every prefix |
+| open x / bring up x / switch to twitter | Launch X’s installed app or maximize and focus its existing window; x and twitter work with these prefixes |
 | maximize chrome / maximize chromium / maximize google chrome | Maximize the most recently used normal browser window |
 | maximize discord | Maximize Discord’s app window |
 | maximize x / maximize twitter | Maximize X/Twitter’s app window |
 | close terminal / close the terminal / close a terminal | Close the most recently used terminal; ask if programs are running |
 | close this terminal | Close the terminal focused when recording started; ask if programs are running |
+| close this window / close the current window | Close the window focused when the command starts |
 | close discord | Close the most recently used Discord app window |
 | close x / close twitter | Close the most recently used X/Twitter app window |
 | close chrome / close chromium / close google chrome | Close one normal Chrome/Chromium window, including its tabs |
-| open discord / bring up discord / focus discord / switch to discord | Launch Discord if closed, otherwise maximize and focus its existing app window |
-| show all windows / show all open windows / show all open window | Restore and tile all windows on the captured workspace, just like “tile all windows” |
+| open discord / bring up discord / switch to discord | Launch Discord if closed, otherwise maximize and focus its existing app window |
+| show all windows / show all open windows / show all open window | Restore and raise each open window on its own workspace |
 | list open windows / list the open windows / what windows are open | Show every open window across all workspaces without changing its layout or focus |
 
 All Skipper open/bring-up commands now use the same presentation policy: move the
 selected or newly created window to DP-1, maximize it with normal controls visible,
 explicitly raise it above the floating grid, and focus it. This includes browsers,
-Gmail/GitHub browser windows, Discord, X, and new terminals. Say **“tile open
+Gmail/GitHub browser windows, Discord, X, and new terminals. Enter **“tile open
 windows”** afterward to include the new window in the equal grid.
 
 Discord and X use their installed desktop launchers (the Omarchy web apps on
@@ -405,7 +318,7 @@ to moving the focused window. “Other window” is also accepted as “other sc
 
 Terminal close commands close an idle shell prompt directly. If a program or job
 is running, they show a confirmation in the bar popup with the chosen window's title.
-The target is captured when recording starts and remains fixed while the
+The target is captured when the picker opens and remains fixed while the
 confirmation is pending. “Close this terminal” does
 nothing if the focused window was not a terminal. “Close terminal” chooses the
 most recently used terminal across screens/workspaces. Only that window is closed.
@@ -452,7 +365,7 @@ current tile layout or opens on its own. Say an explicit browser layout command
 such as **“open the browser and tile”** or **“open the browser in full screen”**
 when that presentation is wanted.
 
-Say **“open another GitHub tab”** (or **“open a new Gmail tab”**) to create a
+Enter **“open another GitHub tab”** (or **“open a new Gmail tab”**) to create a
 new tab even when that website is already open. This is a separate intent from
 **“open GitHub,”** which always prefers reusing an existing matching tab.
 
@@ -500,7 +413,7 @@ apps such as Discord. On this installation, “Chrome” maps to Chromium.
 
 ### Two-screen layout on this MacBook
 
-The voice popup belongs to the bar on the monitor focused when recording starts.
+The command popup belongs to the bar on the monitor focused when the picker opens.
 It occupies no workspace or tile. Voice actions retain their existing display
 policies: open/focus app commands target **DP-1**, all maximize commands
 stay on the target's current screen, and move-to-other-screen selects another
@@ -509,62 +422,60 @@ monitor and arranges the destination workspace.
 The old GTK-window rule in [config/hyprland-skipper.lua](config/hyprland-skipper.lua)
 only applies to the development window; the runtime creates no such window.
 
-## Model provenance
+## Historical speech experiments
 
-- Original model: [NVIDIA Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)
-- Community conversion: [istupakov/parakeet-tdt-0.6b-v3-onnx](https://huggingface.co/istupakov/parakeet-tdt-0.6b-v3-onnx)
-- Runtime: [onnx-asr](https://github.com/istupakov/onnx-asr), using ONNX Runtime CPU
+Earlier versions used a direct Parakeet/ONNX integration. That code and its
+inference dependencies have been removed. [Early measurements](docs/first-run.md)
+remain historical reference, not current setup instructions. Downloaded model
+files and recordings are left intact.
 
-The converted model is marked CC BY 4.0 by its publisher. Credit belongs to
-NVIDIA for the original model and Ivan Stupakov for the conversion/runtime.
-Weights are downloaded separately and are not committed to this repository.
-Skipper is an independent app, not an NVIDIA product.
+## Command picker and history
 
-See [the first local benchmark](docs/first-run.md) for hardware and measurements.
+**Super + R** opens a centered written-command box on the active monitor.
 
-## Validation
-
-Unparsed push-to-talk commands expand a correction editor **inside the Skipper
-bar dropdown**: “I heard ‘…’, but I wasn’t sure what you meant.” There is no
-separate correction window. Recognized commands, including accepted fuzzy
-matches, run without asking you to repeat their wording. If only the target
-window is ambiguous, the dropdown asks which window instead.
-
-**Super + Shift + R** opens a centered written-command box on the active monitor.
-
-The box shows recent recognized commands from your local diagnostics history,
-including speech and keyboard input. Type a fragment such as `tile term` to fuzzy
-match “tile the terminals.” Up/Down selects a match, Tab (or a click) recalls it
-for editing, and Enter runs the selected match. Ctrl+Enter runs exactly the text
-you typed. With an empty box, choose a recent command with the arrow keys. Escape
-cancels. Recalled wording is parsed again against the current desktop context;
-old window addresses are never replayed. History indicates recognition, not
-successful execution, and normal confirmation rules still apply.
+The box shows supported commands from the shared intent dataset and commands
+generated for currently available apps and windows. Typed and spoken phrases are
+never added to this list. Type a fragment such as `tile term` to fuzzy match
+“tile the terminals.” Up/Down selects a match. Tab accepts a selection or opens
+its next argument level; Shift+Tab goes back. Add step queues a completed command.
+Enter runs the complete selection and any queued steps. Incomplete commands ask
+for their remaining arguments.
+Escape cancels. Selected wording is parsed against the current desktop context;
+old window addresses are never replayed. Normal confirmation rules still apply.
 
 History is private local data (PII), stored in
 `~/.local/state/skipper/command-history.sqlite3` (or `$XDG_STATE_HOME/skipper/`).
 The directory is owner-only (0700), and the database is owner-only (0600).
 It is outside the checkout; Git ignores databases and sidecars as a safeguard.
 Every recognized invocation, including repeats from speech and typing, is saved.
-The dropdown shows the ten most recently used distinct commands when empty and
-continuously ranks up to ten fuzzy matches from all stored wording as you type.
+The dropdown searches two sources: base commands from the shared dataset and
+dynamic commands for currently available apps and windows. Newly supported
+intents appear when the dataset or dynamic vocabulary changes. Opening the box
+captures current targets and rebuilds the dynamic source. While open, it refreshes
+available targets every half-second. Saved command history is never searched by
+the dropdown.
+For example, a uniquely named terminal can contribute “close the skipper terminal,”
+“focus the skipper terminal,” “maximize the skipper terminal,” and “move the skipper
+terminal to the other screen.” Wording comes from dataset templates; titles and
+expanded phrases stay local. Ambiguous window names are excluded.
+
+The list shows up to ten plain command phrases. Typing filters both supported
+sources by ordered-letter subsequence matching, including alternative wording.
+The cheap filter permits skipped letters in the candidate. A shortlist is then
+ranked by text similarity alone; frequency is reserved for later tuning.
+See the matching notes for the exact algorithm.
+Refresh preserves your draft and the original focused window; named targets use
+the latest displayed snapshot. Execution checks the captured identity again, so
+a closed or replaced terminal is not retargeted.
+Suggestions do not create command-history rows until used.
 The original diagnostics log is imported once, including older entries; no fake
 history is seeded. Rows record recognition attempts, not verified execution:
-failed or cancelled actions may appear. Stored wording is reparsed on recall.
+failed or cancelled actions may appear in the database.
 Recordings and existing diagnostic logs remain separate local private data.
-To use keyboard commands without loading Parakeet, launch the runtime with
-`SKIPPER_TEXT_ONLY=1 .venv/bin/python runtime.py`. Speech stays unavailable in
-that process; restart normally to load the speech model.
-
-It stays open while you type, including after clicking outside or pressing the
-shortcut again. Only Enter submits; Escape cancels. It reserves no workspace space.
-Super + R remains hold-to-talk. The three layers are speech recognition,
-written wording, and logical intent. Typed input starts at the written layer:
-it does not record audio, run the speech model, apply speech corrections, or
-save automatic speech aliases. Both modes share logical parsing, window
-selection and terminal-close confirmation. The active window is captured before
-the input box opens, so “this window” refers to your application. Unknown typed
-commands remain editable in place. Escape cancels without running anything.
+The picker stays open while you type. Escape cancels; incomplete commands do not
+run. Opening it captures the active window, so “this window” refers to your app.
+Typed input does not apply speech corrections or save automatic speech aliases.
+Future speech input will share command parsing, argument selection, and confirmation.
 The optional shortcut source is `config/hyprland-skipper-written.lua`; check for
 conflicts before installing it elsewhere. Skipper must be running for the shortcut.
 
@@ -576,7 +487,7 @@ are saved separately. Previously saved three-layer corrections remain compatible
 Cancel saves nothing. Starting a new recording invalidates the old request.
 
 Tiling defaults to **side by side (left to right)**, using a grid for larger groups, on the monitor
-of the active window captured when recording starts. Paired commands bring the
+of the active window captured when the picker opens. Paired commands bring the
 selected second window to that workspace. Five windows use two columns over
 three rows, with every window the same size and one unused cell. Incomplete
 rows retain the same cell dimensions. The layout respects scale, rotation,
@@ -588,12 +499,12 @@ columns: **what was heard**, **words you meant**, and **intended action**. Each 
 also shows the original logged match and outcome, when available. Edit the words,
 choose an action from the searchable list, and click **Save correction**. **Match
 these words** can suggest an action; saving still requires your click and never
-runs the action. Use **Refresh** after recording another command.
+runs the action. Use **Refresh** to reload history.
 
 User corrections are separate from automatic fuzzy aliases. They apply before
 normal matching only when the normalized heard phrase is identical (ignoring case
 and punctuation), including commands normally excluded from automatic learning.
-Corrections take effect on the next command without restarting or training a model.
+These saved speech corrections are retained for future voice input; typed commands do not apply them.
 **Remove correction** restores normal parsing. The picker currently covers the
 fixed command catalog; it does not save identities of individual named windows.
 Corrections and their edit/removal audit are saved outside the repo in
@@ -607,61 +518,31 @@ Each line is a timestamped JSON event linking the recording file, focused window
 context, recognized transcript, original parse result (including candidates and
 matching method), and action outcome or error. Unrecognized commands are logged
 too. Audio and transcript files remain in `~/.local/share/skipper/recordings`.
-Logging covers push-to-talk recordings, not conversations while Skipper is idle.
+Logging covers submitted commands; Skipper does not listen to conversations.
 Use `tail -n 30 ~/.local/state/skipper/commands.jsonl` to inspect recent events.
 
 ```bash
 .venv/bin/python -m unittest discover -s tests -v
 node --test tests/test_browser_tabs.cjs
-.venv/bin/python tests/learning_smoke.py
 .venv/bin/python tests/explorer_smoke.py
 .venv/bin/python tests/history_smoke.py
 .venv/bin/python tests/correction_smoke.py
 .venv/bin/python tests/tutorial_smoke.py
-.venv/bin/python tests/runtime_smoke.py
 .venv/bin/python tests/bar_popup_smoke.py
-.venv/bin/python tests/bar_mode_smoke.py
-.venv/bin/python tests/terminal_confirmation_smoke.py
 .venv/bin/python tests/terminal_activity_smoke.py
 .venv/bin/python tests/window_close_smoke.py
 .venv/bin/python tests/tile_windows_smoke.py
 .venv/bin/python tests/window_close_smoke.py --maximize
 .venv/bin/python tests/window_close_smoke.py --maximize-current
 .venv/bin/python tests/window_close_smoke.py --maximize --move
-# With the public sample downloaded as described in docs/first-run.md:
-.venv/bin/python tests/gui_smoke.py local/jfk.wav
-.venv/bin/python tests/gui_smoke.py local/jfk.wav --auto
 ```
 
-With the real Skipper app closed and the shortcut installed, `tests/gui_smoke.py`
-also supports `--ptt` and `--ptt --super-first`. These use a test-only virtual
-keyboard with a standard evdev keymap to exercise the compositor binding and
-D-Bus action, checking transcription before the second key is released.
-`tests/shortcut_smoke.py` verifies taps never latch recording, both Super keys, both release orders,
-and a deliberately dropped release message without recording audio.
-The helper is built in a temporary directory using `cc`, `wayland-scanner`,
-`wayland-client`, and `xkbcommon`; these are test tools, not app dependencies.
-Its vendored protocol is from wlroots' `virtual-keyboard-unstable-v1.xml`, with
-its license retained. No input setting changes are needed.
-
-The GUI smoke test opens a temporary test window and substitutes a prerecorded
-sample for the microphone. It verifies amplitude activity during recording and
-no live text, then exercises key release with the installed recorder's exit-code-1
-behavior, automatic on-screen transcription, actual model inference,
-WAV/transcript/metrics persistence, history reloading and returning to ready.
-It never records the real microphone. The owner confirmed microphone recording
-works. A real recording previously skipped transcription because this installed
-`pw-record` returned 1 after a requested stop despite saving a valid WAV. The
-app now accepts that requested-stop result and validates/transcribes the WAV;
-the regression test covers this exact case. The owner subsequently confirmed
-that the meter and automatic transcription work in the updated app.
-
-Say **“maximize this window”** to maximize the window focused when recording starts,
+Enter **“maximize this window”** to maximize the window focused when the picker opens,
 on its current screen. Repeating the command keeps it maximized; browser tabs
 and normal window controls stay visible.
 
-Say **“tile open windows”** (or **“tile all windows”**) to arrange the windows
-on the workspace focused when recording starts in equal-sized grid cells (four
+Enter **“tile open windows”** (or **“tile all windows”**) to arrange the windows
+on the workspace focused when the picker opens in equal-sized grid cells (four
 windows form a 2 × 2 grid). It exits maximize/fullscreen and separates groups.
 The adapter uses positioned floating windows to avoid inheriting old split ratios,
 respects monitor scaling and the panel, and leaves spare cells empty for odd counts.
@@ -669,7 +550,7 @@ Run the command again after opening or closing windows to rearrange the grid.
 Skipper is excluded. Other workspaces stay as they are; repeating the command keeps
 the windows tiled.
 
-Say **“tile all the terminals”**, **“tile all terminals”**, or **“tile terminals”**
+Enter **“tile all the terminals”**, **“tile all terminals”**, or **“tile terminals”**
 to tile only terminals on that workspace and hide the other apps. **“Tile all
 browsers”** shows browser windows and hides everything else; **“tile all apps”**
 shows all non-terminal apps and hides terminals. **“Tile all windows”** brings
@@ -690,7 +571,7 @@ visible non-terminal apps. Both accept only those exact phrases (ignoring case
 and punctuation). They leave the remaining windows in place and do not bring
 back previously hidden windows. **“Tile all windows”** restores and tiles them,
 even after hiding the last window on a workspace.
-**“Hide this window”** hides just the window focused when recording starts,
+**“Hide this window”** and **“minimize this window”** hide just the window focused when the picker opens,
 whether it is a terminal or another app. It also requires the exact phrase and
 can be restored with **“tile all windows”**. A focus change while speaking does
 not change the target; a closed, moved, or replaced window is skipped.
@@ -712,17 +593,22 @@ a change if this shell version retains the previous component in its cache.
 
 ### Tile two specific windows
 
-Say **“tile this window and the browser”**. `tile_current_window_with_browser(first, second)` is a dedicated intent that resolves
-“this window” from the focus captured when recording starts. Browser selection
-prefers visible windows as described below; ambiguous candidates produce a picker with window titles
-and workspace numbers. Choose a button to continue, or cancel. Starting a new
-recording cancels the pending picker. Spoken answers to picker questions are not
-yet supported.
+The written-command selector offers **“tile this window and the …”** for each
+other open window, using the same live window names as focus, close, hide, and
+minimize. It does not offer the current window as its own partner. The list
+refreshes when windows open or close, and a selected pair is checked again
+before tiling.
+
+For example, say **“tile this window and the chromium window”** when that window
+is open. “This window” comes from the focus captured when the picker opens.
+If a name still matches several windows, a picker shows their titles and workspace
+numbers. Choose a button to continue, or cancel. Starting a new recording cancels
+the pending picker. Spoken answers to picker questions are not yet supported.
 
 The selected pair is tiled side by side on the original workspace and screen:
-the original focused window on the left, the chosen browser on the right. The browser
-is brought there if needed. All other windows on that workspace are hidden,
-including unselected browsers. They remain running; “tile all windows” restores
+the original focused window on the left, the chosen window on the right. The chosen
+window is brought there if needed. All other windows on that workspace are hidden.
+They remain running; “tile all windows” restores
 them. Other workspaces are left in place.
 Both references must identify different windows. Missing matches or windows that
 closed, moved, or changed identity stop the command with an explanation.
@@ -750,7 +636,7 @@ focus stop the command. A connection error may happen after some tabs closed;
 Skipper reports it and does not automatically retry. It does not inspect page
 contents or send browsing data to an LLM. These phrases require an exact match.
 
-Say **“close Tensaku”** or **“close image viewer”** to close the Tensaku
+Enter **“close Tensaku”** or **“close image viewer”** to close the Tensaku
 screenshot annotation app. Both names target its exact app identity; browser
 pages with those titles are not selected. Multiple Tensaku windows produce
 the same window picker described below.
@@ -788,12 +674,12 @@ misspellings such as “brwoser” are accepted in these opening commands.
 
 If browser selection is ambiguous, choose one in the picker. The tiling command keeps
 its original focused window even when launching the browser changes focus.
-Both commands work through speech and the centered typing box.
+Both commands work through the centered typing box.
 
 
 ### Volume, brightness, and media
 
-These commands work through speech and the centered typing box. They accept the
+These commands work through the centered typing box. They accept the
 listed wording exactly; they are not guessed from similar phrases.
 
 | Say or type | Action |
@@ -824,7 +710,7 @@ Open **Skipper Explorer → Named actions** to create, edit, or remove a named
 shortcut. Enter a name and an exact phrase, choose a supported action, review its
 meaning, then save. For example, **Quiet time** can map **“make it quiet”** to
 **Mute sound**. Saving never executes the action. The phrase works immediately
-through speech, typed input, and Explorer's parse-only preview.
+through typed input and Explorer's parse-only preview.
 
 Named actions select one existing typed command. They retain its window picker,
 original captured context, and terminal-close confirmation. They do not contain
@@ -864,9 +750,283 @@ speech text as shell arguments. It reports that the launcher started; applicatio
 whose desktop files do not create a normal window may still manage their own
 startup or show an error separately.
 
+Open windows contribute focus, close, hide, and minimize commands to the
+written-command selector. A single Firefox window, for example, offers
+**“focus the firefox window,” “close the firefox window,” “hide the firefox
+window,”** and **“minimize the firefox window.”** Hide and minimize perform the
+same action. Already hidden windows offer focus and close. Multiple windows of
+one app receive distinct window names. These commands check the captured window
+identity before acting; they never launch a closed app. Open commands continue
+to list launchable installed apps.
+If floating windows cover a tiled target, focus moves the target into the
+floating stack so it actually comes forward without maximizing it. This also
+applies when choosing a window from Skipper's window list.
+Ambiguous spoken names ask for a more specific window title; selector entries
+use phrases that resolve to one open window. Skipper-hidden windows are restored
+to their original workspace when focused.
+
 ## Shared dataset and private SQLite overrides
 
 See [data ownership, lookup precedence, migration, and installation](docs/data-ownership.md).
-The public dataset is https://github.com/gregorycoppola/omarchy-voice-dataset.
+The dataset is maintained at https://github.com/gregorycoppola/omarchy-voice-dataset.
+Each Skipper release includes its compatible snapshot in `bundled/intents`; users
+install only Skipper. `OMARCHY_INTENT_DATASET` is an explicit developer override.
 Personal aliases, corrections, named actions, and preferences now use the same
 private SQLite database as command history. Legacy JSON files are migration backups.
+
+### Close all terminals
+
+Say or type **“close all terminals”**, **“close all terminal windows”**, or
+**“close every terminal”**. This targets terminal windows across all workspaces,
+including hidden terminals, captured when the command starts. Other apps and
+terminals opened afterward are excluded. The shared wording and canonical
+`window.close(target={kind: "all", value: "all_terminals"})` binding live in the
+intent dataset.
+
+This command requires an exact supported phrase. With terminal-close confirmation
+enabled, Skipper asks once before closing the batch if any terminal has running
+programs or its activity is unknown. Cancel closes nothing. Normal close requests
+preserve each terminal application's own prompts; Skipper does not force-kill
+processes. Window identities are rechecked before closing. If a close fails partway
+through, Skipper reports how many close requests preceded the failure.
+
+### List terminal names
+
+Say or type **“list the terminals”** to show terminal windows across workspaces.
+Each row shows its current title, terminal app, workspace, and up to three unique
+spoken names derived from that title. Task/project titles and directory names can
+provide names; changing status prefixes are removed. Shared names are omitted
+when they identify multiple terminals. Unnamed terminals remain clickable.
+
+These are live title-derived names, not permanent nicknames or terminal contents.
+For example, `Fix layout | skipper` can supply “fix layout” and, if unique,
+“skipper.” Use a name with existing commands such as “focus fix layout.” Clicking
+a row focuses the same window after checking its identity again.
+
+### Quick Yes/No confirmation
+
+Terminal-close confirmation appears in a centered popup with large **Yes** and
+**No** buttons. **Enter / Y** confirms; **Escape / N** cancels. Key-repeat events
+are ignored. Confirmations retain the captured target and reject stale answers.
+Voice confirmation can be added with the future speech adapter.
+
+### Build a command sequence with Tab
+
+Type **“open chrome”**, press **Tab**, then type **“tile the windows”** and press
+**Enter**. Skipper opens Chrome, waits for that action to finish, then tiles using
+fresh window information. Tab only queues a step; it executes nothing. Numbered
+steps have a Remove button. Enter with an empty input runs the queued steps.
+Escape discards the draft sequence. Up to 20 steps are accepted.
+
+All steps must parse before execution starts. A confirmation or window picker
+pauses the sequence; confirming continues it. Cancellation or an error stops the
+remaining steps, while completed actions remain done. Each executed step is saved
+separately in local history. Named-window commands retain their expected identity;
+changed or replaced targets stop the sequence instead of redirecting the action.
+
+### Hide an app window
+
+Say or type **“hide Chrome”**, **“hide Chromium”**, **“hide X”** / **“hide Twitter”**,
+or **“hide the browser.”** Chrome wording targets Chrome/Chromium specifically;
+X wording targets the X app window, not a browser tab. Multiple matches show the
+existing window picker. Hiding uses Skipper's holding workspace and leaves the
+app running. Use **“tile all windows”** on its original workspace to restore it.
+These commands require an exact supported phrase and work in command sequences.
+
+### Show an app window
+
+**“Show Chrome”** / **“show Chromium,” “show X”** / **“show Twitter,”** and
+**“show the browser”** select an existing app window. A Skipper-hidden window is
+restored to its original workspace, raised, and focused. Already visible windows
+are raised and focused without resizing. Multiple matches show a picker, including
+hidden browser candidates. If the app is closed, use its open command to launch it.
+Show commands also work as steps in a command sequence.
+
+**“Show all browsers,” “show all X,” “show all terminals,”** and **“show all
+windows”** restore and raise every matching open window without a picker.
+Chrome, Firefox, Discord, file managers, Tensaku, and apps are also supported;
+“apps” excludes terminals. Each window stays on its own workspace, with
+Skipper-hidden windows restored to their original workspace. The most recently
+used match is focused last. Closed apps are not launched, and window sizes stay
+unchanged. Use “tile all windows” to arrange windows side by side.
+
+**“List all browsers”** (also “list browsers” or “list all browser windows”)
+shows a clickable list of open browser windows across workspaces, including
+Skipper-hidden browsers. It does not focus anything until you select a window.
+“List all X” or “list all Twitter” lists X/Twitter app windows. Empty lists
+explicitly say there are no open browsers, X windows, terminals, or windows.
+Lists and window-selection prompts appear in the center of the monitor, like
+the typed-command box, and take keyboard focus immediately. Enter closes an
+informational list by default; Tab moves to a window and Enter selects it.
+Selection prompts focus their first choice. Escape closes or cancels the popup.
+The shared typed patterns “list all <application>” and “show all <application>”
+also accept exact live app class names (for example, Spotify), with the app
+name stored as an intent argument. Unknown app names produce an empty result.
+
+Idle shell titles such as `alex@workstation:~/Projects/demo` are suggested as
+**“close the shell alex projects demo.”** The hostname is omitted; the username
+and directory path identify the shell. Task/project terminals retain their task
+names. This is inferred from the shell-style title, not a check that no process
+is running; normal terminal-close confirmations still apply.
+
+### Personal layout exclusions
+
+The private SQLite settings document supports `layout_excluded_classes`, a list
+of exact Hyprland app classes (matching either class or initialClass). Excluded
+windows remain in window listings, but Skipper skips them when tiling or hiding
+windows and rejects direct move/maximize requests. This also protects overlays
+when tiling terminals would otherwise hide other apps. Rules are read on every
+layout operation; an empty list is the default for a new user. Changing an
+overlay application's class requires updating its rule.
+
+Use `Settings(DEFAULT_DATA / 'settings.json').set_layout_excluded_classes([...])`
+from the Python API (`settings.Settings`, `personal_store.DEFAULT_DATA`).
+These preferences live outside Git in the same owner-only SQLite database as
+command history. Updating terminal-close confirmation preserves the rules.
+The shared dataset also accepts “list all windows” and “list all the windows”.
+
+### Tile a particular monitor
+
+Say/type “tile the terminals on monitor 2” or “tile terminals on screen two”.
+The same forms work for windows, browsers, and apps, with numbers 1–8.
+Numbers are **one-based ordinals of connected, enabled, non-mirrored monitors
+sorted by compositor ID**, not raw Hyprland IDs; reconnecting displays can change
+the numbering. The response includes the monitor's connector name.
+
+This tiles the selected monitor's active regular workspace, including windows
+previously hidden by Skipper from that workspace. It does not gather windows
+from other workspaces. Category tiling hides other apps on that workspace,
+while personal layout exclusions remain untouched. Missing monitors produce an
+error. Shared grammar and the optional canonical `window.tile.monitor` argument
+live in the intent dataset; this executor resolves the live monitor at execution.
+
+### Screen recording
+
+“Start a new screen recording with web cam capture” starts Omarchy fullscreen
+capture with webcam. “Start a new screen recording without web cam capture”
+records the screen without webcam. Both include microphone audio and also accept
+“webcam” as one word. The shorter “Start a screen recording” still includes webcam.
+“Stop recording” stops the screen recording and lets Omarchy
+finish saving it. Both work in the typed command box and through the normal
+voice-command shortcut when a speech model is loaded; this is not an always
+listening stop phrase. Keyboard-only mode does not recognize spoken commands.
+
+An already-running recording is not toggled off by “start”. Repeated commands
+are blocked while this session's recording command is starting or saving.
+Stopping can control an Omarchy recording started outside Skipper too.
+Skipper reports that saving is in progress, rather than claiming the file is
+already finalized. Omarchy owns encoding, output location, and save notifications.
+
+The optional personal SQLite setting `screen_recording_monitor` selects a
+connector name before recording. Configure it with
+`Settings(DEFAULT_DATA / 'settings.json').set_screen_recording_monitor(name)`;
+`None` uses the focused monitor. A disconnected preferred monitor is an error.
+The shared dataset owns both intents and their ten phrase variants; no personal
+connector names or recording files belong in Git.
+
+### Move to a workspace
+
+“Move this window to workspace 3” moves the window captured at the start of the
+command to that numbered workspace. The current workspace stays selected.
+Digits are accepted for positive workspace numbers; spoken “one” through “ten”
+also work. The move checks the original window identity and verifies its final
+workspace. A grouped window is detached first so only that window moves.
+
+### Switch workspaces
+
+“Switch to workspace 3” changes the focused monitor to workspace 3, without
+moving any windows. “Go to workspace 3” is also accepted. Workspaces 1–10 each
+have a clean suggestion in the Super + R command list, so typing
+“switch workspace” can find them. Spoken number words one through ten work too.
+
+### System operations
+
+Say or type “sleep” / “suspend,” “screensaver,” “lock,” “log out,” “reboot,” or
+“shutdown.” These appear in the typed command suggestions and use the same
+operations as Omarchy's System menu. Logout, reboot, and shutdown show a focused
+confirmation before ending the session; Enter/Y confirms and Escape/N cancels.
+Sleep suspends directly. System actions require exact supported wording, and
+end a queued command sequence. Skipper reports a request, not proof that the
+machine has finished suspending or shutting down.
+
+### Open URL
+
+Say or type “open URL” to show a URL entry box. Type or paste a web address,
+then press Enter to open it in your default browser, or Escape to cancel.
+Addresses without a scheme use HTTPS. Invalid addresses stay in the box for
+correction. The box accepts addresses directly, without command suggestions.
+
+“Open a new browser to web site” opens a second, focused website picker on the
+same monitor. Its suggestions now come automatically from browser history:
+visits to individual pages are summed per hostname, with the most visited sites
+first. Equal counts use the latest visit, then hostname. Chromium, Chrome, Brave,
+and Firefox profiles in the usual local directories are supported. Up to 100 sites
+are retained in memory; the picker filters these and shows at most ten at a time.
+You can always enter a new address. **Open website in new browser…** and
+**Open website in existing browser…** are complete choices under **open**: Tab opens
+site choices; Tab accepts a site and Enter opens it. Existing browser uses a new tab
+in the captured connected Chrome/Chromium window; multiple possible windows add
+a browser-choice level. Shift+Tab goes back. Existing-window mode requires the
+configured browser extension connection and never falls back to a new window.
+
+History loads on a background thread when the website picker opens, with a
+60-second in-memory cache and a **Refresh browser history** button. A locked
+Chromium database is read from a private, disposable snapshot including its WAL
+or rollback journal; an unstable or unreadable source is reported in the picker.
+No browser files are modified. Suggestions contain site origins and visit counts,
+not individual page paths, queries, or titles. Counts reflect retained history;
+multiple profiles, including synced profiles, contribute their recorded counts.
+
+Saved bookmarks remain stored and can still be managed, but they do not seed or
+boost the most-visited list. This website-frequency order is independent of the
+command picker's text-only ranking.
+
+Saved websites and up to 20 recent destinations live in the personal
+`websites.json` namespace inside `~/.local/state/skipper/command-history.sqlite3`,
+with user-only permissions. No personal website JSON file is written and the
+store refuses paths inside a Git checkout. The starter Twitter/X bookmark can
+be edited or removed.
+
+### Select an audio device
+
+In the command picker, choose **Switch → audio output** or **Switch → microphone**,
+then choose a device. Tab accepts the device; Enter sets it as the system default.
+The current default is marked in the list. Back cancels selection.
+
+Devices load when the level opens and refresh while it is visible. Switching the
+microphone does not start recording or voice recognition. Existing applications
+may retain their own audio routing. Audio selections cannot yet be queued with
+Add step. Requires the local PipeWire/PulseAudio service and `pactl`.
+
+### Find and open a file
+
+Choose **Open → file**, to see recently opened files, newest first. Type a filename to search instead. Files
+under your home directory are searched asynchronously; hidden files, ignored
+paths, `node_modules`, and Python virtual environments are excluded. Folder
+subtitles distinguish matching filenames.
+
+Tab accepts a result and Enter requests opening it in the default application.
+Search considers up to 80 candidates before picker ranking, so narrow broad
+queries to find more specific results. File contents are not searched, and file
+selections cannot yet be added to a command sequence. Requires `fd` and `xdg-open`.
+
+The empty file menu merges desktop recent-file history (`recently-used.xbel`)
+with Skipper's own opening requests, deduplicated by path. It uses recorded access
+times, not filesystem modification times. Missing and hidden files are omitted,
+and results stay within your home folder. Applications that do not report desktop
+recent files may be absent. Skipper stores its additions locally in
+`~/.local/state/skipper/recent-files.sqlite3` (or `XDG_STATE_HOME`); this history is
+not stored in the repository. A launch request does not prove an app displayed
+the file successfully.
+
+### Explicit system controls
+
+- **Enable / Disable → night light, Wi-Fi, or Bluetooth** sets the requested state.
+- **Connect / Disconnect → paired Bluetooth device** operates on a known device.
+- Rows show current state and refresh while browsing. Tab accepts; Enter applies.
+  Selecting an already satisfied state leaves it unchanged.
+
+Night light uses Omarchy's 4000 K / 6500 K settings. Wi-Fi changes the software
+radio state; hardware radio blocks still apply. Bluetooth adapter choices are
+separate on systems with multiple adapters. Pairing new devices stays in the
+existing Bluetooth settings. System controls cannot yet be queued with Add step.

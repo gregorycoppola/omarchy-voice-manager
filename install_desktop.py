@@ -19,8 +19,8 @@ def install(root, home, data_home, *, explorer=False):
     binary.chmod(0o755)
     # Desktop Exec has its own quoting rules, distinct from shell quoting.
     executable = str(launcher).replace("\\", "\\\\\\\\").replace('"', '\\"').replace('`', '\\`').replace('$', '\\$').replace('%', '%%')
-    comment = ("Explore voice grammars, vocabulary and intents" if explorer
-               else "Record and transcribe speech locally")
+    comment = ("Explore command vocabulary and intents" if explorer
+               else "Choose desktop commands and arguments")
     desktop.write_text(
         f"[Desktop Entry]\nType=Application\nName={name}\n"
         f"Comment={comment}\n"

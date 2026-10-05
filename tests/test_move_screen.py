@@ -4,7 +4,6 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
-from gui import Skipper
 from intent_matching import IntentMatcher
 from unittest.mock import patch
 from os_actions import parse_command, window_target, move_other_screen
@@ -87,27 +86,3 @@ class MoveScreenTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'workspace'):
                 move_other_screen(TARGET)
             self.assertEqual(run.call_count,2)
-
-
-class MoveRoutingTests(unittest.TestCase):
-    def test_exact_and_fuzzy_preserve_recording_context(self):
-        with tempfile.TemporaryDirectory() as directory:
-            matcher = IntentMatcher(Path(directory)/'aliases.json')
-            for phrase, exact in [('move to other screen', True), ('move to other screan', False)]:
-                app = SimpleNamespace(model=object(), refresh_aliases=Mock(), matcher=matcher, finished=Mock(), offer_suggestion=Mock())
-                with patch('gui.save_transcript', return_value=(phrase, {'audio_seconds':1,'transcribe_seconds':.1})), \
-                     patch('gui.move_other_screen', return_value='Moved') as move, \
-                     patch('gui.GLib.idle_add', side_effect=lambda callback,*args: callback(*args)):
-                    Skipper.convert(app, Path('test.wav'), commands=True, context={'active':TARGET})
-                    move.assert_called_once_with(TARGET)
-                    app.offer_suggestion.assert_not_called()
-                    self.assertEqual(matcher.exact(phrase), 'move:other_screen')
-
-    def test_fuzzy_confirmation_uses_captured_target(self):
-        app = SimpleNamespace(finished=Mock())
-        with patch('gui.move_other_screen', return_value='Moved') as move, \
-             patch('gui.execute_command') as generic, \
-             patch('gui.GLib.idle_add', side_effect=lambda callback,*args: callback(*args)):
-            Skipper.run_confirmed(app, Path('test.wav'), 'move:other_screen', TARGET, True)
-            move.assert_called_once_with(TARGET)
-            generic.assert_not_called()

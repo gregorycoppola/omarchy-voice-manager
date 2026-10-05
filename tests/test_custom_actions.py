@@ -73,7 +73,7 @@ class CustomActionTests(unittest.TestCase):
     def test_action_reaches_existing_terminal_confirmation(self):
         self.store.save('Done', 'finish this session', 'close:terminal_current')
         app = VoiceRuntime(self.root, self.root / 'status.json')
-        target = {'address': '0x1', 'pid': 10}
+        target = {'address': '0x1', 'pid': 10, 'class': 'foot'}
         with patch('runtime.GLib.idle_add', side_effect=lambda fn, *a: fn(*a)), \
              patch('runtime.terminal_close_target', return_value=target), \
              patch('runtime.terminal_has_jobs', return_value=True), \

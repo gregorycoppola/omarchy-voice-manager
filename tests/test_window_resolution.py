@@ -129,9 +129,8 @@ class ResolutionTests(unittest.TestCase):
     def test_runtime_routes_pair_without_learning(self):
         app = VoiceRuntime(self.data, self.data / 'status.json')
         context = {'active': TERM, 'clients': [TERM, BROWSER, OTHER]}
-        with patch('runtime.save_transcript', return_value=('tile this window and the browser', {})), \
-             patch('runtime.GLib.idle_add', side_effect=lambda fn, *args: fn(*args)):
-            app.transcribe(self.data / 'test.wav', context, True)
+        with patch('runtime.GLib.idle_add', side_effect=lambda fn, *args: fn(*args)):
+            app.interpret('tile this window and the browser', context, True, source='speech')
         self.assertEqual(app.state['state'], 'Choose')
         self.assertFalse((self.data / 'aliases.json').exists())
 

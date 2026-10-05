@@ -27,6 +27,8 @@ class PluginSetupTests(unittest.TestCase):
             install_integration(ROOT, home, config, data, shortcut=True, autostart=True)
             self.assertEqual(bindings.read_text(), first)
             self.assertEqual(first.count('-- BEGIN Skipper'), 1)
+            self.assertNotIn('skipper-plugin-layout.lua', first)
+            self.assertFalse((config/'hypr/skipper-plugin-layout.lua').exists())
             saved = data/'skipper/aliases.json'
             saved.write_text('{"example":"saved"}')
             self.assertTrue((home/'.local/bin/skipper').is_file())

@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.3.1 — 2026-10-05
+
+- Offer installed, launchable apps by name, with an alias for the configured terminal.
+- Add optional workspace and tiling arguments; Enter runs with the current defaults.
+- Bring newly opened windows to the front after placement or tiling.
+- Put all windows, all terminals, and all browsers first in Tile and List.
+- Add selection of two named windows with identity checks and explicit tiling behavior.
+- Refresh public dataset provenance and validate the release snapshots for personal data.
+
+## 0.3.0 — 2026-10-02
+
+- Bundle the compatible intent catalog so installation uses one GitHub repository.
+- Make typing the default and remove custom speech recognition dependencies.
+- Add staged verb and argument menus, full-path matching, and explicit window targets.
+- Distinguish Focus (go to a window) from Show (bring it to this workspace).
+- Add browser-history website choices and new/existing browser destinations.
+- Add local filename search and recently opened files.
+- Add audio-device defaults and explicit night light, Wi-Fi, and Bluetooth controls.
+- Keep personal history in local storage outside the source repository.
+
+### Earlier changes included in this release
+
+- Name shell-style terminals using “shell” plus their path, omitting the hostname.
+
+- Add show Chrome/Chromium, X/Twitter, and browser commands to restore hidden
+  windows to their original workspace and focus them.
+
+- Add hide Chrome/Chromium, X/Twitter, and browser commands with window selection.
+- Rank displayed wording and action-word matches above alias-only matches.
+
+- Use Tab to build numbered command sequences and Enter to run them in order,
+  with fresh context between steps and pauses for confirmation or window choice.
+
+- Refresh dynamic terminal suggestions while the box is open and hide stale
+  named-terminal history entries without deleting saved history.
+- Center terminal-close confirmation with Yes/No buttons, Enter/Y and Escape/N,
+  plus token-bound spoken answers when voice is enabled.
+
+- Keep suggested command wording stable while matching aliases; unmatched history
+  entries no longer hide suggestions that match through another phrase.
+
+- Add a third dropdown source: dynamic per-terminal commands generated from
+  captured live names and shared templates, refreshed whenever the box opens.
+
+- Add “list the terminals” with titles, workspaces, unique spoken names, and
+  click-to-focus with window identity checks.
+
+- Show dataset command suggestions alongside recent commands in the typing box;
+  search unused supported phrases without creating fake history.
+
+- Add exact “close all terminals” across workspaces, with captured targets,
+  identity checks, and one batch confirmation for running or unknown jobs.
+  Requires the matching development intent dataset.
+
 ## 0.2.0 — 2026-09-24
 
 - Load shared intents and grammar from the public Omarchy Voice Dataset. Fresh

@@ -44,13 +44,11 @@ def install_integration(root, home, config, data, *, shortcut=False, autostart=F
                 planned[config / 'autostart/skipper.desktop'] = (desktop.read_bytes(), 0o644)
     block = None
     if shortcut:
-        target = config / 'hypr/skipper-plugin-ptt.lua'
-        planned[target] = ((root / 'config/hyprland-skipper-ptt.lua').read_bytes(), 0o644)
         written_target = config / 'hypr/skipper-plugin-written.lua'
         planned[written_target] = ((root / 'config/hyprland-skipper-written.lua').read_bytes(), 0o644)
         bindings = config / 'hypr/bindings.lua'
         # JSON strings are also valid Lua strings for normal filesystem paths.
-        block = BEGIN + 'dofile(' + json.dumps(str(target)) + ')\n' + 'dofile(' + json.dumps(str(written_target)) + ')\n' + END
+        block = BEGIN + 'dofile(' + json.dumps(str(written_target)) + ')\n' + END
         current = bindings.read_text() if bindings.exists() else ''
         old_block = state.get('shortcut')
         if BEGIN in current and (not old_block or old_block['block'] not in current):
@@ -116,69 +114,12 @@ def uninstall_integration(data):
     return ['Kept modified file: ' + path for path in retained]
 
 
-def install_dataset(source, data):
-    """Install a selected dataset snapshot; never fetch private credentials on launch."""
-    source, data = Path(source).expanduser().resolve(), Path(data)
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('skipper_setup_catalog', source / 'intent_explorer/catalog.py')
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    catalog = module.Catalog(source)
-    if 'language_policy' not in catalog.providers['skipper']:
-        raise ValueError('Dataset is too old for this Skipper version')
-    destination = data / 'skipper/intent-dataset'
-    if source == destination.resolve():
-        return catalog.revision
-    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    # Build a complete snapshot before replacing a previously installed version.
-    with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
-        staged = Path(temporary) / 'dataset'
-        staged.mkdir()
-        for folder in ('data', 'intent_explorer'):
-            shutil.copytree(source / folder, staged / folder,
-                            ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-        for filename in ('LICENSE', 'README.md'):
-            if (source / filename).is_file():
-                shutil.copyfile(source / filename, staged / filename)
-        (staged / 'installed-revision.txt').write_text(catalog.revision + '\n')
-        backup = destination.with_name('intent-dataset.previous')
-        if backup.exists():
-            raise RuntimeError('Previous dataset backup exists; retain or move it before replacing the dataset')
-        if destination.exists():
-            destination.rename(backup)
-        try:
-            staged.rename(destination)
-        except OSError:
-            if backup.exists():
-                backup.rename(destination)
-            raise
-    return catalog.revision
-
-
-def install_public_dataset(release, data):
-    """Fetch a pinned public snapshot; no credentials or moving branch dependency."""
-    repository, commit = release['repository'], release['commit']
-    import re
-    if not repository.startswith('https://github.com/') or not re.fullmatch(r'[0-9a-f]{40}', commit):
-        raise ValueError('Dataset release requires a public HTTPS URL and full commit ID')
-    with tempfile.TemporaryDirectory(prefix='skipper-dataset-') as temporary:
-        source = Path(temporary) / 'source'
-        subprocess.run(['git', 'init', '-q', str(source)], check=True)
-        subprocess.run(['git', '-C', str(source), 'fetch', '--depth=1', repository, commit], check=True)
-        subprocess.run(['git', '-C', str(source), 'checkout', '--detach', '-q', 'FETCH_HEAD'], check=True)
-        actual = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
-        if actual != commit:
-            raise ValueError('Downloaded dataset commit does not match release pin')
-        return install_dataset(source, data)
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command', required=True)
     setup = sub.add_parser('install')
-    setup.add_argument('--dataset', type=Path, help='Path to the separately obtained intent dataset checkout/snapshot')
-    setup.add_argument('--text-only', action='store_true', help='Skip speech-model download; use SKIPPER_TEXT_ONLY=1 when launching')
-    setup.add_argument('--shortcut', action='store_true', help='Install Super+R hold-to-talk; replaces its existing binding')
+    setup.add_argument('--text-only', action='store_true', help=argparse.SUPPRESS)
+    setup.add_argument('--shortcut', action='store_true', help='Install Super+R command picker; replaces the Super+R binding')
     setup.add_argument('--autostart', action='store_true', help='Start Skipper at login')
     setup.add_argument('--replace-existing', action='store_true', help='Back up and replace conflicting Skipper launchers')
     sub.add_parser('uninstall', help='Remove setup-owned integration; keep recordings, settings, model, and Python environment')
@@ -191,18 +132,15 @@ def main():
             print(message)
         print('Saved data, model, and Python environment retained. Remove the widget with: omarchy plugin remove greg.skipper')
     else:
-        reference = json.loads((ROOT / 'dataset-reference.json').read_text())
-        source = args.dataset or (Path(os.environ['OMARCHY_INTENT_DATASET']) if os.environ.get('OMARCHY_INTENT_DATASET') else None)
-        if source:
-            if not (source / 'intent_explorer/catalog.py').is_file():
-                parser.error('Intent dataset missing at --dataset / OMARCHY_INTENT_DATASET path.')
-            revision = install_dataset(source, data)
-        else:
-            revision = install_public_dataset(reference['release'], data)
+        # Same source as runtime: shipped bundle, or an explicit developer override.
+        from dataset_source import CATALOG, DATASET_REVISION
+        if 'language_policy' not in CATALOG.providers['skipper']:
+            parser.error('Intent dataset is too old for this Skipper version')
+        revision = DATASET_REVISION
         from personal_store import initialize
         initialize(data / 'skipper')
-        print('Intent dataset installed: ' + revision)
-        missing = [cmd for cmd in ('hyprctl', 'pw-record', 'gapplication') if not shutil.which(cmd)]
+        print('Intent dataset ready: ' + revision)
+        missing = [cmd for cmd in ('hyprctl', 'gapplication') if not shutil.which(cmd)]
         if missing:
             parser.error('Install required system commands first: ' + ', '.join(missing))
         check = subprocess.run([sys.executable, '-c', "import gi; gi.require_version('Gtk', '4.0'); from gi.repository import Gtk; import cairo"], capture_output=True)
@@ -211,11 +149,6 @@ def main():
         environment = data / 'skipper/venv'
         if not (environment / 'bin/python').exists():
             subprocess.run([sys.executable, '-m', 'venv', '--system-site-packages', str(environment)], check=True)
-        python = environment / 'bin/python'
-        subprocess.run([str(python), '-m', 'pip', 'install', '-r', str(ROOT / 'requirements.lock')], check=True)
-        env = dict(os.environ, SKIPPER_MODEL_DIR=str(data / 'skipper/models/parakeet-tdt-0.6b-v3-int8'))
-        if not args.text_only:
-            subprocess.run([str(python), str(ROOT / 'skipper.py'), 'download'], env=env, check=True)
         install_integration(ROOT, home, config, data, shortcut=args.shortcut, autostart=args.autostart, replace=args.replace_existing)
         print('Setup complete. Click Start Skipper in the bar, or run ~/.local/bin/skipper.')
     if shutil.which('hyprctl') and (args.command == 'uninstall' or args.shortcut):

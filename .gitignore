@@ -14,3 +14,8 @@ local/
 *.db
 *.db-*
 command-history*
+
+# Machine-local secrets and diagnostic history.
+.env
+.env.*
+*.jsonl

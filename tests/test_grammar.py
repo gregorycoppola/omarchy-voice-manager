@@ -89,19 +89,18 @@ class GrammarTests(unittest.TestCase):
         self.assertEqual(personal_store.load(self.matcher.path), before)
 
     def test_new_browser_expansions_share_existing_semantics(self):
-        for prefix in ('open', 'launch', 'focus', 'switch to'):
+        for prefix in ('open', 'launch', 'switch to'):
             for name in ('chrome', 'chromium', 'google chrome'):
                 self.assertEqual(GRAMMAR[f'{prefix} {name}'], 'browser')
+        self.assertNotIn('focus chrome', GRAMMAR)
 
-    def test_focus_apps_reuses_open_intent_with_fuzzy_names(self):
+    def test_switch_to_apps_reuses_open_intent_with_fuzzy_names(self):
         for name in ('discord', 'x', 'twitter'):
             expected = self.matcher.parse(f'open {name}').intent
-            for prefix in ('focus', 'switch to'):
-                with self.subTest(name=name, prefix=prefix):
-                    result = self.matcher.parse(f'{prefix} {name}')
-                    self.assertEqual(result.method, 'exact')
-                    self.assertEqual(result.intent, expected)
-        for phrase, app in [('focus discrod', 'discord'), ('switch to twiter', 'x')]:
-            result = self.matcher.parse(phrase)
-            self.assertEqual(result.method, 'fuzzy')
-            self.assertEqual(result.intent, STRUCTURED_INTENTS[app])
+            result = self.matcher.parse(f'switch to {name}')
+            self.assertEqual(result.method, 'exact')
+            self.assertEqual(result.intent, expected)
+            self.assertIsNone(self.matcher.parse(f'focus {name}').command)
+        result = self.matcher.parse('switch to twiter')
+        self.assertEqual(result.method, 'fuzzy')
+        self.assertEqual(result.intent, STRUCTURED_INTENTS['x'])

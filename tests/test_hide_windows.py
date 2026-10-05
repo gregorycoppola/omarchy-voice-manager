@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from intent_matching import IntentMatcher
+from command_catalog import COMMAND_SUGGESTIONS
 from os_actions import capture_window_context, hide_windows
 from runtime import VoiceRuntime
 from test_tile_windows import WINDOW
@@ -55,7 +56,7 @@ class HideWindowsTests(unittest.TestCase):
     def test_empty_workspace_capture_allows_restore(self):
         workspace = {'id': 2, 'name': '2', 'monitorID': 1}
         hidden = dict(WINDOW, workspace={'id': -99, 'name': 'special:skipper-tile-2'})
-        with patch('os_actions.run', side_effect=['{}', json.dumps(workspace), json.dumps([hidden])]):
+        with patch('os_actions.run', side_effect=['{}', json.dumps(workspace), json.dumps([hidden]), '[]']):
             context = capture_window_context()
         self.assertEqual(context['active']['workspace']['id'], 2)
         self.assertEqual(context['active']['monitor'], 1)
@@ -66,10 +67,13 @@ class HideCurrentWindowTests(unittest.TestCase):
     def test_phrase_and_runtime_keep_captured_context(self):
         with tempfile.TemporaryDirectory() as directory:
             matcher = IntentMatcher(Path(directory) / 'aliases.json')
-            result = matcher.parse('Hide this window!')
-            self.assertEqual(result.command, 'window:hide')
-            self.assertEqual(result.intent.type, 'hide_window')
+            for phrase in ('Hide this window!', 'Minimize this window!'):
+                result = matcher.parse(phrase)
+                self.assertEqual(result.command, 'window:hide')
+                self.assertEqual(result.intent.type, 'hide_window')
             self.assertIsNone(matcher.parse('hide this windo').command)
+        suggestion = next(item for item in COMMAND_SUGGESTIONS if item['command'] == 'window:hide')
+        self.assertIn('minimize this window', suggestion['forms'])
         context = {'active': WINDOW, 'clients': [WINDOW, OTHER]}
         with patch('runtime.hide_current_window', return_value='Hidden') as action:
             VoiceRuntime.execute('window:hide', context)

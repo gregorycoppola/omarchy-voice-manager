@@ -5,7 +5,7 @@ import re
 
 from command_catalog import APPS, TERMINAL_CLASSES
 from grammar_engine import normalize
-from window_vocabulary import window_names
+from window_vocabulary import window_names, inject_windows
 
 BROWSERS = {'chromium', 'google-chrome', 'google-chrome-stable', 'chrome',
             'firefox', 'org.mozilla.firefox', 'brave-browser', 'brave',
@@ -33,7 +33,7 @@ class WindowQuestion:
 
 def needs_window_resolution(intent):
     return bool(intent and (intent.type in ('tile_pair', 'tile_current_window_with_browser',
-                    'open_browser_and_tile', 'open_browser_fullscreen', 'close_browser_tabs')
+                    'open_browser_and_tile', 'open_browser_fullscreen', 'close_browser_tabs', 'hide_application', 'show_application')
                 or (intent.type == 'close_window' and dict(intent.arguments)['application'] != 'terminal')))
 
 
@@ -41,10 +41,10 @@ class WindowResolution:
     def __init__(self, intent, context):
         self.intent = intent
         self.references = intent.arguments
-        if intent.type == 'close_window':
+        if intent.type in ('close_window', 'hide_application', 'show_application'):
             application = dict(intent.arguments)['application']
             reference = {'browser': 'the browser', 'files': 'the file browser',
-                         'x': 'X', 'discord': 'Discord', 'tensaku': 'Tensaku'}[application]
+                         'x': 'X', 'discord': 'Discord', 'tensaku': 'Tensaku', 'chrome': 'Chrome'}[application]
             self.references = (('window', reference),)
         self.context = deepcopy(context or {})
         self.resolved = {}
@@ -64,7 +64,7 @@ class WindowResolution:
             matches = tuple(c for c in self.windows if c.get('class', '').lower() in classes)
             # Resolve generic browser references from the recording snapshot.
             # Missing visibility metadata must not silently exclude candidates.
-            if name == 'browser' and all(type(c.get('visible')) is bool for c in matches):
+            if name == 'browser' and self.intent.type not in ('show_application', 'show_all_application') and all(type(c.get('visible')) is bool for c in matches):
                 visible = tuple(c for c in matches if c['visible'] and not c.get('hidden', False))
                 if visible:
                     return visible
@@ -76,6 +76,12 @@ class WindowResolution:
             return tuple(c for c in self.windows if c.get('class') in APPS[app]['classes'])
         if name == 'terminal':
             return tuple(c for c in self.windows if c.get('class', '').lower() in TERMINAL_CLASSES)
+        if not hasattr(self, '_window_vocabulary'):
+            self._window_vocabulary = inject_windows(self.context)
+        named = {identity(self._window_vocabulary.targets[word.id]) for word in self._window_vocabulary.words
+                 if name in word.forms}
+        if named:
+            return tuple(c for c in self.windows if identity(c) in named)
         return tuple(c for c in self.windows if name in window_names(c.get('title', ''))[1])
 
     def advance(self):

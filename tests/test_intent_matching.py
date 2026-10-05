@@ -22,7 +22,7 @@ class MatchingTests(unittest.TestCase):
             self.assertIsNone(self.matcher.suggest(phrase))
 
     def test_close_transcripts_suggest_intents_without_learning(self):
-        for text, intent in [("show all the open windows", "windows:tile"), ("open dis cord", "discord"), ("open chrom", "browser")]:
+        for text, intent in [("open dis cord", "discord"), ("open chrom", "browser")]:
             self.assertEqual(self.matcher.suggest(text), intent)
             self.assertIsNone(self.matcher.exact(text))
         self.assertFalse(self.path.exists())

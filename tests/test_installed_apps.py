@@ -83,9 +83,9 @@ class InstalledAppTests(unittest.TestCase):
         runtime = VoiceRuntime(self.root, self.root / 'status.json')
         with patch('runtime.discover_installed_apps', return_value=apps), \
              patch('runtime.GLib.idle_add', side_effect=lambda fn, *args: fn(*args)), \
-             patch('runtime.open_installed_app', return_value='Opening Book Reader') as launch:
+             patch('runtime.open_with_options', return_value='Opening Book Reader') as launch:
             runtime.interpret('open book reader', {})
-        launch.assert_called_once_with(apps.apps[0])
+        launch.assert_called_once_with('desktop-app:org.example.Reader', {'workspace': 'current', 'tile': False}, {}, apps.apps[0])
         self.assertEqual(runtime.state['state'], 'Ready')
         self.assertEqual(runtime.state['intent']['arguments']['desktop'], 'org.example.Reader')
         self.assertFalse((self.root / 'aliases.json').exists())

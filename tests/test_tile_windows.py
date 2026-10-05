@@ -4,7 +4,6 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
-from gui import Skipper
 from intent_matching import IntentMatcher
 from os_actions import tile_open_windows, parse_command, equal_grid
 
@@ -86,18 +85,8 @@ class TileTests(unittest.TestCase):
             with patch('os_actions.time.sleep'), self.assertRaisesRegex(RuntimeError,'could not confirm'):
                 tile_open_windows({'active':WINDOW,'clients':[WINDOW]})
 
-    def test_exact_and_fuzzy_use_original_workspace_context(self):
-        with tempfile.TemporaryDirectory() as directory:
-            matcher = IntentMatcher(Path(directory)/'aliases.json')
-            context = {'active':WINDOW,'clients':[WINDOW]}
-            app = SimpleNamespace(model=object(),matcher=matcher,finished=Mock(),refresh_aliases=Mock())
-            for text in ['tile open windows','tile open windos']:
-                with patch('gui.save_transcript',return_value=(text,{'audio_seconds':1,'transcribe_seconds':.1})), patch('gui.tile_open_windows',return_value='Tiled') as tile, patch('gui.GLib.idle_add',side_effect=lambda cb,*args:cb(*args)):
-                    Skipper.convert(app,Path('test.wav'),commands=True,context=context)
-                    tile.assert_called_once_with(context)
-                    self.assertEqual(matcher.exact(text),'windows:tile')
 
-    def test_show_and_tile_share_intent_and_captured_workspace(self):
+    def test_show_raises_windows_and_tile_still_tiles(self):
         from runtime import VoiceRuntime
         with tempfile.TemporaryDirectory() as directory:
             matcher = IntentMatcher(Path(directory) / 'aliases.json')
@@ -105,11 +94,11 @@ class TileTests(unittest.TestCase):
             context = {'active': WINDOW, 'clients': [WINDOW]}
             for phrase in ('show all windows', 'show all open windows', 'show all open window'):
                 result = matcher.parse(phrase)
-                self.assertEqual(result.intent, expected)
-                self.assertEqual(result.command, 'windows:tile')
-                with patch('runtime.tile_open_windows', return_value='Tiled') as tile:
+                self.assertNotEqual(result.intent, expected)
+                self.assertEqual(result.command, 'show-all:windows')
+                with patch('runtime.show_all_windows', return_value='Shown') as show:
                     VoiceRuntime.execute(result.command, context)
-                    tile.assert_called_once_with(context)
+                    show.assert_called_once_with(context, 'windows')
             with patch('runtime.tile_open_windows', return_value='Tiled') as tile:
                 VoiceRuntime.execute('windows', context)
                 tile.assert_called_once_with(context)

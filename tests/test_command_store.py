@@ -36,6 +36,13 @@ class CommandStoreTests(unittest.TestCase):
         with self.store.connect() as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM commands').fetchone()[0], 2)
 
+    def test_written_counts_group_aliases_by_command_and_exclude_speech(self):
+        self.store.record('open chrome', 'browser', 'written')
+        self.store.record('open the browser', 'browser', 'written')
+        self.store.record('open chrome', 'browser', 'speech')
+        self.store.record('open discord', 'discord', 'written')
+        self.assertEqual(CommandStore(self.path).written_counts(), {'browser': 2, 'discord': 1})
+
     def test_reject_checkout(self):
         repo = self.root / 'repo'
         (repo / '.git').mkdir(parents=True)

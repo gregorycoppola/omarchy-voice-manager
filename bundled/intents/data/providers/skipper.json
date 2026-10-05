@@ -1,0 +1,3248 @@
+{
+  "schema_version": 2,
+  "provider": "skipper",
+  "rules": [
+    {
+      "id": "open_destination",
+      "patterns": [
+        "open <destination>",
+        "bring up <destination>"
+      ],
+      "intent_type": "open_destination",
+      "arguments": [
+        [
+          "destination",
+          "$destination"
+        ]
+      ],
+      "command": "site:{destination}",
+      "label": "Open {destination}",
+      "scope": "global"
+    },
+    {
+      "id": "close_browser_tabs",
+      "patterns": [
+        "close all tabs",
+        "close all browser tabs",
+        "close all tabs in the browser",
+        "close all tabs on the browser",
+        "close all tabs in browser",
+        "close all tabs on browser"
+      ],
+      "intent_type": "close_browser_tabs",
+      "arguments": [
+        [
+          "window",
+          "the browser"
+        ]
+      ],
+      "command": "browser:close_tabs",
+      "label": "Close browser tabs, leaving one blank tab",
+      "scope": "global"
+    },
+    {
+      "id": "list_windows",
+      "patterns": [
+        "list all windows",
+        "list all the windows",
+        "list open windows",
+        "list the open windows",
+        "what windows are open"
+      ],
+      "intent_type": "list_windows",
+      "arguments": [],
+      "command": "windows:list",
+      "label": "List open windows",
+      "scope": "global"
+    },
+    {
+      "id": "open_another_destination",
+      "patterns": [
+        "open another <destination> tab",
+        "open a new <destination> tab"
+      ],
+      "intent_type": "open_another_destination",
+      "arguments": [
+        [
+          "destination",
+          "$destination"
+        ]
+      ],
+      "command": "site-new:{destination}",
+      "label": "Open another {destination} tab",
+      "scope": "global"
+    },
+    {
+      "id": "open_browser",
+      "patterns": [
+        "open <browser>",
+        "launch <browser>",
+        "switch to <browser>"
+      ],
+      "intent_type": "open_application",
+      "arguments": [
+        [
+          "application",
+          "$browser"
+        ],
+        [
+          "presentation",
+          "maximized"
+        ]
+      ],
+      "command": "browser",
+      "label": "Open Chrome",
+      "scope": "global"
+    },
+    {
+      "id": "present_browser",
+      "patterns": [
+        "bring up <browser>"
+      ],
+      "intent_type": "open_application",
+      "arguments": [
+        [
+          "application",
+          "$browser"
+        ],
+        [
+          "presentation",
+          "maximized"
+        ]
+      ],
+      "command": "browser_fullscreen",
+      "label": "Bring up Chrome with tabs visible",
+      "scope": "global"
+    },
+    {
+      "id": "open_browser_and_tile",
+      "patterns": [
+        "open <browser_target> and tile",
+        "open <browser_target> and tile it"
+      ],
+      "intent_type": "open_browser_and_tile",
+      "arguments": [
+        [
+          "first",
+          "this window"
+        ],
+        [
+          "second",
+          "the browser"
+        ]
+      ],
+      "command": "browser:open_tile",
+      "label": "Open the browser and tile",
+      "scope": "global"
+    },
+    {
+      "id": "open_browser_fullscreen",
+      "patterns": [
+        "open the browser",
+        "open browser",
+        "open <browser_target> in full screen",
+        "open <browser_target> in fullscreen",
+        "open <browser_target> full screen",
+        "open <browser_target> fullscreen"
+      ],
+      "intent_type": "open_browser_fullscreen",
+      "arguments": [
+        [
+          "window",
+          "the browser"
+        ]
+      ],
+      "command": "browser:open_fullscreen",
+      "label": "Open the browser in full screen",
+      "scope": "global"
+    },
+    {
+      "id": "open_app",
+      "patterns": [
+        "open <app>",
+        "bring up <app>",
+        "switch to <app>"
+      ],
+      "intent_type": "open_application",
+      "arguments": [
+        [
+          "application",
+          "$app"
+        ],
+        [
+          "presentation",
+          "maximized"
+        ]
+      ],
+      "command": "{app}",
+      "label": "Open {app}",
+      "scope": "global"
+    },
+    {
+      "id": "close_app",
+      "patterns": [
+        "close <close_app>",
+        "close the <close_app>",
+        "close <close_app> window",
+        "close the <close_app> window"
+      ],
+      "intent_type": "close_window",
+      "arguments": [
+        [
+          "application",
+          "$close_app"
+        ],
+        [
+          "selection",
+          "unique_or_choose"
+        ]
+      ],
+      "command": "close:{close_app}",
+      "label": "Close {close_app} window",
+      "scope": "global"
+    },
+    {
+      "id": "move_app",
+      "patterns": [
+        "move <window_app> to other screen",
+        "move <window_app> to other monitor",
+        "move <window_app> to other window",
+        "move <window_app> to the other screen",
+        "move <window_app> to the other monitor",
+        "move <window_app> to the other window",
+        "move the <window_app> to other screen",
+        "move the <window_app> to other monitor",
+        "move the <window_app> to other window",
+        "move the <window_app> to the other screen",
+        "move the <window_app> to the other monitor",
+        "move the <window_app> to the other window"
+      ],
+      "intent_type": "move_application",
+      "arguments": [
+        [
+          "application",
+          "$window_app"
+        ],
+        [
+          "selection",
+          "most_recent"
+        ],
+        [
+          "monitor",
+          "other"
+        ]
+      ],
+      "command": "move-app:{window_app}",
+      "label": "Move {window_app} to the other screen",
+      "scope": "global"
+    },
+    {
+      "id": "maximize_app",
+      "patterns": [
+        "maximize <window_app>"
+      ],
+      "intent_type": "maximize_window",
+      "arguments": [
+        [
+          "application",
+          "$window_app"
+        ],
+        [
+          "selection",
+          "most_recent"
+        ],
+        [
+          "monitor",
+          "current"
+        ]
+      ],
+      "command": "maximize:{window_app}",
+      "label": "Maximize {window_app} window",
+      "scope": "global"
+    },
+    {
+      "id": "create_terminal",
+      "patterns": [
+        "open a new terminal",
+        "open a terminal",
+        "open terminal",
+        "open new terminal"
+      ],
+      "intent_type": "create_terminal",
+      "arguments": [],
+      "command": "terminal:new",
+      "label": "Open a new terminal",
+      "scope": "global"
+    },
+    {
+      "id": "close_terminal",
+      "patterns": [
+        "close terminal",
+        "close the terminal",
+        "close a terminal"
+      ],
+      "intent_type": "close_window",
+      "arguments": [
+        [
+          "application",
+          "terminal"
+        ],
+        [
+          "selection",
+          "most_recent"
+        ]
+      ],
+      "command": "close:terminal",
+      "label": "Close the most recent terminal",
+      "scope": "global"
+    },
+    {
+      "id": "close_current_terminal",
+      "patterns": [
+        "close this terminal"
+      ],
+      "intent_type": "close_window",
+      "arguments": [
+        [
+          "application",
+          "terminal"
+        ],
+        [
+          "selection",
+          "current"
+        ]
+      ],
+      "command": "close:terminal_current",
+      "label": "Close this terminal",
+      "scope": "global"
+    },
+    {
+      "id": "maximize_current_window",
+      "patterns": [
+        "maximize this window",
+        "maximize the current window"
+      ],
+      "intent_type": "maximize_window",
+      "arguments": [
+        [
+          "application",
+          "any"
+        ],
+        [
+          "selection",
+          "current"
+        ],
+        [
+          "monitor",
+          "current"
+        ]
+      ],
+      "command": "maximize:current_window",
+      "label": "Maximize this window",
+      "scope": "global"
+    },
+    {
+      "id": "move_window",
+      "patterns": [
+        "move to other screen",
+        "move window to other screen",
+        "move to the other screen",
+        "move window to the other screen",
+        "move this window to the other screen"
+      ],
+      "intent_type": "move_window",
+      "arguments": [
+        [
+          "selection",
+          "current"
+        ],
+        [
+          "monitor",
+          "other"
+        ]
+      ],
+      "command": "move:other_screen",
+      "label": "Move window to the other screen",
+      "scope": "global"
+    },
+    {
+      "id": "tile_current_window_with_browser",
+      "patterns": [
+        "tile this window and the browser",
+        "tile this window and browser",
+        "tile the current window and the browser"
+      ],
+      "intent_type": "tile_current_window_with_browser",
+      "arguments": [
+        [
+          "first",
+          "this window"
+        ],
+        [
+          "second",
+          "the browser"
+        ]
+      ],
+      "command": "windows:tile_current_browser",
+      "label": "Tile this window and the browser",
+      "scope": "global"
+    },
+    {
+      "id": "tile_windows",
+      "patterns": [
+        "tile open windows",
+        "tile all open windows",
+        "tile windows",
+        "tile all windows",
+        "tile the open windows"
+      ],
+      "intent_type": "tile_windows",
+      "arguments": [
+        [
+          "workspace",
+          "current"
+        ]
+      ],
+      "command": "windows:tile",
+      "label": "Tile open windows",
+      "scope": "global"
+    },
+    {
+      "id": "tile_terminals",
+      "patterns": [
+        "tile all the terminals",
+        "tile all terminals",
+        "tile terminals",
+        "tile the terminals",
+        "tile open terminals",
+        "tile all open terminals"
+      ],
+      "intent_type": "tile_terminals",
+      "arguments": [
+        [
+          "workspace",
+          "current"
+        ]
+      ],
+      "command": "terminals:tile",
+      "label": "Tile terminals and minimize other windows",
+      "scope": "global"
+    },
+    {
+      "id": "tile_browsers",
+      "patterns": [
+        "tile all browsers",
+        "tile all the browsers",
+        "tile browsers",
+        "tile the browsers",
+        "tile open browsers",
+        "tile all browser windows"
+      ],
+      "intent_type": "tile_browsers",
+      "arguments": [
+        [
+          "workspace",
+          "current"
+        ]
+      ],
+      "command": "browsers:tile",
+      "label": "Tile browsers and minimize other windows",
+      "scope": "global"
+    },
+    {
+      "id": "hide_terminals",
+      "patterns": [
+        "hide all terminals"
+      ],
+      "intent_type": "hide_windows",
+      "arguments": [
+        [
+          "workspace",
+          "current"
+        ],
+        [
+          "category",
+          "terminals"
+        ]
+      ],
+      "command": "terminals:hide",
+      "label": "Hide all terminals",
+      "scope": "global"
+    },
+    {
+      "id": "hide_apps",
+      "patterns": [
+        "hide all apps"
+      ],
+      "intent_type": "hide_windows",
+      "arguments": [
+        [
+          "workspace",
+          "current"
+        ],
+        [
+          "category",
+          "apps"
+        ]
+      ],
+      "command": "apps:hide",
+      "label": "Hide all non-terminal apps",
+      "scope": "global"
+    },
+    {
+      "id": "hide_current_window",
+      "patterns": [
+        "hide this window",
+        "minimize this window"
+      ],
+      "intent_type": "hide_window",
+      "arguments": [
+        [
+          "selection",
+          "current"
+        ]
+      ],
+      "command": "window:hide",
+      "label": "Hide this window",
+      "scope": "global"
+    },
+    {
+      "id": "tile_apps",
+      "patterns": [
+        "tile all apps",
+        "tile the apps"
+      ],
+      "intent_type": "tile_apps",
+      "arguments": [
+        [
+          "workspace",
+          "current"
+        ]
+      ],
+      "command": "apps:tile",
+      "label": "Tile non-terminal apps and minimize terminals",
+      "scope": "global"
+    },
+    {
+      "id": "volume_up",
+      "patterns": [
+        "volume up",
+        "turn the volume up",
+        "turn up the volume",
+        "louder"
+      ],
+      "intent_type": "desktop_action",
+      "arguments": [
+        [
+          "action",
+          "volume:up"
+        ]
+      ],
+      "command": "volume:up",
+      "label": "Turn volume up",
+      "scope": "global"
+    },
+    {
+      "id": "volume_down",
+      "patterns": [
+        "volume down",
+        "turn the volume down",
+        "turn down the volume",
+        "quieter"
+      ],
+      "intent_type": "desktop_action",
+      "arguments": [
+        [
+          "action",
+          "volume:down"
+        ]
+      ],
+      "command": "volume:down",
+      "label": "Turn volume down",
+      "scope": "global"
+    },
+    {
+      "id": "volume_mute",
+      "patterns": [
+        "mute",
+        "mute sound",
+        "mute the sound",
+        "mute audio"
+      ],
+      "intent_type": "desktop_action",
+      "arguments": [
+        [
+          "action",
+          "volume:mute"
+        ]
+      ],
+      "command": "volume:mute",
+      "label": "Mute sound",
+      "scope": "global"
+    },
+    {
+      "id": "volume_unmute",
+      "patterns": [
+        "unmute",
+        "unmute sound",
+        "unmute the sound",
+        "unmute audio"
+      ],
+      "intent_type": "desktop_action",
+      "arguments": [
+        [
+          "action",
+          "volume:unmute"
+        ]
+      ],
+      "command": "volume:unmute",
+      "label": "Unmute sound",
+      "scope": "global"
+    },
+    {
+      "id": "brightness_up",
+      "patterns": [
+        "brightness up",
+        "increase brightness",
+        "brighter"
+      ],
+      "intent_type": "desktop_action",
+      "arguments": [
+        [
+          "action",
+          "brightness:up"
+        ]
+      ],
+      "command": "brightness:up",
+      "label": "Increase brightness",
+      "scope": "global"
+    },
+    {
+      "id": "brightness_down",
+      "patterns": [
+        "brightness down",
+        "decrease brightness",
+        "dimmer"
+      ],
+      "intent_type": "desktop_action",
+      "arguments": [
+        [
+          "action",
+          "brightness:down"
+        ]
+      ],
+      "command": "brightness:down",
+      "label": "Decrease brightness",
+      "scope": "global"
+    },
+    {
+      "id": "media_play",
+      "patterns": [
+        "play music",
+        "play the music",
+        "resume music",
+        "resume playback"
+      ],
+      "intent_type": "desktop_action",
+      "arguments": [
+        [
+          "action",
+          "media:play"
+        ]
+      ],
+      "command": "media:play",
+      "label": "Play music",
+      "scope": "global"
+    },
+    {
+      "id": "media_pause",
+      "patterns": [
+        "pause music",
+        "pause the music",
+        "pause playback",
+        "stop the music"
+      ],
+      "intent_type": "desktop_action",
+      "arguments": [
+        [
+          "action",
+          "media:pause"
+        ]
+      ],
+      "command": "media:pause",
+      "label": "Pause music",
+      "scope": "global"
+    },
+    {
+      "id": "media_next",
+      "patterns": [
+        "next song",
+        "next track",
+        "skip track",
+        "skip this song"
+      ],
+      "intent_type": "desktop_action",
+      "arguments": [
+        [
+          "action",
+          "media:next"
+        ]
+      ],
+      "command": "media:next",
+      "label": "Next track",
+      "scope": "global"
+    },
+    {
+      "id": "media_previous",
+      "patterns": [
+        "previous song",
+        "previous track",
+        "go back a track"
+      ],
+      "intent_type": "desktop_action",
+      "arguments": [
+        [
+          "action",
+          "media:previous"
+        ]
+      ],
+      "command": "media:previous",
+      "label": "Previous track",
+      "scope": "global"
+    },
+    {
+      "id": "close_all_terminals",
+      "patterns": [
+        "close all the terminals",
+        "close all terminals",
+        "close all terminal windows",
+        "close all open terminals",
+        "close every terminal",
+        "close every terminal window",
+        "close the terminals",
+        "close all of the terminals",
+        "close all my terminals",
+        "close all open terminal windows"
+      ],
+      "intent_type": "close_all_terminals",
+      "arguments": [],
+      "command": "terminals:close",
+      "label": "Close all terminals across workspaces",
+      "scope": "global"
+    },
+    {
+      "id": "list_terminals",
+      "patterns": [
+        "list the terminals",
+        "list terminals",
+        "list all terminals",
+        "list open terminals",
+        "list the open terminals",
+        "list terminal windows",
+        "list all terminal windows",
+        "what terminals are open",
+        "show the terminal list",
+        "show me the terminal list"
+      ],
+      "intent_type": "list_terminals",
+      "arguments": [],
+      "command": "terminals:list",
+      "label": "List terminal windows and spoken names",
+      "scope": "global"
+    },
+    {
+      "id": "hide_chrome",
+      "patterns": [
+        "hide chrome",
+        "hide chromium",
+        "hide google chrome",
+        "hide the chrome window",
+        "hide the chromium window"
+      ],
+      "intent_type": "hide_application",
+      "arguments": [
+        [
+          "application",
+          "chrome"
+        ]
+      ],
+      "command": "hide:chrome",
+      "label": "Hide chrome window",
+      "scope": "global"
+    },
+    {
+      "id": "hide_x",
+      "patterns": [
+        "hide X",
+        "hide twitter",
+        "hide the X window",
+        "hide the twitter window"
+      ],
+      "intent_type": "hide_application",
+      "arguments": [
+        [
+          "application",
+          "x"
+        ]
+      ],
+      "command": "hide:x",
+      "label": "Hide x window",
+      "scope": "global"
+    },
+    {
+      "id": "hide_browser",
+      "patterns": [
+        "hide the browser",
+        "hide browser",
+        "hide the browser window"
+      ],
+      "intent_type": "hide_application",
+      "arguments": [
+        [
+          "application",
+          "browser"
+        ]
+      ],
+      "command": "hide:browser",
+      "label": "Hide browser window",
+      "scope": "global"
+    },
+    {
+      "id": "show_chrome",
+      "patterns": [
+        "show chrome",
+        "show chromium",
+        "show google chrome",
+        "show the chrome window",
+        "show the chromium window"
+      ],
+      "intent_type": "show_application",
+      "arguments": [
+        [
+          "application",
+          "chrome"
+        ]
+      ],
+      "command": "show:chrome",
+      "label": "Show chrome window",
+      "scope": "global"
+    },
+    {
+      "id": "show_x",
+      "patterns": [
+        "show X",
+        "show twitter",
+        "show the X window",
+        "show the twitter window"
+      ],
+      "intent_type": "show_application",
+      "arguments": [
+        [
+          "application",
+          "x"
+        ]
+      ],
+      "command": "show:x",
+      "label": "Show x window",
+      "scope": "global"
+    },
+    {
+      "id": "show_browser",
+      "patterns": [
+        "show the browser",
+        "show browser",
+        "show the browser window"
+      ],
+      "intent_type": "show_application",
+      "arguments": [
+        [
+          "application",
+          "browser"
+        ]
+      ],
+      "command": "show:browser",
+      "label": "Show browser window",
+      "scope": "global"
+    },
+    {
+      "id": "tile_terminals_on_monitor",
+      "patterns": [
+        "tile the terminals on monitor <monitor_number>",
+        "tile terminals on monitor <monitor_number>",
+        "tile all terminals on monitor <monitor_number>",
+        "tile all the terminals on monitor <monitor_number>",
+        "tile the open terminals on monitor <monitor_number>",
+        "tile the terminals on screen <monitor_number>",
+        "tile terminals on screen <monitor_number>",
+        "tile all terminals on screen <monitor_number>",
+        "tile all the terminals on screen <monitor_number>",
+        "tile the open terminals on screen <monitor_number>"
+      ],
+      "intent_type": "tile_terminals_on_monitor",
+      "arguments": [
+        [
+          "monitor",
+          "$monitor_number"
+        ]
+      ],
+      "command": "terminals:tile-monitor:{monitor_number}",
+      "label": "Tile terminals on monitor {monitor_number}",
+      "scope": "global"
+    },
+    {
+      "id": "tile_windows_on_monitor",
+      "patterns": [
+        "tile the windows on monitor <monitor_number>",
+        "tile windows on monitor <monitor_number>",
+        "tile all windows on monitor <monitor_number>",
+        "tile all the windows on monitor <monitor_number>",
+        "tile the open windows on monitor <monitor_number>",
+        "tile the windows on screen <monitor_number>",
+        "tile windows on screen <monitor_number>",
+        "tile all windows on screen <monitor_number>",
+        "tile all the windows on screen <monitor_number>",
+        "tile the open windows on screen <monitor_number>"
+      ],
+      "intent_type": "tile_windows_on_monitor",
+      "arguments": [
+        [
+          "monitor",
+          "$monitor_number"
+        ]
+      ],
+      "command": "windows:tile-monitor:{monitor_number}",
+      "label": "Tile windows on monitor {monitor_number}",
+      "scope": "global"
+    },
+    {
+      "id": "tile_browsers_on_monitor",
+      "patterns": [
+        "tile the browsers on monitor <monitor_number>",
+        "tile browsers on monitor <monitor_number>",
+        "tile all browsers on monitor <monitor_number>",
+        "tile all the browsers on monitor <monitor_number>",
+        "tile the open browsers on monitor <monitor_number>",
+        "tile the browsers on screen <monitor_number>",
+        "tile browsers on screen <monitor_number>",
+        "tile all browsers on screen <monitor_number>",
+        "tile all the browsers on screen <monitor_number>",
+        "tile the open browsers on screen <monitor_number>"
+      ],
+      "intent_type": "tile_browsers_on_monitor",
+      "arguments": [
+        [
+          "monitor",
+          "$monitor_number"
+        ]
+      ],
+      "command": "browsers:tile-monitor:{monitor_number}",
+      "label": "Tile browsers on monitor {monitor_number}",
+      "scope": "global"
+    },
+    {
+      "id": "tile_apps_on_monitor",
+      "patterns": [
+        "tile the apps on monitor <monitor_number>",
+        "tile apps on monitor <monitor_number>",
+        "tile all apps on monitor <monitor_number>",
+        "tile all the apps on monitor <monitor_number>",
+        "tile the open apps on monitor <monitor_number>",
+        "tile the apps on screen <monitor_number>",
+        "tile apps on screen <monitor_number>",
+        "tile all apps on screen <monitor_number>",
+        "tile all the apps on screen <monitor_number>",
+        "tile the open apps on screen <monitor_number>"
+      ],
+      "intent_type": "tile_apps_on_monitor",
+      "arguments": [
+        [
+          "monitor",
+          "$monitor_number"
+        ]
+      ],
+      "command": "apps:tile-monitor:{monitor_number}",
+      "label": "Tile apps on monitor {monitor_number}",
+      "scope": "global"
+    },
+    {
+      "id": "screenrecord_start",
+      "patterns": [
+        "start a new screen recording with web cam capture",
+        "start a new screen recording with webcam capture",
+        "start a screen recording with web cam capture",
+        "start a screen recording with webcam capture",
+        "start screen recording with web cam capture",
+        "start screen recording with webcam capture",
+        "begin a screen recording with web cam capture",
+        "begin a screen recording with webcam capture",
+        "record my screen with web cam capture",
+        "record my screen with webcam capture",
+        "start a new screen recording with web cam",
+        "start a new screen recording with webcam",
+        "start a screen recording with web cam",
+        "start a screen recording with webcam",
+        "start screen recording with web cam",
+        "start screen recording with webcam",
+        "begin a screen recording with web cam",
+        "begin a screen recording with webcam",
+        "record my screen with web cam",
+        "record my screen with webcam",
+        "start a screen recording",
+        "start screen recording",
+        "start recording",
+        "record my screen",
+        "record the screen",
+        "begin screen recording",
+        "begin a screen recording",
+        "start recording my screen",
+        "start recording the screen",
+        "begin recording my screen"
+      ],
+      "intent_type": "screenrecord_start",
+      "arguments": [],
+      "command": "screenrecord:start",
+      "label": "Start screen recording with webcam capture",
+      "scope": "global"
+    },
+    {
+      "id": "screenrecord_start_without_webcam",
+      "patterns": [
+        "start a new screen recording without web cam capture",
+        "start a new screen recording without webcam capture",
+        "start a screen recording without web cam capture",
+        "start a screen recording without webcam capture",
+        "start screen recording without web cam capture",
+        "start screen recording without webcam capture",
+        "begin a screen recording without web cam capture",
+        "begin a screen recording without webcam capture",
+        "record my screen without web cam capture",
+        "record my screen without webcam capture",
+        "start a new screen recording without web cam",
+        "start a new screen recording without webcam",
+        "start a screen recording without web cam",
+        "start a screen recording without webcam",
+        "start screen recording without web cam",
+        "start screen recording without webcam",
+        "begin a screen recording without web cam",
+        "begin a screen recording without webcam",
+        "record my screen without web cam",
+        "record my screen without webcam"
+      ],
+      "intent_type": "screenrecord_start_without_webcam",
+      "arguments": [],
+      "command": "screenrecord:start_without_webcam",
+      "label": "Start screen recording without webcam capture",
+      "scope": "global"
+    },
+    {
+      "id": "screenrecord_stop",
+      "patterns": [
+        "stop recording",
+        "stop the recording",
+        "stop screen recording",
+        "stop the screen recording",
+        "end recording",
+        "end the recording",
+        "end screen recording",
+        "finish recording",
+        "finish the screen recording",
+        "stop recording my screen"
+      ],
+      "intent_type": "screenrecord_stop",
+      "arguments": [],
+      "command": "screenrecord:stop",
+      "label": "Stop screen recording",
+      "scope": "global"
+    },
+    {
+      "id": "open_url",
+      "patterns": [
+        "open url",
+        "open a url",
+        "open a new url",
+        "open u r l",
+        "open a web address",
+        "open a website",
+        "enter a url"
+      ],
+      "intent_type": "open_url",
+      "arguments": [],
+      "command": "browser:prompt_url",
+      "label": "Open URL",
+      "scope": "global"
+    },
+    {
+      "id": "show_all_application",
+      "patterns": [
+        "show all <show_all_app>",
+        "show all the <show_all_app>",
+        "bring all <show_all_app> to the front",
+        "bring all the <show_all_app> to the front"
+      ],
+      "intent_type": "show_all_application",
+      "arguments": [
+        [
+          "application",
+          "$show_all_app"
+        ]
+      ],
+      "command": "show-all:{show_all_app}",
+      "label": "Show all {show_all_app}",
+      "scope": "global"
+    },
+    {
+      "id": "list_browsers",
+      "patterns": [
+        "list all browsers",
+        "list all the browsers",
+        "list browsers",
+        "list the browsers",
+        "list open browsers",
+        "list the open browsers",
+        "list browser windows",
+        "list all browser windows",
+        "what browsers are open",
+        "show the browser list"
+      ],
+      "intent_type": "list_browsers",
+      "arguments": [],
+      "command": "browsers:list",
+      "label": "List open browser windows",
+      "scope": "global"
+    },
+    {
+      "id": "list_x",
+      "patterns": [
+        "list all x",
+        "list x",
+        "list all twitter",
+        "list twitter",
+        "list all x windows",
+        "list all twitter windows",
+        "list open x windows"
+      ],
+      "intent_type": "list_x",
+      "arguments": [],
+      "command": "x:list",
+      "label": "List open X windows",
+      "scope": "global"
+    },
+    {
+      "id": "open_website_picker",
+      "patterns": [
+        "open a new browser to web site",
+        "open a new browser to a web site",
+        "open a new browser to a website",
+        "open a new browser to website",
+        "open a browser to a website",
+        "open a website in a new browser",
+        "choose a website",
+        "open my websites"
+      ],
+      "intent_type": "open_website_picker",
+      "arguments": [],
+      "command": "browser:prompt_website",
+      "label": "Open a new browser to a website",
+      "scope": "global"
+    },
+    {
+      "id": "system_screensaver",
+      "patterns": [
+        "start screensaver",
+        "screensaver",
+        "start the screensaver",
+        "show screensaver",
+        "turn on the screensaver",
+        "start screen saver",
+        "screen saver",
+        "show the screensaver",
+        "activate screensaver",
+        "run screensaver"
+      ],
+      "intent_type": "system_screensaver",
+      "arguments": [],
+      "command": "system:screensaver",
+      "label": "Start screensaver",
+      "scope": "global"
+    },
+    {
+      "id": "system_lock",
+      "patterns": [
+        "lock",
+        "lock screen",
+        "lock the screen",
+        "lock my computer",
+        "lock computer"
+      ],
+      "intent_type": "system_lock",
+      "arguments": [],
+      "command": "system:lock",
+      "label": "Lock screen",
+      "scope": "global"
+    },
+    {
+      "id": "system_suspend",
+      "patterns": [
+        "sleep",
+        "suspend",
+        "suspend computer",
+        "suspend my computer",
+        "put the computer to sleep",
+        "put my computer to sleep",
+        "go to sleep"
+      ],
+      "intent_type": "system_suspend",
+      "arguments": [],
+      "command": "system:suspend",
+      "label": "Sleep / suspend",
+      "scope": "global"
+    },
+    {
+      "id": "system_logout",
+      "patterns": [
+        "log out",
+        "logout",
+        "log me out",
+        "log out of my session"
+      ],
+      "intent_type": "system_logout",
+      "arguments": [],
+      "command": "system:logout",
+      "label": "Log out",
+      "scope": "global"
+    },
+    {
+      "id": "system_reboot",
+      "patterns": [
+        "reboot",
+        "restart computer",
+        "restart my computer",
+        "reboot the computer",
+        "reboot my computer"
+      ],
+      "intent_type": "system_reboot",
+      "arguments": [],
+      "command": "system:reboot",
+      "label": "Reboot",
+      "scope": "global"
+    },
+    {
+      "id": "system_shutdown",
+      "patterns": [
+        "shutdown",
+        "shut down",
+        "shut down computer",
+        "shut down my computer",
+        "power off",
+        "turn off the computer"
+      ],
+      "intent_type": "system_shutdown",
+      "arguments": [],
+      "command": "system:shutdown",
+      "label": "Shut down",
+      "scope": "global"
+    },
+    {
+      "id": "move_window_workspace",
+      "patterns": [
+        "move this window to workspace <workspace_number>",
+        "move the current window to workspace <workspace_number>",
+        "move window to workspace <workspace_number>"
+      ],
+      "intent_type": "move_window_workspace",
+      "arguments": [
+        [
+          "workspace",
+          "$workspace_number"
+        ]
+      ],
+      "command": "window:move-workspace:{workspace_number}",
+      "label": "Move this window to workspace {workspace_number}",
+      "scope": "global"
+    },
+    {
+      "id": "close_current_window",
+      "patterns": [
+        "close this window",
+        "close the current window",
+        "close current window",
+        "close this winodw"
+      ],
+      "intent_type": "close_current_window",
+      "arguments": [],
+      "command": "close:current_window",
+      "label": "Close this window",
+      "scope": "global"
+    }
+  ],
+  "window_rules": [
+    {
+      "id": "focus_window",
+      "patterns": [
+        "focus <window>",
+        "focus the <window>",
+        "focus on <window>",
+        "focus on the <window>",
+        "switch to <window>",
+        "switch to the <window>",
+        "go to <window>",
+        "go to the <window>"
+      ],
+      "intent_type": "focus_window",
+      "arguments": [
+        [
+          "window",
+          "$window"
+        ]
+      ],
+      "command": "focus-window:{window}",
+      "label": "Focus {window}",
+      "scope": "global"
+    },
+    {
+      "id": "close_named_window",
+      "patterns": [
+        "close <window>",
+        "close the <window>"
+      ],
+      "intent_type": "close_named_window",
+      "arguments": [
+        [
+          "window",
+          "$window"
+        ]
+      ],
+      "command": "close-window:{window}",
+      "label": "Close {window}",
+      "scope": "global"
+    },
+    {
+      "id": "hide_named_window",
+      "patterns": [
+        "hide <window>",
+        "hide the <window>",
+        "minimize <window>",
+        "minimize the <window>"
+      ],
+      "intent_type": "hide_named_window",
+      "arguments": [
+        [
+          "window",
+          "$window"
+        ]
+      ],
+      "command": "hide-window:{window}",
+      "label": "Hide {window}",
+      "scope": "global"
+    },
+    {
+      "id": "move_named_window",
+      "patterns": [
+        "move <window> to other screen",
+        "move <window> to other monitor",
+        "move <window> to other window",
+        "move <window> to the other screen",
+        "move <window> to the other monitor",
+        "move <window> to the other window",
+        "move the <window> to other screen",
+        "move the <window> to other monitor",
+        "move the <window> to other window",
+        "move the <window> to the other screen",
+        "move the <window> to the other monitor",
+        "move the <window> to the other window"
+      ],
+      "intent_type": "move_named_window",
+      "arguments": [
+        [
+          "window",
+          "$window"
+        ],
+        [
+          "monitor",
+          "other"
+        ]
+      ],
+      "command": "move-window:{window}",
+      "label": "Move {window} to the other screen",
+      "scope": "global"
+    },
+    {
+      "id": "maximize_named_window",
+      "patterns": [
+        "maximize <window>",
+        "maximize the <window>"
+      ],
+      "intent_type": "maximize_named_window",
+      "arguments": [
+        [
+          "window",
+          "$window"
+        ],
+        [
+          "monitor",
+          "current"
+        ]
+      ],
+      "command": "maximize-window:{window}",
+      "label": "Maximize {window}",
+      "scope": "global"
+    }
+  ],
+  "vocabulary": {
+    "destination": [
+      {
+        "id": "gmail",
+        "label": "Gmail",
+        "forms": [
+          "gmail",
+          "g mail"
+        ]
+      },
+      {
+        "id": "github",
+        "label": "GitHub",
+        "forms": [
+          "github",
+          "git hub"
+        ]
+      }
+    ],
+    "browser": [
+      {
+        "id": "browser",
+        "label": "Chrome",
+        "forms": [
+          "chrome",
+          "chromium",
+          "google chrome"
+        ]
+      }
+    ],
+    "browser_target": [
+      {
+        "id": "browser",
+        "label": "Browser",
+        "forms": [
+          "browser",
+          "the browser",
+          "chrome",
+          "chromium",
+          "google chrome"
+        ]
+      }
+    ],
+    "app": [
+      {
+        "id": "discord",
+        "label": "Discord",
+        "forms": [
+          "discord"
+        ]
+      },
+      {
+        "id": "x",
+        "label": "X (Twitter)",
+        "forms": [
+          "x",
+          "twitter"
+        ]
+      }
+    ],
+    "window_app": [
+      {
+        "id": "browser",
+        "label": "Chrome",
+        "forms": [
+          "chrome",
+          "chromium",
+          "google chrome"
+        ]
+      },
+      {
+        "id": "discord",
+        "label": "Discord",
+        "forms": [
+          "discord"
+        ]
+      },
+      {
+        "id": "x",
+        "label": "X (Twitter)",
+        "forms": [
+          "x",
+          "twitter"
+        ]
+      }
+    ],
+    "close_app": [
+      {
+        "id": "browser",
+        "label": "Browser",
+        "forms": [
+          "chrome",
+          "chromium",
+          "google chrome",
+          "browser"
+        ]
+      },
+      {
+        "id": "discord",
+        "label": "Discord",
+        "forms": [
+          "discord"
+        ]
+      },
+      {
+        "id": "x",
+        "label": "X (Twitter)",
+        "forms": [
+          "x",
+          "twitter"
+        ]
+      },
+      {
+        "id": "files",
+        "label": "Files",
+        "forms": [
+          "file browser",
+          "file manager",
+          "files",
+          "nautilus"
+        ]
+      },
+      {
+        "id": "tensaku",
+        "label": "Tensaku",
+        "forms": [
+          "tensaku",
+          "image viewer"
+        ]
+      }
+    ],
+    "monitor_number": [
+      {
+        "id": "1",
+        "label": "1",
+        "forms": [
+          "1",
+          "one"
+        ]
+      },
+      {
+        "id": "2",
+        "label": "2",
+        "forms": [
+          "2",
+          "two"
+        ]
+      },
+      {
+        "id": "3",
+        "label": "3",
+        "forms": [
+          "3",
+          "three"
+        ]
+      },
+      {
+        "id": "4",
+        "label": "4",
+        "forms": [
+          "4",
+          "four"
+        ]
+      },
+      {
+        "id": "5",
+        "label": "5",
+        "forms": [
+          "5",
+          "five"
+        ]
+      },
+      {
+        "id": "6",
+        "label": "6",
+        "forms": [
+          "6",
+          "six"
+        ]
+      },
+      {
+        "id": "7",
+        "label": "7",
+        "forms": [
+          "7",
+          "seven"
+        ]
+      },
+      {
+        "id": "8",
+        "label": "8",
+        "forms": [
+          "8",
+          "eight"
+        ]
+      }
+    ],
+    "show_all_app": [
+      {
+        "id": "browser",
+        "label": "browser",
+        "forms": [
+          "browsers",
+          "browser",
+          "browser windows"
+        ]
+      },
+      {
+        "id": "chrome",
+        "label": "chrome",
+        "forms": [
+          "chrome",
+          "chromium",
+          "chrome windows",
+          "chromium windows"
+        ]
+      },
+      {
+        "id": "firefox",
+        "label": "firefox",
+        "forms": [
+          "firefox",
+          "firefox windows"
+        ]
+      },
+      {
+        "id": "terminal",
+        "label": "terminal",
+        "forms": [
+          "terminals",
+          "terminal windows"
+        ]
+      },
+      {
+        "id": "x",
+        "label": "x",
+        "forms": [
+          "x",
+          "twitter",
+          "x windows",
+          "twitter windows"
+        ]
+      },
+      {
+        "id": "discord",
+        "label": "discord",
+        "forms": [
+          "discord",
+          "discord windows"
+        ]
+      },
+      {
+        "id": "files",
+        "label": "files",
+        "forms": [
+          "files",
+          "file browsers",
+          "file managers",
+          "file browser windows"
+        ]
+      },
+      {
+        "id": "tensaku",
+        "label": "tensaku",
+        "forms": [
+          "tensaku",
+          "image viewers"
+        ]
+      },
+      {
+        "id": "apps",
+        "label": "apps",
+        "forms": [
+          "apps",
+          "applications"
+        ]
+      },
+      {
+        "id": "windows",
+        "label": "windows",
+        "forms": [
+          "windows",
+          "open windows",
+          "open window"
+        ]
+      }
+    ],
+    "workspace_number": [
+      {
+        "id": "1",
+        "label": "1",
+        "forms": [
+          "1",
+          "one"
+        ]
+      },
+      {
+        "id": "2",
+        "label": "2",
+        "forms": [
+          "2",
+          "two"
+        ]
+      },
+      {
+        "id": "3",
+        "label": "3",
+        "forms": [
+          "3",
+          "three"
+        ]
+      },
+      {
+        "id": "4",
+        "label": "4",
+        "forms": [
+          "4",
+          "four"
+        ]
+      },
+      {
+        "id": "5",
+        "label": "5",
+        "forms": [
+          "5",
+          "five"
+        ]
+      },
+      {
+        "id": "6",
+        "label": "6",
+        "forms": [
+          "6",
+          "six"
+        ]
+      },
+      {
+        "id": "7",
+        "label": "7",
+        "forms": [
+          "7",
+          "seven"
+        ]
+      },
+      {
+        "id": "8",
+        "label": "8",
+        "forms": [
+          "8",
+          "eight"
+        ]
+      },
+      {
+        "id": "9",
+        "label": "9",
+        "forms": [
+          "9",
+          "nine"
+        ]
+      },
+      {
+        "id": "10",
+        "label": "10",
+        "forms": [
+          "10",
+          "ten"
+        ]
+      }
+    ]
+  },
+  "executor_schemas": {
+    "desktop_action": {
+      "action": [
+        "volume:up",
+        "volume:down",
+        "volume:mute",
+        "volume:unmute",
+        "brightness:up",
+        "brightness:down",
+        "media:play",
+        "media:pause",
+        "media:next",
+        "media:previous"
+      ]
+    },
+    "open_destination": {
+      "destination": [
+        "gmail",
+        "github"
+      ]
+    },
+    "open_another_destination": {
+      "destination": [
+        "gmail",
+        "github"
+      ]
+    },
+    "open_application": {
+      "application": [
+        "browser",
+        "discord",
+        "x"
+      ],
+      "presentation": [
+        "normal",
+        "maximized",
+        "fullscreen"
+      ]
+    },
+    "create_terminal": {},
+    "close_window": {
+      "application": [
+        "browser",
+        "discord",
+        "x",
+        "terminal",
+        "files",
+        "tensaku"
+      ],
+      "selection": [
+        "unique_or_choose",
+        "most_recent",
+        "current"
+      ]
+    },
+    "maximize_window": {
+      "application": [
+        "browser",
+        "discord",
+        "x",
+        "any"
+      ],
+      "selection": [
+        "most_recent",
+        "current"
+      ],
+      "monitor": [
+        "main",
+        "current"
+      ]
+    },
+    "move_window": {
+      "selection": [
+        "current"
+      ],
+      "monitor": [
+        "other"
+      ]
+    },
+    "move_application": {
+      "application": [
+        "browser",
+        "discord",
+        "x"
+      ],
+      "selection": [
+        "most_recent"
+      ],
+      "monitor": [
+        "other"
+      ]
+    },
+    "open_browser_and_tile": {
+      "first": [
+        "this window"
+      ],
+      "second": [
+        "the browser"
+      ]
+    },
+    "open_browser_fullscreen": {
+      "window": [
+        "the browser"
+      ]
+    },
+    "tile_current_window_with_browser": {
+      "first": [
+        "this window"
+      ],
+      "second": [
+        "the browser"
+      ]
+    },
+    "tile_windows": {
+      "workspace": [
+        "current"
+      ]
+    },
+    "tile_terminals": {
+      "workspace": [
+        "current"
+      ]
+    },
+    "tile_browsers": {
+      "workspace": [
+        "current"
+      ]
+    },
+    "tile_apps": {
+      "workspace": [
+        "current"
+      ]
+    },
+    "hide_windows": {
+      "workspace": [
+        "current"
+      ],
+      "category": [
+        "terminals",
+        "apps"
+      ]
+    },
+    "hide_window": {
+      "selection": [
+        "current"
+      ]
+    },
+    "hide_named_window": {
+      "window": []
+    },
+    "list_windows": {},
+    "close_browser_tabs": {
+      "window": [
+        "the browser"
+      ]
+    },
+    "close_all_terminals": {},
+    "list_terminals": {},
+    "hide_application": {
+      "application": [
+        "chrome",
+        "x",
+        "browser"
+      ]
+    },
+    "show_application": {
+      "application": [
+        "chrome",
+        "x",
+        "browser"
+      ]
+    },
+    "tile_terminals_on_monitor": {
+      "monitor": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8"
+      ]
+    },
+    "tile_windows_on_monitor": {
+      "monitor": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8"
+      ]
+    },
+    "tile_browsers_on_monitor": {
+      "monitor": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8"
+      ]
+    },
+    "tile_apps_on_monitor": {
+      "monitor": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8"
+      ]
+    },
+    "screenrecord_start": {},
+    "screenrecord_stop": {},
+    "screenrecord_start_without_webcam": {},
+    "open_url": {},
+    "show_all_application": {
+      "application": [
+        "browser",
+        "chrome",
+        "firefox",
+        "terminal",
+        "x",
+        "discord",
+        "files",
+        "tensaku",
+        "apps",
+        "windows"
+      ]
+    },
+    "list_browsers": {},
+    "list_x": {},
+    "open_website_picker": {},
+    "system_screensaver": {},
+    "system_lock": {},
+    "system_suspend": {},
+    "system_logout": {},
+    "system_reboot": {},
+    "system_shutdown": {},
+    "move_window_workspace": {
+      "workspace": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10"
+      ]
+    },
+    "close_current_window": {}
+  },
+  "terminal_classes": [
+    "alacritty",
+    "com.mitchellh.ghostty",
+    "foot",
+    "footclient",
+    "kitty",
+    "org.wezfurlong.wezterm"
+  ],
+  "sites": {
+    "gmail": {
+      "name": "Gmail",
+      "url": "https://mail.google.com/",
+      "host": "mail.google.com"
+    },
+    "github": {
+      "name": "GitHub",
+      "url": "https://github.com/",
+      "host": "github.com"
+    }
+  },
+  "apps": {
+    "tensaku": {
+      "name": "Tensaku",
+      "classes": [
+        "dev.tensaku.Tensaku"
+      ],
+      "desktop_files": [
+        "dev.tensaku.Tensaku.desktop"
+      ]
+    },
+    "files": {
+      "name": "Files",
+      "classes": [
+        "Nautilus",
+        "nautilus",
+        "org.gnome.Nautilus"
+      ],
+      "desktop_files": [
+        "org.gnome.Nautilus.desktop"
+      ]
+    },
+    "discord": {
+      "name": "Discord",
+      "classes": [
+        "Discord",
+        "chrome-discord.com__channels_@me-Default",
+        "discord"
+      ],
+      "desktop_files": [
+        "Discord.desktop",
+        "discord.desktop"
+      ]
+    },
+    "x": {
+      "name": "X (Twitter)",
+      "classes": [
+        "chrome-twitter.com__-Default",
+        "chrome-x.com__-Default"
+      ],
+      "desktop_files": [
+        "X.desktop",
+        "Twitter.desktop",
+        "twitter.desktop"
+      ]
+    }
+  },
+  "exact_only_commands": [
+    "apps:hide",
+    "brightness:down",
+    "brightness:up",
+    "browser:close_tabs",
+    "browser:open_fullscreen",
+    "browser:open_tile",
+    "media:next",
+    "media:pause",
+    "media:play",
+    "media:previous",
+    "terminals:close",
+    "terminals:hide",
+    "volume:down",
+    "volume:mute",
+    "volume:unmute",
+    "volume:up",
+    "window:hide",
+    "windows:tile_current_browser",
+    "windows:tile_pair",
+    "hide:chrome",
+    "hide:x",
+    "hide:browser",
+    "show:chrome",
+    "show:x",
+    "show:browser",
+    "terminals:tile-monitor:1",
+    "terminals:tile-monitor:2",
+    "terminals:tile-monitor:3",
+    "terminals:tile-monitor:4",
+    "terminals:tile-monitor:5",
+    "terminals:tile-monitor:6",
+    "terminals:tile-monitor:7",
+    "terminals:tile-monitor:8",
+    "windows:tile-monitor:1",
+    "windows:tile-monitor:2",
+    "windows:tile-monitor:3",
+    "windows:tile-monitor:4",
+    "windows:tile-monitor:5",
+    "windows:tile-monitor:6",
+    "windows:tile-monitor:7",
+    "windows:tile-monitor:8",
+    "browsers:tile-monitor:1",
+    "browsers:tile-monitor:2",
+    "browsers:tile-monitor:3",
+    "browsers:tile-monitor:4",
+    "browsers:tile-monitor:5",
+    "browsers:tile-monitor:6",
+    "browsers:tile-monitor:7",
+    "browsers:tile-monitor:8",
+    "apps:tile-monitor:1",
+    "apps:tile-monitor:2",
+    "apps:tile-monitor:3",
+    "apps:tile-monitor:4",
+    "apps:tile-monitor:5",
+    "apps:tile-monitor:6",
+    "apps:tile-monitor:7",
+    "apps:tile-monitor:8",
+    "screenrecord:start",
+    "screenrecord:stop",
+    "screenrecord:start_without_webcam",
+    "browser:prompt_url",
+    "show-all:browser",
+    "show-all:chrome",
+    "show-all:firefox",
+    "show-all:terminal",
+    "show-all:x",
+    "show-all:discord",
+    "show-all:files",
+    "show-all:tensaku",
+    "show-all:apps",
+    "show-all:windows",
+    "browsers:list",
+    "x:list",
+    "browser:prompt_website",
+    "system:screensaver",
+    "system:lock",
+    "system:suspend",
+    "system:logout",
+    "system:reboot",
+    "system:shutdown",
+    "window:move-workspace:1",
+    "window:move-workspace:2",
+    "window:move-workspace:3",
+    "window:move-workspace:4",
+    "window:move-workspace:5",
+    "window:move-workspace:6",
+    "window:move-workspace:7",
+    "window:move-workspace:8",
+    "window:move-workspace:9",
+    "window:move-workspace:10",
+    "close:current_window"
+  ],
+  "no_learn_commands": [
+    "apps:hide",
+    "apps:tile",
+    "brightness:down",
+    "brightness:up",
+    "browser:close_tabs",
+    "browser:open_fullscreen",
+    "browser:open_tile",
+    "media:next",
+    "media:pause",
+    "media:play",
+    "media:previous",
+    "terminals:close",
+    "terminals:hide",
+    "volume:down",
+    "volume:mute",
+    "volume:unmute",
+    "volume:up",
+    "window:hide",
+    "windows:tile_current_browser",
+    "windows:tile_pair",
+    "hide:chrome",
+    "hide:x",
+    "hide:browser",
+    "show:chrome",
+    "show:x",
+    "show:browser",
+    "screenrecord:start",
+    "screenrecord:stop",
+    "screenrecord:start_without_webcam",
+    "browser:prompt_url",
+    "show-all:browser",
+    "show-all:chrome",
+    "show-all:firefox",
+    "show-all:terminal",
+    "show-all:x",
+    "show-all:discord",
+    "show-all:files",
+    "show-all:tensaku",
+    "show-all:apps",
+    "show-all:windows",
+    "browsers:list",
+    "x:list",
+    "browser:prompt_website",
+    "system:screensaver",
+    "system:lock",
+    "system:suspend",
+    "system:logout",
+    "system:reboot",
+    "system:shutdown",
+    "window:move-workspace:1",
+    "window:move-workspace:2",
+    "window:move-workspace:3",
+    "window:move-workspace:4",
+    "window:move-workspace:5",
+    "window:move-workspace:6",
+    "window:move-workspace:7",
+    "window:move-workspace:8",
+    "window:move-workspace:9",
+    "window:move-workspace:10"
+  ],
+  "desktop_commands": {
+    "volume:up": [
+      "Turn volume up",
+      [
+        "volume up",
+        "turn the volume up",
+        "turn up the volume",
+        "louder"
+      ]
+    ],
+    "volume:down": [
+      "Turn volume down",
+      [
+        "volume down",
+        "turn the volume down",
+        "turn down the volume",
+        "quieter"
+      ]
+    ],
+    "volume:mute": [
+      "Mute sound",
+      [
+        "mute",
+        "mute sound",
+        "mute the sound",
+        "mute audio"
+      ]
+    ],
+    "volume:unmute": [
+      "Unmute sound",
+      [
+        "unmute",
+        "unmute sound",
+        "unmute the sound",
+        "unmute audio"
+      ]
+    ],
+    "brightness:up": [
+      "Increase brightness",
+      [
+        "brightness up",
+        "increase brightness",
+        "brighter"
+      ]
+    ],
+    "brightness:down": [
+      "Decrease brightness",
+      [
+        "brightness down",
+        "decrease brightness",
+        "dimmer"
+      ]
+    ],
+    "media:play": [
+      "Play music",
+      [
+        "play music",
+        "play the music",
+        "resume music",
+        "resume playback"
+      ]
+    ],
+    "media:pause": [
+      "Pause music",
+      [
+        "pause music",
+        "pause the music",
+        "pause playback",
+        "stop the music"
+      ]
+    ],
+    "media:next": [
+      "Next track",
+      [
+        "next song",
+        "next track",
+        "skip track",
+        "skip this song"
+      ]
+    ],
+    "media:previous": [
+      "Previous track",
+      [
+        "previous song",
+        "previous track",
+        "go back a track"
+      ]
+    ]
+  },
+  "approved_aliases": [
+    {
+      "intent": "browser.open",
+      "variant": 3,
+      "text": "Please open the browser.",
+      "command": "browser:open_fullscreen"
+    },
+    {
+      "intent": "browser.open",
+      "variant": 4,
+      "text": "Could you open the browser?",
+      "command": "browser:open_fullscreen"
+    },
+    {
+      "intent": "browser.open",
+      "variant": 5,
+      "text": "Open the browser, please.",
+      "command": "browser:open_fullscreen"
+    },
+    {
+      "intent": "browser.open",
+      "variant": 6,
+      "text": "I need you to open the browser.",
+      "command": "browser:open_fullscreen"
+    },
+    {
+      "intent": "window.tile_pair",
+      "variant": 1,
+      "text": "Tile this window with the browser",
+      "command": "windows:tile_current_browser"
+    },
+    {
+      "intent": "window.tile_pair",
+      "variant": 2,
+      "text": "Put this window beside the browser",
+      "command": "windows:tile_current_browser"
+    },
+    {
+      "intent": "window.tile_pair",
+      "variant": 3,
+      "text": "Please tile this window with the browser.",
+      "command": "windows:tile_current_browser"
+    },
+    {
+      "intent": "window.tile_pair",
+      "variant": 4,
+      "text": "Could you tile this window with the browser?",
+      "command": "windows:tile_current_browser"
+    },
+    {
+      "intent": "window.tile_pair",
+      "variant": 5,
+      "text": "Tile this window with the browser, please.",
+      "command": "windows:tile_current_browser"
+    },
+    {
+      "intent": "window.tile_pair",
+      "variant": 6,
+      "text": "I need you to tile this window with the browser.",
+      "command": "windows:tile_current_browser"
+    },
+    {
+      "intent": "window.tile_pair",
+      "variant": 7,
+      "text": "Please put this window beside the browser.",
+      "command": "windows:tile_current_browser"
+    },
+    {
+      "intent": "window.tile_pair",
+      "variant": 8,
+      "text": "Could you put this window beside the browser?",
+      "command": "windows:tile_current_browser"
+    },
+    {
+      "intent": "window.tile_pair",
+      "variant": 9,
+      "text": "Put this window beside the browser, please.",
+      "command": "windows:tile_current_browser"
+    },
+    {
+      "intent": "window.tile_pair",
+      "variant": 10,
+      "text": "I need you to put this window beside the browser.",
+      "command": "windows:tile_current_browser"
+    }
+  ],
+  "canonical_bindings": {
+    "open_destination": [
+      {
+        "intent": "browser.navigate",
+        "arguments": {
+          "url_or_destination": "$destination"
+        }
+      }
+    ],
+    "open_another_destination": [
+      {
+        "intent": "browser.tab_new",
+        "arguments": {
+          "url": "$destination"
+        }
+      }
+    ],
+    "open_application": [
+      {
+        "intent": "app.launch",
+        "arguments": {
+          "application": "$application",
+          "presentation": "$presentation",
+          "launch_policy": "open_or_focus"
+        }
+      }
+    ],
+    "open_installed_app": [
+      {
+        "intent": "app.launch",
+        "arguments": {
+          "application": "$desktop",
+          "presentation": "normal",
+          "launch_policy": "launch"
+        }
+      }
+    ],
+    "create_terminal": [
+      {
+        "intent": "terminal.open",
+        "arguments": {}
+      }
+    ],
+    "close_window": [
+      {
+        "intent": "app.close",
+        "arguments": {
+          "application": "$application",
+          "selection": "$selection"
+        }
+      }
+    ],
+    "maximize_window": [
+      {
+        "intent": "window.maximize",
+        "arguments": {
+          "target": {
+            "kind": "application",
+            "value": "$application"
+          },
+          "monitor": {
+            "kind": "named",
+            "value": "$monitor"
+          },
+          "selection": "$selection"
+        }
+      }
+    ],
+    "move_window": [
+      {
+        "intent": "window.move_monitor",
+        "arguments": {
+          "target": {
+            "kind": "current"
+          },
+          "monitor": {
+            "kind": "named",
+            "value": "$monitor"
+          },
+          "selection": "$selection"
+        }
+      }
+    ],
+    "move_application": [
+      {
+        "intent": "window.move_monitor",
+        "arguments": {
+          "target": {
+            "kind": "application",
+            "value": "$application"
+          },
+          "monitor": {
+            "kind": "named",
+            "value": "$monitor"
+          },
+          "selection": "$selection"
+        }
+      }
+    ],
+    "open_browser_fullscreen": [
+      {
+        "intent": "browser.open",
+        "arguments": {
+          "browser": "default",
+          "presentation": "fullscreen"
+        }
+      }
+    ],
+    "close_browser_tabs": [
+      {
+        "intent": "browser.tabs_clear",
+        "arguments": {
+          "target": {
+            "kind": "application",
+            "value": "browser"
+          },
+          "leave_blank": true
+        }
+      }
+    ],
+    "open_browser_and_tile": [
+      {
+        "id": "open_browser",
+        "intent": "browser.open",
+        "arguments": {
+          "browser": "default",
+          "presentation": "normal"
+        }
+      },
+      {
+        "intent": "window.tile_pair",
+        "arguments": {
+          "first": {
+            "kind": "current"
+          },
+          "second": {
+            "kind": "result",
+            "value": "open_browser.window"
+          },
+          "other_windows": "hide"
+        }
+      }
+    ],
+    "tile_current_window_with_browser": [
+      {
+        "intent": "window.tile_pair",
+        "arguments": {
+          "first": {
+            "kind": "current"
+          },
+          "second": {
+            "kind": "application",
+            "value": "browser"
+          },
+          "other_windows": "hide"
+        }
+      }
+    ],
+    "tile_pair": [
+      {
+        "intent": "window.tile_pair",
+        "arguments": {
+          "first": {
+            "kind": "named",
+            "value": "$first"
+          },
+          "second": {
+            "kind": "named",
+            "value": "$second"
+          },
+          "other_windows": "hide"
+        }
+      }
+    ],
+    "tile_windows": [
+      {
+        "intent": "window.tile",
+        "arguments": {
+          "scope": "open_windows",
+          "other_windows": "preserve"
+        }
+      }
+    ],
+    "tile_terminals": [
+      {
+        "intent": "window.tile",
+        "arguments": {
+          "scope": "terminals",
+          "other_windows": "hide"
+        }
+      }
+    ],
+    "tile_browsers": [
+      {
+        "intent": "window.tile",
+        "arguments": {
+          "scope": "browsers",
+          "other_windows": "hide"
+        }
+      }
+    ],
+    "tile_apps": [
+      {
+        "intent": "window.tile",
+        "arguments": {
+          "scope": "apps",
+          "other_windows": "hide"
+        }
+      }
+    ],
+    "hide_windows": [
+      {
+        "intent": "window.hide",
+        "arguments": {
+          "target": {
+            "kind": "all",
+            "value": "$category"
+          }
+        }
+      }
+    ],
+    "hide_window": [
+      {
+        "intent": "window.hide",
+        "arguments": {
+          "target": {
+            "kind": "current"
+          }
+        }
+      }
+    ],
+    "list_windows": [
+      {
+        "intent": "window.list",
+        "arguments": {
+          "scope": "open_windows"
+        }
+      }
+    ],
+    "focus_window": [
+      {
+        "intent": "window.focus",
+        "arguments": {
+          "target": {
+            "kind": "id",
+            "value": "$window"
+          }
+        }
+      }
+    ],
+    "close_named_window": [
+      {
+        "intent": "window.close",
+        "arguments": {
+          "target": {
+            "kind": "id",
+            "value": "$window"
+          }
+        }
+      }
+    ],
+    "hide_named_window": [
+      {
+        "intent": "window.hide",
+        "arguments": {
+          "target": {
+            "kind": "id",
+            "value": "$window"
+          }
+        }
+      }
+    ],
+    "move_named_window": [
+      {
+        "intent": "window.move_monitor",
+        "arguments": {
+          "target": {
+            "kind": "id",
+            "value": "$window"
+          },
+          "monitor": {
+            "kind": "named",
+            "value": "$monitor"
+          }
+        }
+      }
+    ],
+    "maximize_named_window": [
+      {
+        "intent": "window.maximize",
+        "arguments": {
+          "target": {
+            "kind": "id",
+            "value": "$window"
+          },
+          "monitor": {
+            "kind": "named",
+            "value": "$monitor"
+          }
+        }
+      }
+    ],
+    "close_all_terminals": [
+      {
+        "intent": "window.close",
+        "arguments": {
+          "target": {
+            "kind": "all",
+            "value": "all_terminals"
+          }
+        }
+      }
+    ],
+    "list_terminals": [
+      {
+        "intent": "window.list",
+        "arguments": {
+          "scope": "open_windows",
+          "application": "terminal"
+        }
+      }
+    ],
+    "hide_application": [
+      {
+        "intent": "window.hide",
+        "arguments": {
+          "target": {
+            "kind": "application",
+            "value": "$application"
+          }
+        }
+      }
+    ],
+    "show_application": [
+      {
+        "intent": "window.focus",
+        "arguments": {
+          "target": {
+            "kind": "application",
+            "value": "$application"
+          }
+        }
+      }
+    ],
+    "tile_terminals_on_monitor": [
+      {
+        "intent": "window.tile",
+        "arguments": {
+          "scope": "terminals",
+          "other_windows": "hide",
+          "monitor": "$monitor"
+        }
+      }
+    ],
+    "tile_windows_on_monitor": [
+      {
+        "intent": "window.tile",
+        "arguments": {
+          "scope": "open_windows",
+          "other_windows": "preserve",
+          "monitor": "$monitor"
+        }
+      }
+    ],
+    "tile_browsers_on_monitor": [
+      {
+        "intent": "window.tile",
+        "arguments": {
+          "scope": "browsers",
+          "other_windows": "hide",
+          "monitor": "$monitor"
+        }
+      }
+    ],
+    "tile_apps_on_monitor": [
+      {
+        "intent": "window.tile",
+        "arguments": {
+          "scope": "apps",
+          "other_windows": "hide",
+          "monitor": "$monitor"
+        }
+      }
+    ],
+    "screenrecord_start": [
+      {
+        "intent": "screen_recording.start",
+        "arguments": {
+          "profile": "user_default",
+          "webcam": true
+        }
+      }
+    ],
+    "screenrecord_stop": [
+      {
+        "intent": "screen_recording.stop",
+        "arguments": {}
+      }
+    ],
+    "screenrecord_start_without_webcam": [
+      {
+        "intent": "screen_recording.start",
+        "arguments": {
+          "profile": "user_default",
+          "webcam": false
+        }
+      }
+    ],
+    "open_url": [
+      {
+        "intent": "browser.navigate",
+        "arguments": {
+          "url_or_destination": null
+        }
+      }
+    ],
+    "show_all_application": [
+      {
+        "intent": "window.focus",
+        "arguments": {
+          "target": {
+            "kind": "all",
+            "value": "$application"
+          }
+        }
+      }
+    ],
+    "list_browsers": [
+      {
+        "intent": "window.list",
+        "arguments": {
+          "scope": "open_windows",
+          "application": "browser"
+        }
+      }
+    ],
+    "list_x": [
+      {
+        "intent": "window.list",
+        "arguments": {
+          "scope": "open_windows",
+          "application": "x"
+        }
+      }
+    ],
+    "list_application": [
+      {
+        "intent": "window.list",
+        "arguments": {
+          "scope": "open_windows",
+          "application": "$application"
+        }
+      }
+    ],
+    "open_website_picker": [
+      {
+        "intent": "browser.navigate",
+        "arguments": {
+          "url_or_destination": null,
+          "new_window": true
+        }
+      }
+    ],
+    "system_screensaver": [
+      {
+        "intent": "system.screensaver",
+        "arguments": {}
+      }
+    ],
+    "system_lock": [
+      {
+        "intent": "system.lock",
+        "arguments": {}
+      }
+    ],
+    "system_suspend": [
+      {
+        "intent": "system.suspend",
+        "arguments": {}
+      }
+    ],
+    "system_logout": [
+      {
+        "intent": "system.logout",
+        "arguments": {}
+      }
+    ],
+    "system_reboot": [
+      {
+        "intent": "system.reboot",
+        "arguments": {}
+      }
+    ],
+    "system_shutdown": [
+      {
+        "intent": "system.shutdown",
+        "arguments": {}
+      }
+    ],
+    "move_window_workspace": [
+      {
+        "intent": "window.move_workspace",
+        "arguments": {
+          "target": {
+            "kind": "current"
+          },
+          "workspace": {
+            "kind": "id",
+            "value": "$workspace"
+          }
+        }
+      }
+    ],
+    "close_current_window": [
+      {
+        "intent": "window.close",
+        "arguments": {
+          "target": {
+            "kind": "current"
+          }
+        }
+      }
+    ]
+  },
+  "desktop_bindings": {
+    "volume:up": [
+      {
+        "intent": "audio.volume_up",
+        "arguments": {
+          "amount": null
+        }
+      }
+    ],
+    "volume:down": [
+      {
+        "intent": "audio.volume_down",
+        "arguments": {
+          "amount": null
+        }
+      }
+    ],
+    "volume:mute": [
+      {
+        "intent": "audio.mute",
+        "arguments": {
+          "state": true
+        }
+      }
+    ],
+    "volume:unmute": [
+      {
+        "intent": "audio.unmute",
+        "arguments": {
+          "state": false
+        }
+      }
+    ],
+    "brightness:up": [
+      {
+        "intent": "display.brightness_up",
+        "arguments": {
+          "amount": 5
+        }
+      }
+    ],
+    "brightness:down": [
+      {
+        "intent": "display.brightness_down",
+        "arguments": {
+          "amount": 5
+        }
+      }
+    ],
+    "media:play": [
+      {
+        "intent": "media.play",
+        "arguments": {
+          "state": "play"
+        }
+      }
+    ],
+    "media:pause": [
+      {
+        "intent": "media.pause",
+        "arguments": {
+          "state": "pause"
+        }
+      }
+    ],
+    "media:next": [
+      {
+        "intent": "media.next",
+        "arguments": {
+          "direction": "next"
+        }
+      }
+    ],
+    "media:previous": [
+      {
+        "intent": "media.previous",
+        "arguments": {
+          "direction": "previous"
+        }
+      }
+    ]
+  },
+  "installed_app_rules": [
+    {
+      "id": "open_installed_app",
+      "patterns": [
+        "open <installed_app>",
+        "launch <installed_app>"
+      ],
+      "intent_type": "open_installed_app",
+      "arguments": [
+        [
+          "desktop",
+          "$installed_app"
+        ]
+      ],
+      "command": "desktop-app:{installed_app}",
+      "label": "Open {installed_app}",
+      "scope": "global"
+    }
+  ],
+  "free_text_rules": [
+    {
+      "id": "tile_pair",
+      "pattern": "tile <first> and <second>",
+      "intent_type": "tile_pair",
+      "arguments": [
+        [
+          "first",
+          "$first"
+        ],
+        [
+          "second",
+          "$second"
+        ]
+      ],
+      "command": "windows:tile_pair",
+      "label": "Tile two windows",
+      "scope": "global"
+    },
+    {
+      "id": "list_application",
+      "patterns": [
+        "list all <application>",
+        "list all the <application>"
+      ],
+      "intent_type": "list_application",
+      "command": "list-all:{application}",
+      "label": "List all matching app windows",
+      "argument": "application"
+    },
+    {
+      "id": "show_all_application",
+      "patterns": [
+        "show all <application>",
+        "show all the <application>"
+      ],
+      "intent_type": "show_all_application",
+      "command": "show-all:{application}",
+      "label": "Show all matching app windows",
+      "argument": "application"
+    }
+  ],
+  "vocabulary_sources": {
+    "window": {
+      "provider": "recording.windows",
+      "identity": "captured window ID",
+      "scope": "recording"
+    },
+    "installed_app": {
+      "provider": "desktop.applications",
+      "identity": "desktop file ID",
+      "scope": "discovery"
+    }
+  },
+  "compatibility_aliases": {
+    "windows": "windows:tile",
+    "windows:tile_pair": "windows:tile_current_browser"
+  },
+  "canonical_cases": {
+    "open_application": [
+      {
+        "when": {
+          "application": "browser"
+        },
+        "steps": [
+          {
+            "intent": "browser.open",
+            "arguments": {
+              "browser": "chrome",
+              "presentation": "$presentation"
+            }
+          }
+        ]
+      }
+    ],
+    "maximize_window": [
+      {
+        "when": {
+          "selection": "current"
+        },
+        "steps": [
+          {
+            "intent": "window.maximize",
+            "arguments": {
+              "target": {
+                "kind": "current"
+              },
+              "monitor": {
+                "kind": "named",
+                "value": "$monitor"
+              },
+              "selection": "current"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "language_policy": {
+    "browser_spelling": {
+      "forms": [
+        "brwoser",
+        "brwoswer",
+        "brower",
+        "browesr"
+      ],
+      "replacement": "browser",
+      "commands": [
+        "browser:open_tile",
+        "browser:open_fullscreen",
+        "windows:tile_current_browser"
+      ]
+    },
+    "specific_before_free_text": [
+      "windows:tile_current_browser"
+    ],
+    "window_names": {
+      "ignored_statuses": [
+        "action required",
+        "working",
+        "thinking",
+        "idle",
+        "ready"
+      ],
+      "prefix_nouns": [
+        "terminal",
+        "window",
+        "codex"
+      ],
+      "forms": [
+        "{name}",
+        "{name} terminal",
+        "{name} window"
+      ],
+      "task_forms": [
+        "{name} codex",
+        "codex {name}"
+      ],
+      "shell_forms": [
+        "shell {path}",
+        "shell {path} terminal"
+      ]
+    },
+    "terminal_suggestions": {
+      "name_form": "{name} terminal",
+      "rules": [
+        {
+          "id": "close_named_window",
+          "pattern": "close the <window>"
+        },
+        {
+          "id": "focus_window",
+          "pattern": "focus the <window>"
+        },
+        {
+          "id": "maximize_named_window",
+          "pattern": "maximize the <window>"
+        },
+        {
+          "id": "move_named_window",
+          "pattern": "move the <window> to the other screen"
+        }
+      ]
+    },
+    "confirmation_responses": {
+      "yes": [
+        "yes",
+        "yes please",
+        "confirm",
+        "do it",
+        "go ahead"
+      ],
+      "no": [
+        "no",
+        "no thanks",
+        "cancel",
+        "never mind",
+        "nevermind"
+      ]
+    }
+  },
+  "suggested_commands": [
+    "terminals:list",
+    "terminals:close",
+    "terminals:tile",
+    "browsers:tile",
+    "windows:tile",
+    "browser:open_fullscreen",
+    "terminal:new",
+    "windows:list"
+  ],
+  "numeric_rules": [
+    {
+      "id": "move_window_workspace_number",
+      "patterns": [
+        "move this window to workspace <workspace>",
+        "move the current window to workspace <workspace>",
+        "move window to workspace <workspace>"
+      ],
+      "intent_type": "move_window_workspace",
+      "command": "window:move-workspace:{workspace}",
+      "label": "Move this window to a numbered workspace"
+    }
+  ]
+}

@@ -173,7 +173,7 @@ class CommandTests(unittest.TestCase):
 
     def test_window_phrases_are_exact_commands(self):
         for phrase in ["Show all windows.", " SHOW  ALL OPEN WINDOWS! ", "Show all open window."]:
-            self.assertEqual(parse_command(phrase), "windows:tile")
+            self.assertEqual(parse_command(phrase), "show-all:windows")
         self.assertIsNone(parse_command("do not show all windows"))
 
     def test_list_open_windows_is_read_only_and_includes_other_workspaces(self):
@@ -198,7 +198,7 @@ class CommandTests(unittest.TestCase):
 
     def test_requested_phrases(self):
         for text in ["Open Chrome.", "open Chromium.",
-                     "Open Google Chrome", "focus chrome", "  OPEN   CHROME!  "]:
+                     "Open Google Chrome", "  OPEN   CHROME!  "]:
             with self.subTest(text=text):
                 self.assertEqual(parse_command(text), "browser")
 

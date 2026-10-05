@@ -17,7 +17,7 @@ Productivity
 
 ### Tags
 
-bar, hyprland, ai
+bar, hyprland, launcher
 
 ### Suggest a missing tag
 
@@ -25,21 +25,29 @@ _No response_
 
 ### Maintainer notes
 
-Skipper is a local hold-to-talk voice command plugin with a Quickshell bar widget
-and a companion Python process, licensed GPL-3.0-only. Third-party model and
-test-protocol licenses are documented separately. Manual setup is required: plugin_setup.py creates
-a per-user Python environment, installs pinned dependencies, and downloads a
-revision-pinned, checksum-verified speech model (about 639 MiB). Omarchy plugin
-installation does not run setup automatically. The optional --shortcut and
---autostart flags install Super+R integration and a login launcher. System
-packages are not installed by the setup script. Removal and retained data are
-documented in the README.
+Skipper is a text-first desktop command picker with a Quickshell bar widget and
+companion Python runtime, licensed GPL-3.0-only. Hierarchical menus support
+window operations, website and file opening, audio-device selection, and explicit
+night light, Wi-Fi, and paired Bluetooth controls.
 
-Capabilities: microphone recording while held, local recordings/transcripts,
-Hyprland window metadata/control, app launching, terminal process-tree inspection
-for close confirmations, and optional Playwright browser-tab integration.
-Transcription runs on CPU without a cloud service. Tested on Linux aarch64;
-x86_64 has not been tested. No preview image is supplied.
+Shared intent definitions and their catalog reader are bundled in the plugin
+repository, with their license and pinned source revision. Installation does not
+fetch another GitHub repository or download a speech model. Manual setup is
+required: plugin_setup.py prepares a per-user Python environment using system
+PyGObject/Cairo and installs launchers. Omarchy installation does not run setup
+automatically. Optional --shortcut and --autostart flags add Super+R and a login
+launcher. System package requirements and removal are documented in the README.
+
+Capabilities include Hyprland window metadata/control, app launching, local
+browser-history and recent-file reading, home-directory filename search,
+terminal process inspection for close confirmations, and optional Playwright
+browser-tab integration. System controls use the available local backends.
+Personal history and preferences remain outside the plugin checkout. External
+apps and opened websites have their own network behavior.
+
+Custom speech recognition has been removed. Optional external voice input is
+planned. Tested on Linux aarch64; x86_64 has not been tested. No preview image is
+supplied.
 
 ### Submission checklist
 

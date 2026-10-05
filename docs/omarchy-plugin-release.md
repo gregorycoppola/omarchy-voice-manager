@@ -3,11 +3,12 @@
 The repository is public. The root `manifest.json` loads
 `config/skipper-bar/BarWidget.qml` as `greg.skipper`, a third-party Omarchy bar
 widget. The nested manifest supports the existing development-only bar installer.
-Both manifests use version 0.2.0.
+Both manifests use version 0.3.1.
 
 The README documents Git-based plugin installation and a separate manual setup
-command. `plugin_setup.py` installs Python dependencies and the pinned model
-outside the checkout, plus per-user launchers. Shortcut and autostart installation
+command. `plugin_setup.py` validates the bundled intents and creates a system-Python virtual
+environment outside the checkout, plus per-user launchers. The plugin includes
+its dataset snapshot, license, and provenance; no second repository is fetched. Shortcut and autostart installation
 are explicit flags. Removal preserves saved data and user-modified files.
 
 The launcher also supports the existing development virtual environment. The bar
