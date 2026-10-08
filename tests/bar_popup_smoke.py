@@ -52,7 +52,7 @@ ShellRoot {
         Timer {
             id: confirmCheck; interval: 350
             onTriggered: {
-                if (!widget.opened) throw new Error("Confirmation was dismissed")
+                if (!widget.confirmationOpen) throw new Error("Confirmation was dismissed")
                 widget.readStatus({state:"Choose", updated:Date.now()/1000, session:"test", panel_epoch:3,
                     clarification:{prompt:"Which browser?", choices:[{token:"abc", label:"Docs"}, {token:"def", label:"Mail"}]}})
                 chooseCheck.start()
@@ -61,7 +61,7 @@ ShellRoot {
         Timer {
             id: chooseCheck; interval: 3000
             onTriggered: {
-                if (!widget.opened) throw new Error("Window picker was dismissed")
+                if (!widget.snapshot().selectionVisible) throw new Error("Window picker was dismissed")
                 widget.readStatus({state:"Correction", updated:Date.now()/1000, session:"test", panel_epoch:4,
                     correction:{token:"abc", heard:"towel apps", preview:null, error:""}})
                 correctionCheck.start()

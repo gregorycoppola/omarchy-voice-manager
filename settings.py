@@ -55,3 +55,26 @@ class Settings:
         self._data.update(confirm_terminal_close=self.confirm_terminal_close,
                           screen_recording_monitor=monitor)
         personal_store.save(self.path, self._data)
+
+    @property
+    def voice_cloud(self):
+        return self._data.get('voice_cloud',False) is True
+
+    def set_voice_cloud(self, enabled):
+        if self.error:raise ValueError(self.error)
+        if type(enabled) is not bool:raise ValueError('Cloud fallback must be on or off')
+        self._data.update(confirm_terminal_close=self.confirm_terminal_close,voice_cloud=enabled)
+        personal_store.save(self.path,self._data)
+
+    @property
+    def voice_debug(self):
+        # Normal voice use executes; debugging is an explicit preference.
+        return self._data.get('voice_debug', False) is not False
+
+    def set_voice_debug(self, enabled):
+        if self.error:
+            raise ValueError(self.error)
+        if type(enabled) is not bool:
+            raise ValueError('Debug mode must be on or off')
+        self._data.update(confirm_terminal_close=self.confirm_terminal_close, voice_debug=enabled)
+        personal_store.save(self.path, self._data)

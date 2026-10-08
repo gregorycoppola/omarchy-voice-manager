@@ -41,11 +41,27 @@ def parse_command(text):
     return GRAMMAR.get(normalize(text))
 
 
+def browser_profile_priority(window):
+    """Prefer the ordinary Chromium profile over tool-owned browser instances."""
+    try:
+        pid = int(window.get('pid', 0))
+        if pid <= 0:
+            return 1
+        command = Path(f'/proc/{pid}/cmdline').read_bytes().decode(errors='replace').replace('\0', ' ')
+        match = re.search(r'--user-data-dir(?:=|\s+)([^\s]+)', command)
+        if not match:
+            return 0
+        personal = Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config'))) / 'chromium'
+        return 0 if Path(match.group(1)) == personal else 2
+    except (OSError, ValueError):
+        return 1
+
+
 def browser_window(clients):
     # Match real browser windows, not Chrome-hosted Discord or other web apps.
     matches = [c for c in clients if c.get("class", "").lower() in BROWSER_CLASSES
                and re.fullmatch(r"0x[0-9a-fA-F]+", c.get("address", ""))]
-    return min(matches, key=lambda c: c.get("focusHistoryID", 99999), default=None)
+    return min(matches, key=lambda c: (browser_profile_priority(c), c.get("focusHistoryID", 99999)), default=None)
 
 
 def run(argv):
@@ -226,6 +242,23 @@ def list_open_windows():
     return f'{len(lines)} open window{ "s" if len(lines) != 1 else ""}:\n' + '\n'.join(lines)
 
 
+def window_kind(window):
+    """Presentation category derived from application identity, never the title."""
+    from window_resolution import BROWSERS
+    classes = {str(window.get(k) or '').lower() for k in ('class', 'initialClass')}
+    if is_terminal(window):
+        return 'Terminal'
+    if classes & BROWSERS:
+        return 'Browser'
+    if any(c.startswith(('chrome-', 'chromium-', 'brave-')) and c.endswith('-default') for c in classes):
+        return 'Web app'
+    if classes & {'code', 'code-oss', 'vscodium', 'cursor', 'zed', 'dev.zed.zed', 'sublime_text'}:
+        return 'Editor'
+    if classes & {'org.gnome.nautilus', 'nautilus', 'thunar', 'org.kde.dolphin', 'dolphin', 'pcmanfm'}:
+        return 'Files'
+    return 'App'
+
+
 def open_window_entries(terminals_only=False, browsers_only=False, application=None):
     """Return safe, presentation-ready identities for the window chooser."""
     clients = json.loads(run(['hyprctl', 'clients', '-j']))
@@ -242,11 +275,29 @@ def open_window_entries(terminals_only=False, browsers_only=False, application=N
         windows = matching_app_windows(windows, application)
     windows.sort(key=lambda c: (str(c.get('workspace', {}).get('name', c.get('workspace', {}).get('id', ''))),
                                 c.get('focusHistoryID', 99999), c.get('title', '')))
-    entries = [dict(address=c['address'], pid=c.get('pid'), stableId=c.get('stableId'),
+    entries = [dict(address=c['address'], pid=c.get('pid'), stableId=c.get('stableId'), kind=window_kind(c),
                  **{'class': c.get('class')}, app=c.get('initialClass') or c.get('class') or 'Unknown app',
                  title=c.get('title') or c.get('initialClass') or c.get('class') or 'Unknown app',
                  workspace=str(c.get('workspace', {}).get('name', c.get('workspace', {}).get('id', '?'))))
             for c in windows]
+    # Icons are presentation metadata for this list only.
+    from gi.repository import Gio
+    desktop_icons = {}
+    for desktop in Gio.AppInfo.get_all():
+        icon = desktop.get_icon()
+        if not icon:
+            continue
+        icon_name = icon.get_names()[0] if isinstance(icon, Gio.ThemedIcon) else icon.to_string()
+        for key in (desktop.get_id().removesuffix('.desktop'),
+                    desktop.get_startup_wm_class() if isinstance(desktop, Gio.DesktopAppInfo) else ''):
+            if key:
+                desktop_icons.setdefault(key.lower(), icon_name)
+    for entry in entries:
+        entry['icon'] = (desktop_icons.get(str(entry.get('class') or '').lower())
+                         or desktop_icons.get(entry['app'].lower())
+                         or {'Terminal': 'utilities-terminal', 'Browser': 'web-browser',
+                             'Web app': 'web-browser', 'Editor': 'text-editor',
+                             'Files': 'system-file-manager'}.get(entry['kind'], 'application-x-executable'))
     if terminals_only:
         from window_vocabulary import inject_windows
         vocabulary = inject_windows({'clients': windows})
@@ -406,6 +457,25 @@ def tile_on_monitor(category, number):
     context = {'active': {'monitor': monitor['id'], 'workspace': workspace}, 'clients': clients}
     message = tile_open_windows(context, category=category)
     return f"{message} · Monitor {number} ({monitor['name']})"
+
+
+def tile_in_workspace(context, category, workspace):
+    if workspace == 'current':
+        return tile_open_windows(context, category=category)
+    number = int(workspace)
+    if not 1 <= number <= 999999999:
+        raise ValueError('Choose a positive workspace number.')
+    workspaces = json.loads(run(['hyprctl', 'workspaces', '-j']))
+    target = next((w for w in workspaces if w.get('id') == number), None)
+    if not target:
+        return f'No open {category} in workspace {number}'
+    monitors = json.loads(run(['hyprctl', 'monitors', '-j']))
+    monitor = next((m for m in monitors if m.get('name') == target.get('monitor') and not m.get('disabled')), None)
+    if monitor is None:
+        raise RuntimeError('The workspace’s screen is no longer available.')
+    scoped = dict(context or {}, active={'monitor': monitor['id'], 'workspace': {'id': number}})
+    message = tile_open_windows(scoped, category=category)
+    return f'{message} · Workspace {number}'
 
 
 def tile_terminals(context):

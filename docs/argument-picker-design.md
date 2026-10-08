@@ -1,13 +1,8 @@
 # Prefix groups, arguments, and command sequences
 
-Update: [Picker verb semantics](picker-verb-semantics.md) supersedes the earlier
-window hierarchy below. Move now uses a flat individual-window list followed by a
-combined workspace/monitor list. Focus goes to a window; Show brings it here.
-
-Current direction, October 2, 2026: group by verb, then use meaningful command
-chunks and explicit argument levels. Automatically reveal a
-unique matching branch, and use Tab to accept the highlighted choice when more
-than one remains. A completed action requires Enter. No automatic action runs.
+The picker groups commands by verb and then by arguments. A unique matching
+branch can expand while typing; a completed action requires Enter. Focus goes
+to a window; Show brings it to the current workspace.
 
 ## Interaction
 
@@ -68,10 +63,8 @@ command prefix. Uniqueness is assessed before the ten-row display limit.
 
 ## Window movement
 
-Current and named windows keep the existing argument providers:
-
-- move → this window to / named window to
-- workspace → number, or other monitor
+Move first offers the current window and individual named windows in one list.
+Selecting a window reveals a combined list of workspace and monitor destinations.
 
 Workspace choices currently cover 1–10, with typed positive move destinations
 of up to nine digits. Switching workspaces retains the catalog's supported range.
@@ -106,7 +99,7 @@ A command is an intent with arguments; a sequence is an ordered list of complete
 commands. **Add step** queues a completed ordinary command. Tab never queues or
 executes. Website flows cannot currently join a sequence; run queued commands
 before entering a website flow. Execution retains existing confirmation and
-window-identity checks. All development remains private until explicitly published.
+window-identity checks.
 
 ## Optional app arguments
 
@@ -129,7 +122,8 @@ an app declines to create another window. Layout exclusions still apply.
 ## Category order and named pairs
 
 Browsing Tile or List keeps all windows, all terminals, and all browsers first.
-Tile then offers all apps, two specific windows, and monitor choices. Filtering
+Tile also offers two specific windows and monitor choices; the all-apps category
+is omitted from the picker. Filtering
 by a window/category name still uses the usual text ranking.
 
 The two-specific-windows provider exposes captured, uniquely labeled windows.
@@ -142,3 +136,11 @@ The parsed pair stores two window IDs and uses the existing tiling executor,
 which verifies identities and rejects stale or replaced windows. It gathers the
 two windows on the captured workspace and temporarily hides the other windows
 there. The picker describes this behavior before execution.
+
+## Workspace-scoped tiling
+
+Tile categories for windows, terminals, and browsers are executable branches.
+Enter uses the current default; Tab exposes “this workspace” and numbered
+workspace destinations. Explicit workspace requests affect that workspace's
+matching windows. The parser also accepts positive workspace numbers beyond
+the numbered menu options.

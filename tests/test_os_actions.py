@@ -247,6 +247,16 @@ class CommandTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertIsNone(parse_command(text))
 
+    def test_prefers_personal_browser_over_recent_automation_window(self):
+        personal = {"class": "chromium", "address": "0x123", "pid": 123, "focusHistoryID": 5}
+        automation = {"class": "chromium", "address": "0x456", "pid": 456, "focusHistoryID": 0}
+        from pathlib import Path
+        def cmdline(path):
+            profile = str(Path.home() / '.config/chromium') if '123' in str(path) else '/tmp/automation'
+            return ('chromium\0--user-data-dir=' + profile).encode()
+        with patch("os_actions.Path.read_bytes", autospec=True, side_effect=cmdline):
+            self.assertEqual(browser_window([automation, personal]), personal)
+
     def test_excludes_browser_webapps_and_bad_addresses(self):
         self.assertIsNone(browser_window([
             {"class": "chrome-discord.com__channels_@me-Default", "address": "0x123"},

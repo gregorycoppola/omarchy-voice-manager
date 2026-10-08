@@ -19,3 +19,7 @@ command-history*
 .env
 .env.*
 *.jsonl
+
+# Personal correspondence belongs outside the repository.
+/letter/
+/letters/

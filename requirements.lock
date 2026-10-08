@@ -1,2 +1,2 @@
-# No pip dependencies. Uses system Python with PyGObject and Cairo.
-# Speech recognition will be supplied by an external adapter in a future phase.
+# Text runtime: system Python with PyGObject and Cairo; no pip dependencies.
+# Optional local speech dependencies are listed in requirements-speech.txt.

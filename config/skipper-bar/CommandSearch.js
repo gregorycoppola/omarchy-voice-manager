@@ -101,3 +101,18 @@ function search(query, suggestions, dynamicSuggestions, counts) {
     return rank(query, suggestions, dynamicSuggestions, counts).slice(0, 10)
         .map(function(row) { return row.text; });
 }
+
+// Keep each tab's identity, including duplicate titles in different windows.
+function rankTabs(query, tabs) {
+    var needle = normalize(query);
+    return tabs.map(function(tab, index) {
+        var text = tab.title + " " + ((tab.browser_tab || {}).url || tab.app || "");
+        return {tab: tab, index: index, text: text};
+    }).filter(function(row) {
+        return containsSubsequence(normalize(row.text), needle);
+    }).map(function(row) {
+        row.score = needle ? textMatchScore(row.text, needle) : 0;
+        return row;
+    }).sort(function(a, b) { return b.score - a.score || a.index - b.index; })
+      .map(function(row) { return row.tab; });
+}

@@ -54,7 +54,8 @@ class WrittenTests(unittest.TestCase):
         with patch('installed_apps.application_dirs', return_value=(apps,)):
             self.app.type_command()
             entry = self.app.state['written_entry']
-            self.assertFalse(entry['dynamic_suggestions'])
+            self.assertFalse(any(row['command'].startswith('desktop-app:')
+                                 for row in entry['dynamic_suggestions']))
             desktop = apps / 'tasks.desktop'
             desktop.write_text('[Desktop Entry]\nType=Application\nName=Task Board\nExec=true\n')
             dynamic = self.app.command_suggestions(self.context)
@@ -68,7 +69,8 @@ class WrittenTests(unittest.TestCase):
             desktop.unlink()
             dynamic = self.app.command_suggestions(self.context)
             self.app.apply_written_refresh(self.app.pending_written['token'], self.context, dynamic)
-            self.assertFalse(self.app.state['written_entry']['dynamic_suggestions'])
+            self.assertFalse(any(row['command'].startswith('desktop-app:')
+                                 for row in self.app.state['written_entry']['dynamic_suggestions']))
 
     def test_keyboard_mode_without_model_keeps_original_context(self):
         self.assertFalse(hasattr(self.app, 'model'))

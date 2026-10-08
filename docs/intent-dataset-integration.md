@@ -1,9 +1,9 @@
-# External intent dataset
+# Built-in intent catalog
 
-Skipper ships a runtime snapshot in `bundled/intents`. `dataset-reference.json`
-selects provider `skipper` and records the upstream repository and source commit
-for attribution and repeatable updates. That reference is provenance, not an
-installation download: only the Skipper repository is needed.
+Skipper owns its intent definitions and catalog loader in `bundled/intents`.
+`dataset-reference.json` selects that local directory and provider `skipper`.
+The definitions ship and evolve with the application; there is no upstream
+repository requirement, download, or synchronization step.
 
 `OMARCHY_INTENT_DATASET=/absolute/path` explicitly overrides the bundle for
 trusted development. No sibling checkout or old installed snapshot is selected
@@ -13,23 +13,26 @@ The dataset owns all shared schemas, examples, static Skipper grammar patterns,
 fixed vocabulary, dynamic vocabulary declarations, and mappings to executor
 arguments. `command_catalog.py` constructs compatibility views from that data.
 The app currently activates the shared `workspace.switch` schema's direct
-templates for workspaces 1–10 through a local executor adapter; the pinned
-provider snapshot does not yet contain that binding.
+templates for workspaces 1–10 through a local executor adapter; the current
+provider definition does not yet contain that binding.
 The runtime bundle contains the catalog, Skipper provider, sequence examples,
 catalog reader, and license. Research archives and Git history are excluded.
 `python import_intent_dataset.py` now validates the reference and reports the
 loaded revision without copying files.
 
-In the upstream dataset repository, edit `data/catalog.json` for shared contracts and examples, or
-`data/providers/skipper.json` for active Skipper wording and bindings. Refresh the application bundle from the selected committed snapshot, then restart
-Skipper and its native Explorer. The browser explorer reads the
-catalog directly on refresh. A missing or invalid dataset prevents startup with
-an explanatory error, rather than falling back to a different dataset.
+Edit `bundled/intents/data/catalog.json` for contracts and examples, or
+`bundled/intents/data/providers/skipper.json` for wording and executor bindings.
+Run `python -B import_intent_dataset.py` from the application root to validate
+the catalog and compile the phrases, then run the relevant parser tests.
+Commit definition changes together with their app changes and restart Skipper
+and its native Explorer. Catalog revisions are content hashes of the catalog
+and provider files, so definition edits automatically change the revision.
+A missing or invalid catalog prevents startup with an explanatory error.
 
 Every compiled rule binds its slots, translates its existing executor arguments
 into canonical intent instances, and validates those against the shared schema.
-Window IDs are still captured at recording start; installed app names are still
-discovered locally. Skipper retains execution handlers, target checks,
+Window identities come from the current request context; installed app names
+are discovered locally. Skipper retains execution handlers, target checks,
 confirmation, fuzzy thresholds, and saved correction compatibility.
 
 ```python
@@ -46,16 +49,16 @@ assert matcher.parse_instance(parsed.canonical_plan[0]).command == parsed.comman
 
 `parse_instance` is the entry point for future LLM output. It accepts only
 schema-valid objects with an existing matching executor binding. It does not run
-actions. Schema support for all 223 research intents does not activate all of them
-in Skipper. Multi-step source macros retain their existing executor; general
-sequence execution and external provider adapters remain future work.
+actions. The catalog currently validates 227 intent schemas, but a schema alone does not
+activate an action in Skipper. The typed runtime supports queued ordinary
+commands through Add step; some interactive providers require a separate action.
+The catalog reader can validate structured plans, but that does not make arbitrary
+external-provider plans executable.
 
 The native Explorer shows shared contracts and canonical parser output.
 Diagnostics include `catalog_revision` and `canonical_plan`, alongside the old
 executor intent required by existing corrections and runtime code.
 
-The dataset's `docs/structured-intents.md` documents schemas, references, Python
-iteration, grammar templates, LLM export, historical audit preservation, and
-editing workflow. The [public dataset](https://github.com/gregorycoppola/omarchy-voice-dataset)
-is versioned independently; each app release bundles a compatible snapshot.
-Neither setup nor runtime needs to fetch that repository.
+The catalog loader in `bundled/intents/intent_explorer/catalog.py` provides
+instance and plan validation, grammar bindings, and LLM schema/context export.
+See [the catalog guide](../bundled/intents/README.md) for the file layout.

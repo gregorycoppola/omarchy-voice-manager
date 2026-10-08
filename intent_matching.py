@@ -161,6 +161,16 @@ class IntentMatcher:
                                   1.0, 'correction', INTENTS[command]['label'])
             return ParseResult(text, 'matched', 'correction', candidate, (candidate,),
                                reason='Exact phrase explicitly corrected by the user.', correction=correction)
+        scoped_tile = re.fullmatch(r'tile (?:(?:all|the|open) )*(windows|terminals|browsers) in (this workspace|workspace [1-9][0-9]{0,8})', phrase)
+        if scoped_tile:
+            category, destination = scoped_tile.groups()
+            workspace = destination.removeprefix('workspace ') if destination != 'this workspace' else 'current'
+            intent = Intent('tile_workspace', (('category', category), ('workspace', workspace)))
+            intent.canonical_plan()
+            candidate = Candidate(f'{category}:tile-workspace:{workspace}', intent, phrase, 1.0, 'grammar', phrase)
+            return ParseResult(text, 'matched', 'exact', candidate, (candidate,))
+        if phrase.startswith('tile ') and re.search(r'\bin(?: workspace)?\b', phrase):
+            return ParseResult(text, 'unrecognized', reason='Choose this workspace or a positive workspace number.')
         # Correct known browser misspellings only inside an otherwise exact
         # authored opening/tiling command. Do not fuzzy-match its action words.
         spelling = PROVIDER['language_policy']['browser_spelling']

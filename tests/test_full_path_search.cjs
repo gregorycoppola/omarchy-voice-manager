@@ -70,21 +70,24 @@ const tileTree = levels.build([
  {command:'terminals:tile', text:'tile all the terminals'}
 ],[]);
 const tileRows = levels.preview(tileTree, [], 'tile', false).rows;
-assert.ok(tileRows.some(row => row.text === 'all apps' && row.value === 'tile all apps'));
-assert.ok(tileRows.some(row => row.text === 'all browsers'));
-assert.ok(tileRows.every(row => row.description.startsWith('This workspace')));
-assert.equal(levels.preview(tileTree, [], 'tileopenapps', false).rows[0].value,'tile all apps');
-console.log('Tile labels: open categories, current-workspace descriptions, and executable wording passed');
+assert.ok(!tileRows.some(row => row.text === 'all apps'));
+assert.ok(tileRows.some(row => row.text === 'all browsers' && row.children));
+assert.ok(tileRows.some(row => row.text === 'all terminals' && row.children));
+const terminalWorkspace = levels.preview(tileTree, [], 'tileopenterminals', false);
+assert.equal(terminalWorkspace.rows[0].value,'tile all terminals in this workspace');
+assert.equal(levels.preview(tileTree, [], 'tile open terminals in workspace 3', false).rows[0].value,
+ 'tile all terminals in workspace 3');
+console.log('Tile categories: workspace branches and full-path destination selection passed');
 const monitorTree = levels.build([
- {command:'apps:tile',text:'tile all apps'},
- {command:'apps:tile-monitor:1',text:'tile the apps on monitor 1'},
- {command:'apps:tile-monitor:2',text:'tile the apps on monitor 2'},
+ {command:'terminals:tile',text:'tile all terminals'},
+ {command:'terminals:tile-monitor:1',text:'tile the terminals on monitor 1'},
+ {command:'terminals:tile-monitor:2',text:'tile the terminals on monitor 2'},
  {command:'browsers:tile-monitor:2',text:'tile the browsers on monitor 2'}
 ],[]);
 const monitorRoot = levels.preview(monitorTree,[],'tile',false).rows;
 assert.equal(monitorRoot.length,2);
 assert.ok(monitorRoot.some(row=>row.id==='tile-monitor'));
 assert.ok(!monitorRoot.some(row=>/monitor [0-9]/i.test(row.text)));
-const monitorMatch = levels.preview(monitorTree,[],'tileopenappsonmonitor2',false);
-assert.equal(monitorMatch.rows[0].value,'tile the apps on monitor 2');
+const monitorMatch = levels.preview(monitorTree,[],'tileopenterminalsonmonitor2',false);
+assert.equal(monitorMatch.rows[0].value,'tile the terminals on monitor 2');
 console.log('Tile monitor choices: grouped at the root, full path remains searchable');

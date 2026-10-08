@@ -87,3 +87,23 @@ class PluginSetupTests(unittest.TestCase):
         self.assertEqual(root['id'], development['id'])
         self.assertEqual(root['version'], development['version'])
         self.assertTrue((ROOT/root['entryPoints']['barWidget']).is_file())
+
+    def test_voice_preset_install_and_remove(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home=Path(directory);config=home/'config';data=home/'data'
+            install_integration(ROOT,home,config,data,shortcut=True,voice=True)
+            preset=config/'hypr/skipper-plugin-written.lua'
+            self.assertIn('record-start',preset.read_text())
+            self.assertIn('record-stop',preset.read_text())
+            install_integration(ROOT,home,config,data,shortcut=True,voice=True)
+            self.assertEqual(uninstall_integration(data),[])
+            self.assertFalse(preset.exists())
+
+    def test_edited_binding_preserves_its_lua_dependency(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home=Path(directory);config=home/'config';data=home/'data'
+            install_integration(ROOT,home,config,data,shortcut=True,voice=True)
+            bindings=config/'hypr/bindings.lua'
+            bindings.write_text(bindings.read_text().replace('dofile(', 'dofile(  '))
+            self.assertTrue(uninstall_integration(data))
+            self.assertTrue((config/'hypr/skipper-plugin-written.lua').exists())

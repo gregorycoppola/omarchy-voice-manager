@@ -7,7 +7,7 @@ the current level. Prefix uniqueness is decided before display truncation.
 See [the current picker design](argument-picker-design.md) for Tab, Enter, Back,
 lazy child construction, and website argument providers.
 
-The private command picker first filters by normalized ordered-character subsequence, then reranks
+The command picker first filters by normalized ordered-character subsequence, then reranks
 a shortlist using the existing fuzzy text score. Frequency is
 an independent signal exposed for inspection, with no influence on ordering,
 even when text scores tie. This is the initial text-only baseline for tuning.
@@ -104,22 +104,17 @@ at most 50 retained options. With these edit costs, a subsequence match needs
 only candidate insertions, so its score depends on the length difference. The
 bounded deeper stage remains available for future scoring changes.
 
-The earlier substring-filter Node benchmark of the actual static catalog (130 options, 1,447 phrases,
-three calls per query) measured about 12–77 ms before this filter and 0.5–1.2 ms
-after it, for `m`, `move`, `workspace`, and `open chrome`. This measures the
-scorer in Node, not end-to-end QML input latency or dynamic desktop options.
-
 ## Argument levels and Enter
 
-The picker now applies this score within an explicit argument level. Movement
-and workspace-switch options are grouped into branches. Branches display their
-stable label even when a search form scored best. Tab accepts a choice and
-advances; typing and clicking do not expand branches. Enter can execute a leaf,
-but a selected branch asks for Tab and remains open. See the
+The picker applies matching within the current level. Verb roots use substring
+matching and prefix inference can reveal a unique branch while typing. Tab
+accepts a choice and advances. Enter advances a non-executable branch or runs a
+completed command. Executable app and tile-category branches run their current
+defaults on Enter; Tab reveals optional arguments. See the
 [argument picker design](argument-picker-design.md) for controls and scope.
 
-Ctrl+Enter submits ordinary root text directly to the parser. It cannot bypass
-an unfinished argument level. The parser's separate fuzzy matching still applies.
+Ctrl+Enter clears explicit row selection and calls the same submission handler.
+It does not bypass unfinished argument levels or branch handling.
 
 ## The separate command parser
 

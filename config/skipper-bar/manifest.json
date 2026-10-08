@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "greg.skipper",
   "name": "Skipper",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "author": "Greg",
-  "description": "Text-first desktop command picker with staged menus and local system controls",
+  "description": "Local voice and typed desktop control with optional cloud interpretation",
   "kinds": [
     "bar-widget"
   ],

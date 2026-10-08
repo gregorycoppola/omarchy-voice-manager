@@ -127,6 +127,52 @@ class BrowserConnection:
                 # already have opened a tab. The next command queries tabs anew.
                 raise
 
+    def tab_picker(self, selected=None):
+        """List normal-profile tab metadata, or activate a previously listed tab."""
+        with self.lock:
+            try:
+                if self.process is None or self.process.poll() is not None:
+                    self.close()
+                    self.connect()
+                code = """async (page) => {
+                    const prefix = PREFIX;
+                    let control = page.context().pages().find(p => p.url().startsWith(prefix));
+                    if (!control) {
+                        control = await page.context().newPage();
+                        await control.goto(prefix + 'status.html');
+                    }
+                    return await control.evaluate(async (selected) => {
+                        if (selected) {
+                            const tab = await chrome.tabs.get(selected.tabId);
+                            if (tab.incognito || tab.windowId !== selected.windowId ||
+                                (tab.pendingUrl || tab.url || '') !== selected.url)
+                                throw new Error('Tab changed; list browser tabs again');
+                            await chrome.tabs.update(tab.id, {active: true});
+                            await chrome.windows.update(tab.windowId, {focused: true});
+                            const current = await chrome.tabs.get(tab.id);
+                            const window = await chrome.windows.get(tab.windowId);
+                            return {focused: current.active && window.focused};
+                        }
+                        const windows = await chrome.windows.getAll({populate:true, windowTypes:['normal']});
+                        return {tabs: windows.filter(w => !w.incognito).flatMap(w =>
+                            (w.tabs || []).filter(t => !(t.url || '').startsWith('chrome-extension://'))
+                            .map(t => ({tabId:t.id, windowId:w.id, title:t.title || 'Untitled tab',
+                                url:t.pendingUrl || t.url || '', favicon:t.favIconUrl || '', active:t.active, index:t.index}))) };
+                    }, SELECTED);
+                }""".replace('PREFIX', json.dumps(EXTENSION)).replace('SELECTED', json.dumps(selected))
+                result = self.request('tools/call', dict(name='browser_run_code_unsafe', arguments={'code': code}))
+                for content in result.get('content', []):
+                    if content.get('type') == 'text':
+                        section = content['text'].split('### Result\n', 1)
+                        if len(section) == 2:
+                            value, _ = json.JSONDecoder().raw_decode(section[1].lstrip())
+                            if isinstance(value, dict) and (value.get('focused') is True if selected else isinstance(value.get('tabs'), list)):
+                                return value
+                raise RuntimeError('Browser did not confirm the tab request')
+            except Exception:
+                self.close()
+                raise
+
     def bring_up(self, site):
         return self._select_site_tab(site, 'bringUpSite')
 

@@ -1,4 +1,4 @@
-"""Load the independently maintained intent dataset through an explicit reference."""
+"""Load Skipper-owned intent definitions from this checkout."""
 import importlib.util
 import json
 import os
@@ -14,8 +14,8 @@ DATASET_ROOT = Path(os.environ.get(
 API_PATH = DATASET_ROOT / "intent_explorer/catalog.py"
 if not API_PATH.is_file():
     raise RuntimeError(
-        f"Intent dataset missing at {DATASET_ROOT}. Set OMARCHY_INTENT_DATASET to the "
-        "omarchy-voice-dataset checkout, or reinstall Skipper to restore its bundled intents.")
+        f"Intent dataset missing at {DATASET_ROOT}. Set OMARCHY_INTENT_DATASET to a "
+        "compatible intent directory, or reinstall Skipper to restore its bundled intents.")
 spec = importlib.util.spec_from_file_location("omarchy_intent_catalog", API_PATH)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)

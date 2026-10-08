@@ -1,8 +1,8 @@
 # Website routing and browser resolution
 
-This is the policy for a request such as “open GitHub.” It separates choosing a
-browser from choosing a tab. A browser must never be selected silently when
-there is a meaningful choice.
+This document separates the proposed multi-browser policy from the current
+Chromium-only implementation described below. Cross-browser discovery and
+clarification are design targets, not shipped features.
 
 ## Terms
 

@@ -1,9 +1,5 @@
 {
   "schema_version": 3,
   "provider": "skipper",
-  "bundle": "bundled/intents",
-  "upstream": {
-    "repository": "https://github.com/gregorycoppola/omarchy-voice-dataset.git",
-    "commit": "0210c2846610a810f845bba33539b9215bfdeb4d"
-  }
+  "bundle": "bundled/intents"
 }

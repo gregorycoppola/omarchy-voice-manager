@@ -70,7 +70,7 @@ ShellRoot {
         tileWindows:[{id:"one",label:"editor"},{id:"two",label:"chromium"},{id:"three",label:"notes"}]}],counts:{}}});
     widget.writtenOpen=false;
     if(widget.historyMatches.slice(0,3).join(",") !== "all windows,all terminals,all browsers") throw new Error("Tile category order lost in ranking");
-    widget.historySelection=4; widget.advanceArgument();
+    widget.historySelection=3; widget.advanceArgument();
     if(widget.argumentPrompt !== "CHOOSE THE FIRST WINDOW" || widget.pickerRows.length !== 3) throw new Error("First tile choice missing");
     widget.historySelection=0; widget.advanceArgument();
     if(widget.argumentPrompt !== "CHOOSE THE SECOND WINDOW" || widget.pickerRows.length !== 2) throw new Error("Second tile choice missing");
@@ -81,6 +81,18 @@ ShellRoot {
     if(widget.commandComplete || widget.pickerRows.length !== 2) throw new Error("Pair back failed");
     widget.resetArguments(); input.text="list";
     if(widget.historyMatches.slice(0,3).join(",") !== "all windows,all terminals,all browsers") throw new Error("List category order lost in ranking");
+    widget.resetArguments(); input.text="tile all term";
+    if(widget.argumentPrompt !== "CHOOSE A WORKSPACE" || widget.prefixPreview.query !== "") throw new Error("Unique abbreviated category did not advance");
+    if(widget.selectedCommand() !== "tile all terminals in this workspace") throw new Error("Abbreviated category lost default");
+    input.text="tile all terminals";
+    if(widget.selectedCommand() !== "tile all terminals in this workspace") throw new Error("Default workspace not selected");
+    if(widget.argumentPrompt !== "CHOOSE A WORKSPACE") throw new Error("Workspace level not shown");
+    input.text="tile all terminals in workspace 2";
+    if(widget.selectedCommand() !== "tile all terminals in workspace 2") throw new Error("Numbered workspace not selected");
+    input.text="tile all terminals in workspace 0";
+    if(widget.pickerRows.length) throw new Error("Invalid workspace fell back to default");
+    input.text="tile all terminals";
+    if(widget.selectedCommand() !== "tile all terminals in this workspace") throw new Error("Default did not restore");
     console.log("PASS provider QML: recent order, file/audio/control identities, and queue restrictions")
    } catch (error) { console.error("FAIL " + error) }
    finally { widget.writtenOpen = false; Qt.quit() }

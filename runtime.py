@@ -16,6 +16,7 @@ from gi.repository import Gio, GLib
 
 from browser_connection import connection
 from command_store import CommandStore
+from ui_commands import OMARCHY_MENU_FORMS, OMARCHY_MENU_SUGGESTION
 import personal_store
 from command_catalog import GRAMMAR, INTENTS, NO_LEARN_COMMANDS, COMMAND_SUGGESTIONS, TERMINAL_CLASSES
 from diagnostics import append_event, LOG_PATH
@@ -24,7 +25,7 @@ from grammar_engine import normalize
 from dataset_source import PROVIDER
 from corrections import Corrections
 from os_actions import (capture_window_context, window_target, execute_command,
-                        tile_open_windows, tile_on_monitor, hide_windows, hide_current_window, tile_terminals, tile_browsers, tile_apps, move_other_screen, maximize_current_window,
+                        tile_open_windows, tile_on_monitor, tile_in_workspace, hide_windows, hide_current_window, tile_terminals, tile_browsers, tile_apps, move_other_screen, maximize_current_window,
                         show_selected_window, show_all_windows, terminal_close_target, close_terminal, all_terminal_targets, close_terminals, TERMINAL_CLOSE_INTENTS)
 from os_actions import focus_named_window, move_app_other_screen, list_open_windows, open_window_entries, focus_listed_window
 from window_vocabulary import inject_windows, terminal_suggestions, window_action_suggestions
@@ -71,6 +72,7 @@ class VoiceRuntime(Gio.Application):
         self.started = False
         self.show_on_start = show_on_start
         self.busy = False
+        self.voice_request = None
         self.quit_when_finished = False
         self.pending = None
         self.pending_correction = None
@@ -91,6 +93,10 @@ class VoiceRuntime(Gio.Application):
             ('correct-command', 's', self.correct_command),
             ('type-command', None, self.type_command),
             ('submit-written', 's', self.submit_written),
+            ('voice-debug', 's', self.set_voice_debug),
+            ('voice-cloud', 's', self.set_voice_cloud),
+            ('execute-voice', 's', self.execute_voice),
+            ('voice-status', 's', self.voice_status),
             ('manage-website', 's', self.manage_website),
             ('begin-website', 's', self.begin_website),
             ('load-audio', 's', self.load_audio),
@@ -123,6 +129,10 @@ class VoiceRuntime(Gio.Application):
         if self.show_on_start:
             self.show()
         self.update('Ready', 'Super + R to choose a command.')
+        from speech.config import model_path
+        model=model_path()
+        if model.is_dir() and not Settings(self.data/'settings.json').voice_debug:
+            self.speech_process=subprocess.Popen([sys.executable,str(Path(__file__).with_name('speech_preview.py'))])
 
     def update(self, state, message):
         if state == 'Error':
@@ -133,6 +143,7 @@ class VoiceRuntime(Gio.Application):
         self.publish()
 
     def publish(self):
+        self.state['voice_debug'] = Settings(self.data / 'settings.json').voice_debug
         self.state['layout_history'] = self.layout_history.info()
         payload = self.state | dict(updated=time.time(), session=self.session,
                                     panel_epoch=self.panel_epoch)
@@ -207,7 +218,135 @@ class VoiceRuntime(Gio.Application):
 
 
 
-    def interpret(self, text, context=None, commands=True, path=None, source='written', expected_command=None):
+    @staticmethod
+    def voice_database():
+        from speech.storage import DATABASE
+        return DATABASE
+
+    def set_voice_debug(self, value):
+        try:
+            if value not in ('on', 'off'):
+                raise ValueError('Use on or off for Debug mode.')
+            Settings(self.data / 'settings.json').set_voice_debug(value == 'on')
+            self.publish()
+        except (OSError, ValueError) as exc:
+            self.update('Error', str(exc))
+
+    def set_voice_cloud(self, value):
+        try:
+            if value not in ('on','off'):raise ValueError('Use on or off for cloud fallback.')
+            Settings(self.data/'settings.json').set_voice_cloud(value=='on')
+        except (OSError,ValueError) as exc:self.update('Error',str(exc))
+
+    def voice_outcome(self, ident, state, message):
+        with sqlite3.connect(self.voice_database()) as db:
+            db.execute('UPDATE executions SET status=?,message=? WHERE id=?', (state, message, ident))
+
+    def voice_status(self, payload):
+        try:
+            value=json.loads(payload)
+            state=value['state']
+            if state not in ('Recording','Transcribing','Understanding','Error','Ready'):return
+            if self.busy or self.pending or self.sequence:return
+            if state=='Recording':
+                self.voice_choices={}
+                self.pending_written=None
+                self.state.update(written_entry=None,transcript='',intent=None,intent_label='',
+                                  input_source='voice',clarification=None,monitor=self.focused_monitor())
+                self.panel_epoch+=1
+            self.state['input_source']='voice'
+            self.state['transcript']=str(value.get('transcript') or self.state.get('transcript',''))[:2000]
+            self.update(state,str(value.get('message',''))[:1000])
+        except (ValueError,KeyError,TypeError):
+            return
+
+    def execute_voice(self, ident, selected=None):
+        import re
+        if not isinstance(ident, str) or not re.fullmatch('[a-f0-9]{32}', ident):
+            return
+        try:
+            # A durable claim prevents the same recording from being dispatched twice.
+            with sqlite3.connect(self.voice_database()) as db:
+                db.execute('CREATE TABLE IF NOT EXISTS executions(id TEXT PRIMARY KEY,status TEXT,message TEXT)')
+                observation=db.execute('SELECT data FROM observations WHERE id=? AND created>=datetime("now","-120 seconds")', (ident,)).fetchone()
+                if not observation:return
+                if db.execute('SELECT 1 FROM executions WHERE id=?',(ident,)).fetchone():return
+            if Settings(self.data / 'settings.json').voice_debug:
+                raise ValueError('Debug mode is on; nothing was executed.')
+            if self.busy or self.pending or self.pending_written or self.sequence:
+                raise ValueError('Skipper is waiting for another command; nothing was executed.')
+            saved=json.loads(observation[0])
+            if saved.get('mode')!='execute' or saved.get('source')!='microphone':
+                raise ValueError('This recording was made in Debug mode; nothing was executed.')
+            from speech.grammar import Grammar
+            from speech.learning import LearnedGrammar
+            from speech.execution import execution_result, signature
+            context=saved['context']
+            grammar=LearnedGrammar(Grammar(context, discover_installed_apps(for_picker=True), inject_windows(context)))
+            parsed=grammar.parse(saved['parsed']['transcript'])
+            expected=saved['parsed']
+            if expected['status']=='unrecognized' and saved.get('llm',{}).get('status')=='interpreted':
+                from speech.openai_fallback import validate
+                parsed=validate(saved['llm']['reply'],grammar)
+                expected=saved['llm']['parsed']
+            if parsed['status']=='ambiguous' and expected['status']=='ambiguous':
+                if parsed['candidates']!=expected['candidates']:
+                    raise ValueError('Available choices changed; please repeat.')
+                if selected is None:
+                    windows=inject_windows(context)
+                    self.voice_choices={};choices=[]
+                    for index,candidate in enumerate(parsed['candidates']):
+                        target=windows.targets.get(candidate.get('intent',{}).get('arguments',{}).get('window'))
+                        if candidate.get('intent',{}).get('type')!='focus_window' or not target:
+                            raise ValueError('Several meanings match. Please name the action and window more precisely.')
+                        token=uuid4().hex;self.voice_choices[token]=(ident,index)
+                        title=' '.join((target.get('title') or target.get('class','Window')).split())[:100]
+                        choices.append({'token':token,'label':title+' · Workspace '+str(target.get('workspace',{}).get('id','?'))})
+                    self.state.update(transcript=parsed['transcript'],input_source='voice',
+                                      clarification={'prompt':'Which window did you mean?','choices':choices})
+                    self.panel_epoch+=1;self.update('Choose','Choose a window.')
+                    return
+                parsed={**parsed,'status':'matched','candidates':[parsed['candidates'][selected]]}
+                expected={**expected,'status':'matched','candidates':[expected['candidates'][selected]]}
+            if signature(parsed)!=signature(expected):
+                raise ValueError('The interpretation or available targets changed; please repeat.')
+            with sqlite3.connect(self.voice_database()) as db:
+                claimed=db.execute('INSERT OR IGNORE INTO executions VALUES(?,?,?)',(ident,'checking','Validating voice intent')).rowcount
+                if not claimed:return
+            self.state.update(input_source='voice',transcript=saved['parsed']['transcript'])
+            interaction=parsed['candidates'][0].get('interaction')
+            if interaction:
+                if interaction=='omarchy_menu':
+                    subprocess.Popen(['omarchy-menu','toggle','root'])
+                    self.voice_outcome(ident,'complete','Opened the Omarchy main menu.')
+                elif interaction=='browser_tabs':
+                    self.state['monitor']=self.focused_monitor()
+                    self.busy=True
+                    threading.Thread(target=self.load_browser_tabs,daemon=True).start()
+                    self.voice_outcome(ident,'selection','Choose a browser tab in Skipper.')
+                else:
+                    self.type_command()
+                    self.voice_outcome(ident,'selection','Choose the requested target in the keyboard picker.')
+                return
+            labels={key:target.get('voice_label') or target.get('title') or 'window'
+                    for key,target in inject_windows(context).targets.items()}
+            result=execution_result(parsed,labels)
+            self.voice_request=ident
+            self.state['monitor']=self.focused_monitor()
+            self.busy=True
+            self.voice_outcome(ident,'dispatched','Sent to Skipper; normal target checks and confirmations apply.')
+            self.update('Working','Running voice command…')
+            threading.Thread(target=self.interpret,
+                args=(saved['parsed']['transcript'],context),
+                kwargs={'source':'voice','prepared_result':result},daemon=True).start()
+        except Exception as exc:
+            with sqlite3.connect(self.voice_database()) as db:
+                db.execute('INSERT OR IGNORE INTO executions VALUES(?,?,?)',(ident,'error',str(exc)))
+            try:self.voice_outcome(ident,'error',str(exc))
+            except (sqlite3.Error,OSError):pass
+            if not self.busy:self.update('Error',str(exc))
+
+    def interpret(self, text, context=None, commands=True, path=None, source='written', expected_command=None, prepared_result=None):
         """Shared text interpretation for the picker and future speech adapters."""
         try:
             if commands and (context or {}).get('confirmation_token'):
@@ -218,8 +357,8 @@ class VoiceRuntime(Gio.Application):
             apps = discover_installed_apps(for_picker=True) if commands else None
             expansions = windows.expansions + apps.expansions if commands else ()
             from picker_windows import parse as parse_picker, resolve_target, VERBS
-            picker_result = parse_picker(text, context) if commands else None
-            result = ((parse_open(text, matcher, expansions) if source == "written" else None) or picker_result or matcher.parse(text, expansions, use_corrections=source == "speech")) if commands else None
+            picker_result = parse_picker(text, context) if commands and prepared_result is None else None
+            result = prepared_result or (((parse_open(text, matcher, expansions) if source == "written" else None) or picker_result or matcher.parse(text, expansions, use_corrections=source == "speech")) if commands else None)
             if (commands and source == 'written' and normalize(text).split(' ')[0] in VERBS
                     and picker_result is None and result.method != 'exact'):
                 if expected_command is not None:
@@ -385,9 +524,37 @@ class VoiceRuntime(Gio.Application):
         # Keep the monitor captured when the voice/typed command began.
         if not self.state.get('monitor'):
             self.state['monitor'] = self.focused_monitor()
+        self.state['list_kind'] = 'windows'
         self.state['window_list'] = entries
         self.panel_epoch += 1
         self.update('WindowList', message)
+
+    def load_browser_tabs(self):
+        from urllib.parse import urlsplit
+        try:
+            tabs = connection.tab_picker()['tabs']
+            windows = list(dict.fromkeys(t['windowId'] for t in tabs))
+            entries = [dict(address=uuid4().hex, browser_tab=t, title=t['title'],
+                kind='Browser tab', icon='web-browser', app=urlsplit(t['url']).netloc or t['url'].split(':')[0],
+                workspace='', names_note='',
+                favicon=t.get('favicon', '') if t.get('favicon', '').startswith(('https://', 'http://', 'data:image/')) else '',
+                detail=f"Browser window {windows.index(t['windowId']) + 1} · Tab {t['index'] + 1}"
+                       + (' · Active' if t['active'] else '')) for t in tabs]
+            GLib.idle_add(self.show_browser_tabs, entries)
+        except Exception as exc:
+            GLib.idle_add(self.complete, 'Error', f'Could not list browser tabs: {exc}')
+
+    def show_browser_tabs(self, entries):
+        self.show_window_list(f'{len(entries)} browser tabs' if entries else 'No browser tabs in the connected profile.', entries)
+        self.state['list_kind'] = 'tabs'
+        self.publish()
+
+    def finish_focus_browser_tab(self, entry):
+        try:
+            connection.tab_picker(entry['browser_tab'])
+            GLib.idle_add(self.complete, 'Ready', 'Focused ' + entry['title'])
+        except Exception as exc:
+            GLib.idle_add(self.complete, 'Error', f'Could not focus tab: {exc}')
 
     def dismiss_window_list(self):
         if self.state.get('state') == 'WindowList':
@@ -407,6 +574,9 @@ class VoiceRuntime(Gio.Application):
         GLib.timeout_add(150, self.finish_focus_listed_window, address, entry)
 
     def finish_focus_listed_window(self, address, entry):
+        if entry.get('browser_tab'):
+            threading.Thread(target=self.finish_focus_browser_tab, args=(entry,), daemon=True).start()
+            return False
         try:
             message = focus_listed_window(address, expected=entry)
             self.complete('Ready', message)
@@ -418,14 +588,19 @@ class VoiceRuntime(Gio.Application):
         from picker_windows import suggestions
         apps = discover_installed_apps(for_picker=True)
         return (terminal_suggestions(context) + window_action_suggestions(context)
-                + app_suggestions(apps) + suggestions(context))
+                + app_suggestions(apps) + suggestions(context)
+                + [dict(command='browser:focus-tab', text='focus tab',
+                        forms=['focus tab', 'focus browser tab', 'focus on the browser tab',
+                               'list browser tabs', 'list tabs', 'list all browser tabs'], pickerWindow=True)])
 
     def static_suggestions(self, context):
         workspace = (context or {}).get('active', {}).get('workspace', {}).get('id')
         active = (context or {}).get('active', {})
         rows = []
-        for row in COMMAND_SUGGESTIONS:
+        for row in [*COMMAND_SUGGESTIONS, OMARCHY_MENU_SUGGESTION]:
             command = row['command']
+            if command == 'apps:tile' or command.startswith('apps:tile-monitor:'):
+                continue
             if supports_open(command) or command in {'browser_fullscreen', 'browser:open_fullscreen', 'browser:open_tile'}:
                 continue  # App opening is offered only by installed desktop entries.
             if command == 'close:current_window' and not active.get('address'):
@@ -850,6 +1025,22 @@ class VoiceRuntime(Gio.Application):
                 return
             text = request.get('text')
             normalized = normalize(text) if isinstance(text, str) else ''
+            if normalized in OMARCHY_MENU_FORMS:
+                self.pending_written = None
+                self.state['written_entry'] = None
+                self.complete('Ready', 'Opening the Omarchy main menu.')
+                subprocess.Popen(['omarchy-menu', 'toggle', 'root'])
+                return
+            if normalized in {'focus tab', 'focus browser tab', 'focus on the browser tab',
+                              'list browser tabs', 'list tabs', 'list all browser tabs'}:
+                self.pending_written = None
+                self.state['written_entry'] = None
+                self.state['intent'] = None
+                self.busy = True
+                self.update('Working', 'Reading browser tabs…')
+                threading.Thread(target=self.load_browser_tabs, daemon=True).start()
+                return
+
             if normalized.split(' ')[0] in ('enable', 'disable', 'connect', 'disconnect'):
                 self.written_error(text, 'Choose an available system control, then press Enter.')
                 return
@@ -994,6 +1185,9 @@ class VoiceRuntime(Gio.Application):
             return execute_system(command)
         if command in ("screenrecord:start", "screenrecord:start_without_webcam", "screenrecord:stop"):
             return execute_recording(command.split(":")[1], run_os)
+        if ':tile-workspace:' in command:
+            category, _, workspace = command.split(':')
+            return tile_in_workspace(context, category, workspace)
         if ':tile-monitor:' in command:
             category, _, number = command.split(':')
             return tile_on_monitor(category, int(number))
@@ -1059,6 +1253,11 @@ class VoiceRuntime(Gio.Application):
             self.complete('Error', str(exc))
 
     def choose_window(self, token):
+        if not self.busy and token in getattr(self,'voice_choices',{}):
+            ident,index=self.voice_choices[token]
+            self.voice_choices={};self.state['clarification']=None
+            self.execute_voice(ident,index)
+            return
         if self.busy or not self.window_resolution or token not in self.window_choices:
             return
         resolution = self.window_resolution
@@ -1180,6 +1379,9 @@ class VoiceRuntime(Gio.Application):
                           else f'Could not close terminal: {exc}')
 
     def cancel(self, token=None):
+        if getattr(self,'voice_choices',None):
+            self.voice_choices={};self.state['clarification']=None
+            self.update('Ready','Window selection cancelled.')
         if token in (None, '') or (self.pending and token == self.pending[0]):
             self.sequence = None
         if self.pending_written and token in (None, '', self.pending_written['token']):
@@ -1204,6 +1406,10 @@ class VoiceRuntime(Gio.Application):
             self.update('Ready', 'System action cancelled.' if system_action else 'Terminal close cancelled.')
 
     def complete(self, state, message):
+        if self.voice_request:
+            try:self.voice_outcome(self.voice_request, 'complete' if state=='Ready' else 'error', message)
+            except (sqlite3.Error,OSError):pass
+            self.voice_request=None
         if state == 'Ready':
             try:
                 self.layout_history.observe(force=True)
@@ -1240,6 +1446,8 @@ class VoiceRuntime(Gio.Application):
         self.state['written_entry'] = None
         self.update('Stopped', 'Skipper is stopped.')
         connection.close()
+        if getattr(self,'speech_process',None) and self.speech_process.poll() is None:
+            self.speech_process.terminate()
         self.quit()
 
 

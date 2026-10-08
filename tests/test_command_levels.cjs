@@ -58,7 +58,7 @@ const categoryTree = c.build([
 ], [{command:'picker:tile-pair',text:'tile two specific windows',forms:['tile two specific windows','tile two windows'],
  tileWindows:[{id:'one',label:'project terminal'},{id:'two',label:'chromium'},{id:'three',label:'notes'}]}]);
 assert.equal(c.preview(categoryTree,[],'tile',false).rows.slice(0,4).map(row=>row.text).join(','),
- 'all windows,all terminals,all browsers,all apps');
+ 'all windows,all terminals,all browsers,two specific windows');
 assert.equal(c.preview(categoryTree,[],'list',false).rows.map(row=>row.text).join(','),
  'all windows,all terminals,all browsers');
 const pairPreview=c.preview(categoryTree,[],'tile two specific windows',false);
@@ -74,3 +74,32 @@ assert.ok(!second.children.some(row=>row.text==='project terminal'));
 assert.equal(c.preview(categoryTree,[],'tile project terminal and chromium',false).rows[0].value,
  'tile project terminal and chromium');
 console.log('Tile/List category order and two named window levels passed');
+const tabsTree = c.build([], [{command:'browser:focus-tab',text:'focus tab',
+ forms:['focus tab','focus browser tab','focus on the browser tab','list browser tabs'],pickerWindow:true}]);
+assert.ok(tabsTree.some(row=>row.id==='prefix:focus'));
+assert.ok(!tabsTree.some(row=>row.id==='browser:focus-tab'));
+assert.equal(c.level(tabsTree,['prefix:focus']).children.find(row=>row.id==='browser:focus-tab').value,'focus tab');
+assert.equal(c.preview(tabsTree,[],'list browser tabs',false).rows[0].value,'focus tab');
+console.log('Browser tab picker is nested under Focus and reachable by List alias');
+
+for (const phrase of ['tile all terminals','tile open terminals','tile terminals']) {
+ const p=c.preview(categoryTree,[],phrase,false);
+ assert.equal(p.level.tileWorkspace,true);
+ assert.equal(p.query,'');
+ assert.equal(p.rows[0].value,'tile all terminals in this workspace');
+}
+const scoped=c.preview(categoryTree,[],'tile all browsers in workspace 2',false);
+assert.equal(scoped.rows.length,1);
+assert.equal(scoped.rows[0].value,'tile all browsers in workspace 2');
+assert.equal(c.preview(categoryTree,[],'tile all windows in workspace 0',false).rows.length,0);
+console.log('Tile workspace defaults and explicit destinations passed');
+
+for (const phrase of ['tile all term', 'tile term', 'tile all termi']) {
+ const p=c.preview(categoryTree,[],phrase,false);
+ assert.equal(p.level.tileWorkspace,true,phrase);
+ assert.equal(p.query,'',phrase);
+ assert.equal(p.rows[0].value,'tile all terminals in this workspace');
+}
+const shortNumber=c.preview(categoryTree,[],'tile all term 2',false);
+assert.equal(shortNumber.rows[0].value,'tile all terminals in workspace 2');
+console.log('Unique abbreviated tile categories advance automatically');

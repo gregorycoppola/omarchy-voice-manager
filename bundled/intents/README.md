@@ -1,9 +1,18 @@
-# Bundled intent runtime
+# Skipper intent definitions
 
-This directory contains the runtime subset of the Omarchy Voice Dataset,
-licensed GPL-3.0-only (see LICENSE). Source repository and pinned revision are
-recorded in ../../dataset-reference.json. It includes source code, not binaries.
+This directory is the authoritative source for Skipper's intent definitions and
+catalog loader. Edit and commit these files together with the application code.
+Installation and runtime read them locally without fetching another repository.
 
-The bundle ships with Skipper and is read locally without network access.
-It contains shared definitions and examples, never personal history or settings.
-Maintain definitions upstream and refresh the bundle for a Skipper release.
+- `data/catalog.json`: intent schemas, grammar templates, and examples.
+- `data/providers/skipper.json`: Skipper vocabulary, rules, and executor bindings.
+- `data/command-sequences.json` and `data/segmentation-examples.json`: sequence examples.
+- `intent_explorer/catalog.py`: catalog loading, validation, and schema export.
+
+From the application root, run `python -B import_intent_dataset.py` to validate
+the catalog and compile Skipper's phrases. Restart Skipper after editing definitions.
+Catalog revisions are content hashes computed from schemas and provider files.
+
+These files originated in the Omarchy Voice Dataset and retain GPL-3.0-only
+licensing; see LICENSE. They are now maintained as part of Skipper.
+Personal history, recordings, aliases, and settings belong in per-user storage.

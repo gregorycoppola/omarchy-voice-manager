@@ -18,6 +18,17 @@ BarWidget {
         running: true
         stdout: StdioCollector { onStreamFinished: root.userId = text.trim() }
     }
+    function windowKindColor(kind) {
+        switch (kind) {
+        case "Terminal": return "#63c8b5"
+        case "Browser tab":
+        case "Browser": return "#78aef5"
+        case "Web app": return "#c39af0"
+        case "Editor": return "#efbd70"
+        case "Files": return "#e891b5"
+        default: return "#a5adb9"
+        }
+    }
     property var status: ({})
     property string seenEvent: ""
     property bool manual: false
@@ -152,7 +163,21 @@ BarWidget {
     onPrefixPreviewChanged: Qt.callLater(function() { root.expandWebsitePrefix() })
     function expandWebsitePrefix() {
         if (!writtenOpen || urlEntry || commandComplete || autoSuppressed || websiteTransitionPending) return
+        expandTabPrefix()
         if (prefixPreview.portal) beginWebsite(prefixPreview.portal.websiteMode, prefixPreview.portalQuery)
+    }
+    function expandTabPrefix() {
+        var phrase = writtenWords.text.trim().toLowerCase().replace(/\s+/g, " ")
+        var staged = ((argumentLevel.prefix || "") + " " + prefixPreview.query).trim().toLowerCase().replace(/\s+/g, " ")
+        var aliases = ["focus tab", "focus browser tab", "focus on the browser tab", "list browser tabs", "list tabs", "list all browser tabs"]
+        if (queuedCommands.length || (aliases.indexOf(phrase) < 0 && aliases.indexOf(staged) < 0)) return
+        openTabLevel()
+    }
+    function openTabLevel() {
+        if (!writtenOpen || !status.written_entry) return
+        if (queuedCommands.length) { pickerHint = "Run queued steps before choosing a tab."; return }
+        writtenOpen = false
+        root.action("submit-written", JSON.stringify({token: writtenToken, text: "focus tab"}))
     }
     readonly property var pickerRows: {
         if (urlEntry || commandComplete) return []
@@ -163,7 +188,7 @@ BarWidget {
                 && CommandLevels.subsequence(argumentLevel.prefix, query)) query = ""
         var ranked = CommandSearch.rank(fileLevel ? fileQuery : query, levelOptions, [],
             status.written_entry ? status.written_entry.counts : {})
-        if (!ranked.length && levelOptions.length) ranked = levelOptions.map(function(row, i) {
+        if (!ranked.length && levelOptions.length && !argumentLevel.tileWorkspace) ranked = levelOptions.map(function(row, i) {
             return {index: i, text: row.text}
         })
         return ranked.slice(0, 10).map(function(row) {
@@ -245,6 +270,7 @@ BarWidget {
         var index = historySelection >= 0 ? historySelection : 0
         var row = pickerRows[index]
         if (!row) return
+        if (row.command === "browser:focus-tab" || row.id === "browser:focus-tab") { openTabLevel(); return }
         if (row.unavailable) { pickerHint = "This control is currently unavailable."; return }
         controlSelectionLost = false
         var current = prefixPreview
@@ -351,7 +377,7 @@ BarWidget {
     readonly property bool correctionMatches: !!status.correction && !!status.correction.preview
         && status.correction.preview.said === correctionWords.text.trim()
         && status.correction.preview.meant === correctionWords.text.trim()
-    readonly property string barText: recentIntent ? recentIntent + " · Skipper" : "Skipper"
+    readonly property string barText: state === "Recording" ? "● Recording…" : state === "Transcribing" ? "Transcribing…" : state === "Understanding" ? "Interpreting…" : recentIntent ? recentIntent + " · Skipper" : "Skipper"
     readonly property bool alive: (clock.date.getTime() / 1000 - (status.updated || 0)) < 8
     readonly property string state: alive ? (status.state || "Stopped") : "Stopped"
     readonly property bool working: state === "Working" || state === "Loading"
@@ -361,7 +387,7 @@ BarWidget {
     implicitWidth: button.implicitWidth
     implicitHeight: button.implicitHeight
 
-    function snapshot() { return {opened: popup.open, visible: popup.visible, state: state, barText: barText, screen: screenName, writtenOpen: writtenOpen, writtenFocused: writtenWords.activeFocus, argumentPath: argumentPath, choices: historyMatches, commandComplete: commandComplete, writtenText: writtenWords.text} }
+    function snapshot() { return {opened: popup.open, visible: popup.visible, confirmationOpen: confirmationOpen, selectionVisible: selectionPanel.visible, state: state, barText: barText, screen: screenName, writtenOpen: writtenOpen, writtenFocused: writtenWords.activeFocus, argumentPath: argumentPath, choices: historyMatches, commandComplete: commandComplete, writtenText: writtenWords.text} }
     function open() { manual = true; dismissTimer.stop(); popup.open = true }
     function close() { manual = false; popup.open = false; dismissTimer.stop() }
     function togglePanel() { if (opened) close(); else open() }
@@ -516,7 +542,10 @@ BarWidget {
         var completed = (value.completed_at && value.completed_at !== previousCompletion)
                      || (previousState === "Working" && value.state === "Ready")
         if (completed && value.state === "Ready") {
-            root.close()
+            if (value.input_source === "voice") {
+                dismissTimer.interval = 2500
+                dismissTimer.restart()
+            } else root.close()
             return
         }
         if (newEvent && value.panel_epoch > 0 && (!value.monitor || value.monitor === screenName)) {
@@ -529,7 +558,7 @@ BarWidget {
                 popup.beginFocusPrime()
             })
         }
-        if (value.state === "Working" || value.state === "Confirm" || value.state === "Choose" || value.state === "Correction" || value.state === "TextEntry" || value.state === "Loading" || value.state === "WindowList") {
+        if (value.state === "Recording" || value.state === "Transcribing" || value.state === "Understanding" || value.state === "Working" || value.state === "Confirm" || value.state === "Choose" || value.state === "Correction" || value.state === "TextEntry" || value.state === "Loading" || value.state === "WindowList") {
             dismissTimer.stop()
         } else if (popup.open && !manual && !dismissTimer.running) {
             dismissTimer.interval = value.state === "Error" ? 6000 : 2500
@@ -575,8 +604,8 @@ BarWidget {
         anchors.fill: parent
         bar: root.bar
         text: root.barText
-        active: root.opened || root.working || root.state === "Confirm" || root.state === "Error"
-        activeColor: root.state === "Error" ? Color.urgent : foreground
+        active: root.opened || root.working || root.state === "Confirm" || root.state === "Error" || root.state === "Recording"
+        activeColor: root.state === "Error" || root.state === "Recording" ? Color.urgent : foreground
         tooltipText: "Super + R to choose a command · " + root.state
         onPressed: function(b) { root.togglePanel() }
     }
@@ -945,6 +974,26 @@ BarWidget {
                     }
                     Keys.onEscapePressed: { root.writtenOpen = false; root.action("cancel", root.writtenToken) }
                 }
+                Row {
+                    visible: !!root.argumentLevel.tileWorkspace && root.pickerRows.length > 0
+                    spacing: 6
+                    leftPadding: 10
+                    Text {
+                        text: root.argumentLevel.prefix || ""
+                        color: Color.foreground
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.body
+                    }
+                    Text {
+                        text: {
+                            var option = root.pickerRows[Math.max(0, root.historySelection)]
+                            return option ? option.text : ""
+                        }
+                        color: Qt.alpha(Color.foreground, 0.6)
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.body
+                    }
+                }
                 Text {
                     visible: !root.urlEntry && root.historyMatches.length > 0
                     text: root.argumentPrompt
@@ -1083,11 +1132,28 @@ BarWidget {
         WlrLayershell.namespace: "skipper-selection"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        property int tabSelection: 0
+        readonly property var tabRows: CommandSearch.rankTabs(tabSearch.text, root.status.window_list || [])
+        onTabRowsChanged: tabSelection = 0
+        function chooseTab() {
+            var row = tabRows[tabSelection]
+            if (row) root.action("focus-listed-window", row.address)
+        }
+        function moveTab(delta) {
+            if (!tabRows.length) return
+            tabSelection = (tabSelection + delta + tabRows.length) % tabRows.length
+            var row = windowRepeater.itemAt(tabSelection)
+            if (row) selectionScroll.contentY = Math.max(0, Math.min(row.mapToItem(selectionContent, 0, 0).y,
+                selectionScroll.contentHeight - selectionScroll.height))
+        }
         function focusDefault() {
+            tabSearch.text = ""
+            tabSelection = 0
             Qt.callLater(function() {
                 if (!selectionPanel.visible) return
                 var firstChoice = root.state === "Choose" ? selectionChoices.itemAt(0) : null
-                if (firstChoice) firstChoice.forceActiveFocus()
+                if (root.status.list_kind === "tabs" && root.state === "WindowList") tabSearch.forceActiveFocus()
+                else if (firstChoice) firstChoice.forceActiveFocus()
                 else selectionClose.forceActiveFocus()
             })
         }
@@ -1115,6 +1181,7 @@ BarWidget {
                         Text {
                             width: parent.width - selectionClose.width
                             text: root.state === "Choose" ? (root.status.clarification ? root.status.clarification.prompt : "Choose a window")
+                                : root.status.list_kind === "tabs" ? "Browser tabs · connected Chromium profile"
                                 : root.status.intent && root.status.intent.type === "list_terminals" ? "Open terminals"
                                 : root.status.intent && root.status.intent.type === "list_browsers" ? "Open browsers"
                                 : root.status.intent && root.status.intent.type === "list_x" ? "Open X windows"
@@ -1139,23 +1206,44 @@ BarWidget {
                     spacing: Style.space(8)
                     Text {
                         width: parent.width
-                        text: (root.status.window_list || []).length ? "Choose a window to focus" : (root.status.message || "")
+                        text: (root.status.window_list || []).length ? (root.status.list_kind === "tabs" ? "Choose a tab to focus" : "Choose a window to focus") : (root.status.message || "")
                         color: Color.foreground
                         font.family: Style.font.family
                         font.pixelSize: Style.font.body
                     }
                     Text {
                         text: (root.status.window_list || []).length
-                            ? "Enter to close · Tab to choose a window · Esc to dismiss"
+                            ? "Tab to choose · Enter to activate the focused choice · Esc to dismiss"
                             : "Enter or Esc to dismiss"
                         color: Color.foreground
                         font.family: Style.font.family
                         font.pixelSize: Style.font.body * 0.9
                     }
+                    TextField {
+                        id: tabSearch
+                        objectName: "tabSearch"
+                        visible: root.status.list_kind === "tabs"
+                        width: parent.width
+                        placeholderText: "Fuzzy search tab titles or addresses…"
+                        color: Color.foreground
+                        font.family: Style.font.family
+                        onAccepted: selectionPanel.chooseTab()
+                        Keys.onDownPressed: selectionPanel.moveTab(1)
+                        Keys.onUpPressed: selectionPanel.moveTab(-1)
+                    }
+                    Text {
+                        visible: root.status.list_kind === "tabs"
+                        text: selectionPanel.tabRows.length + " matching tabs · ↑/↓ to choose · Enter to focus"
+                        color: Color.foreground
+                    }
                     Repeater {
-                        model: root.status.window_list || []
+                        id: windowRepeater
+                        model: root.status.list_kind === "tabs" ? selectionPanel.tabRows : (root.status.window_list || [])
                         Rectangle {
                             required property var modelData
+                            required property int index
+                            readonly property bool selectedTab: root.status.list_kind === "tabs" && index === selectionPanel.tabSelection
+                            readonly property color kindColor: root.windowKindColor(modelData.kind || "App")
                             activeFocusOnTab: true
                             Keys.onReturnPressed: root.action("focus-listed-window", modelData.address)
                             Keys.onEnterPressed: root.action("focus-listed-window", modelData.address)
@@ -1167,14 +1255,50 @@ BarWidget {
                             width: parent.width
                             height: windowDetails.implicitHeight + Style.space(24)
                             radius: Style.space(8)
-                            color: activeFocus || listedWindowMouse.containsMouse
+                            color: selectedTab || activeFocus || listedWindowMouse.containsMouse
                                 ? Qt.alpha(Color.accent, 0.22) : Qt.alpha(Color.foreground, 0.07)
-                            border.width: 1
-                            border.color: activeFocus || listedWindowMouse.containsMouse
-                                ? Qt.alpha(Color.accent, 0.8) : Qt.alpha(Color.foreground, 0.10)
+                            border.width: selectedTab || activeFocus ? 3 : 2
+                            border.color: kindColor
+                            Rectangle {
+                                id: windowAppIcon
+                                anchors { left: parent.left; leftMargin: Style.space(12); verticalCenter: parent.verticalCenter }
+                                width: 40
+                                height: 40
+                                radius: 8
+                                color: Qt.alpha(parent.kindColor, 0.15)
+                                Image {
+                                    id: appIconImage
+                                    anchors.centerIn: parent
+                                    width: 28
+                                    height: 28
+                                    visible: siteIcon.status !== Image.Ready
+                                    source: (modelData.icon || "").startsWith("/")
+                                        ? "file://" + modelData.icon
+                                        : Quickshell.iconPath(modelData.icon || "application-x-executable", true)
+                                    sourceSize.width: 28
+                                    sourceSize.height: 28
+                                }
+                                Image {
+                                    id: siteIcon
+                                    anchors.centerIn: parent
+                                    width: 28; height: 28
+                                    source: modelData.favicon || ""
+                                    sourceSize.width: 28; sourceSize.height: 28
+                                    asynchronous: true
+                                    visible: status === Image.Ready
+                                }
+                                Text {
+                                    anchors.centerIn: parent
+                                    visible: appIconImage.status !== Image.Ready && siteIcon.status !== Image.Ready
+                                    text: modelData.kind === "Terminal" ? ">_" : (modelData.app || "?").slice(0, 1).toUpperCase()
+                                    color: parent.parent.kindColor
+                                    font.pixelSize: 18
+                                    font.bold: true
+                                }
+                            }
                             Column {
                                 id: windowDetails
-                                anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: Style.space(12) }
+                                anchors { left: windowAppIcon.right; right: parent.right; verticalCenter: parent.verticalCenter; margins: Style.space(12) }
                                 spacing: Style.space(4)
                                 Text {
                                     width: parent.width
@@ -1188,7 +1312,8 @@ BarWidget {
                                 }
                                 Text {
                                     width: parent.width
-                                    text: "Workspace " + modelData.workspace + "  ·  " + modelData.app
+                                    text: modelData.browser_tab ? modelData.detail + "  ·  " + modelData.app
+                                        : (modelData.kind || "App") + "  ·  Workspace " + modelData.workspace + "  ·  " + modelData.app
                                     textFormat: Text.PlainText
                                     color: Color.foreground
                                     font.family: Style.font.family
@@ -1282,9 +1407,9 @@ BarWidget {
                 Text {
                     width: parent.width
                     visible: root.state !== "WindowList"
-                    text: root.status.transcript || (root.state === "TextEntry" ? "Written command" : "Super + R to choose a command.")
+                    text: root.status.transcript || (root.state === "Recording" ? "● Recording…" : root.state === "Transcribing" ? "Transcribing…" : root.state === "TextEntry" ? "Written command" : "Hold Super + R to speak.")
                     textFormat: Text.PlainText
-                    color: Color.foreground
+                    color: root.state === "Recording" ? Color.urgent : root.status.input_source === "voice" && root.status.transcript ? "#7edb9a" : Color.foreground
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
                     wrapMode: Text.Wrap
@@ -1297,7 +1422,7 @@ BarWidget {
                     visible: root.state !== "WindowList"
                     text: root.status.intent_label || (root.state === "Working" ? "Understanding…" : "No intent yet")
                     textFormat: Text.PlainText
-                    color: root.status.intent_label ? Color.accent : Color.muted
+                    color: root.status.intent_label ? Color.foreground : Color.muted
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
                     font.bold: true
@@ -1406,6 +1531,17 @@ BarWidget {
                         color: Color.muted
                         font.family: Style.font.family
                         font.pixelSize: Style.font.body * 0.85
+                    }
+                }
+                Row {
+                    spacing: Style.space(8)
+                    Button {
+                        text: "Parser debugger"
+                        onClicked: {
+                            var launcher = root.setting("launcher", root.pluginRoot + "/launch.sh")
+                            if (launcher) Quickshell.execDetached([launcher.replace(/launch\.sh$/, "launch-voice-preview.sh"), "--debug"])
+                            root.close()
+                        }
                     }
                 }
                 Row {

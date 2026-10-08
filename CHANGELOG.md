@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.2 — 2026-10-08
+
+- Package voice setup, pinned model download/reuse, health checks, and private API-key configuration.
+- Support generic terminal focus with dropdown disambiguation and validate cloud window choices.
+- Replace the long development README with installation and usage instructions.
+
+- Add opt-in OpenAI fallback to normal voice input and dropdown choices for ambiguous window names.
+
+- Add browser-tab selection and workspace-scoped tiling.
+- Add local voice execution with top-dropdown feedback; keep the separate parser debugger opt-in.
+- Make OpenAI fallback opt-in and use the installed runtime environment for the speech preview and worker.
+- Document optional speech dependencies and model setup.
+
+- Maintain intent definitions and their loader alongside the app; remove the separate repository synchronization step.
+- Limit public snapshots to reviewed documentation and check archives for private data.
+
 ## 0.3.1 — 2026-10-05
 
 - Offer installed, launchable apps by name, with an alias for the configured terminal.

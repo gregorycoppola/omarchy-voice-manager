@@ -33,6 +33,26 @@ function openOptions(item) {
         + 'Enter to open in this workspace · Tab for more arguments';
     return node;
 }
+function tileWorkspaceOptions(item, category) {
+    var base = 'tile all ' + category;
+    var node = branch(item.command, base,
+        [base, 'tile open ' + category, 'tile ' + category, 'tile the ' + category].concat(item.forms || [], [item.text]),
+        function() {
+            var destinations = ['this workspace'];
+            for (var n = 1; n <= 10; n++) destinations.push('workspace ' + n);
+            return destinations.map(function(destination) {
+                var row = leaf({command: item.command + ':' + destination, text: base + ' in ' + destination},
+                    'in ' + destination, [destination]);
+                row.description = destination === 'this workspace' ? 'Default · Enter to tile here' : 'Tile windows already in this workspace';
+                return row;
+            });
+        }, base);
+    node.tileWorkspace = true;
+    node.clearInput = true;
+    node.argumentPrompt = 'CHOOSE A WORKSPACE';
+    node.categoryOrder = ['windows', 'terminals', 'browsers'].indexOf(category);
+    return node;
+}
 function tilePairOptions(item) {
     var windows = item.tileWindows;
     var node = branch(item.command, 'tile two specific windows…', item.forms, function() {
@@ -63,6 +83,7 @@ function catalog(suggestions, dynamic, audio, files) {
     var preciseVerbs = ['move', 'close', 'minimize', 'maximize', 'focus', 'show'];
     var hasWindowPicker = (dynamic || []).some(function(item) { return item.pickerWindow; });
     (suggestions || []).concat(dynamic || []).forEach(function(item) {
+        if (/^apps:tile(?:$|-)/.test(item.command)) return;
         if (item.optionalOpen) { root.push(openOptions(item)); return; }
         if (item.tileWindows) { root.push(tilePairOptions(item)); return; }
         var listCategory = /^(windows|terminals|browsers):list$/.exec(item.command);
@@ -86,13 +107,7 @@ function catalog(suggestions, dynamic, audio, files) {
         }
         var tileCategory = /^(windows|apps|browsers|terminals):tile$/.exec(item.command);
         if (tileCategory) {
-            var label = 'tile all ' + tileCategory[1];
-            var tileRow = leaf(item, label, [label, 'tile open ' + tileCategory[1]].concat(item.forms || [], [item.text]));
-            tileRow.categoryOrder = ['windows', 'terminals', 'browsers', 'apps'].indexOf(tileCategory[1]);
-            tileRow.description = tileCategory[1] === 'apps'
-                ? 'This workspace · Apps excluding terminals'
-                : 'This workspace · Open ' + tileCategory[1];
-            root.push(tileRow);
+            root.push(tileWorkspaceOptions(item, tileCategory[1]));
             return;
         }
         if (item.pickerWindow) {
@@ -208,6 +223,7 @@ function level(tree, path) {
         children = childrenOf(node);
     }
     return {children: children, prefix: node ? node.prefix : '', workspacePrefix: node ? node.workspacePrefix : '',
+        tileWorkspace: !!(node && node.tileWorkspace),
         argumentPrompt: node ? node.argumentPrompt : '',
         audioDirection: node ? node.audioDirection : '', fileProvider: !!(node && node.fileProvider),
         controlProvider: !!(node && node.controlProvider)};
@@ -215,6 +231,12 @@ function level(tree, path) {
 function options(tree, path, query) {
     var current = level(tree, path);
     var rows = current.children.slice();
+    if (current.tileWorkspace) {
+        var number = /^(?:in\s+)?(?:workspace\s+)?([1-9][0-9]{0,8})$/.exec(query.trim());
+        if (number && Number(number[1]) > 10)
+            rows.push(leaf({command: current.prefix + ':' + number[1], text: current.prefix + ' in workspace ' + number[1]},
+                'in workspace ' + number[1], ['workspace ' + number[1], number[1]]));
+    }
     // Numeric move destinations use the existing parser's 1–9 digit rule.
     if ((path[path.length - 1] === 'move-workspace' || current.workspacePrefix) && /^[1-9][0-9]{0,8}$/.test(query.trim())) {
         var number = query.trim();
@@ -346,6 +368,10 @@ function fullOption(row, prefix) {
     return Object.assign({}, row, {forms: forms});
 }
 function matchesPath(row, query, depth) {
+    if (row.tileWorkspace) {
+        var category = row.prefix.split(' ').pop();
+        if (new RegExp('^(?:tile\\s+)?(?:(?:all|open|the)\\s+)*' + category + '(?:\\s|$)', 'i').test(query.trim())) return true;
+    }
     if (row.controlProvider && words(query)[0] === row.prefixWords) return true;
     if (row.fileProvider && /^open\s+file(?:\s|$)/i.test(query.trim())) return true;
     if ([row.text].concat(row.forms || []).some(function(form) { return subsequence(form, query); })) return true;
@@ -379,12 +405,47 @@ function preview(tree, path, query, suppressed) {
     var currentPath = path.slice(), frames = [];
     for (var depth = 0; depth < 32; depth++) {
         var current = level(tree, currentPath);
+        if (current.tileWorkspace) {
+            // Category abbreviations have already selected this level. Only the
+            // remaining words should search its workspace choices.
+            var parts = words(query);
+            if (parts[0] === 'tile') parts.shift();
+            while (['all', 'the', 'open'].indexOf(parts[0]) >= 0) parts.shift();
+            var category = current.prefix.split(' ').pop();
+            // Compact category aliases (e.g. tileopenterminals) select the
+            // workspace branch without leaving the alias as a destination query.
+            if (new RegExp('^(?:tile)?(?:(?:all|the|open))*' + category + '$', 'i')
+                    .test(parts.join(''))) {
+                parts = [];
+                query = '';
+            }
+            if (parts.length && subsequence(category, parts[0])) {
+                parts.shift();
+                query = parts.join(' ');
+            }
+        }
         // Keep custom numeric destinations available for both full and short input.
         var numeric = /(?:^|\s)([1-9][0-9]{0,8})$/.exec(query.trim());
         var all = options(tree, currentPath, numeric ? numeric[1] : query).map(function(row) {
             return fullOption(row, current.prefix);
         });
         var matches = matching(all, query);
+        // A matching category label takes precedence over incidental matches
+        // buried inside "two specific windows" or monitor choices.
+        var directTile = matches.filter(function(option) {
+            return [option.text].concat(option.forms || []).some(function(form) { return subsequence(form, query); });
+        });
+        if (directTile.some(function(option) { return option.tileWorkspace; })) matches = directTile;
+        var exactTile = matches.filter(function(option) {
+            return option.tileWorkspace && [option.text].concat(option.forms || []).some(function(form) {
+                return words(form).join(' ') === words(query).join(' ');
+            });
+        });
+        if (exactTile.length) matches = exactTile;
+        if (current.tileWorkspace) {
+            var numericQuery = /^(?:in\s+)?(?:workspace\s+)?(-?[0-9]+)$/.exec(query.trim());
+            if (numericQuery) matches = all.filter(function(option) { return option.text === 'in workspace ' + numericQuery[1]; });
+        }
         if (query.trim() && matches.length > 1 && matches.every(function(row) { return row.verbGroup; })
                 && !matches.some(function(row) { return subsequence(row.text, query); })) {
             matches = matchingLeaves(matches, query, current.prefix, 0);
@@ -394,7 +455,7 @@ function preview(tree, path, query, suppressed) {
             rows: matches, frames: frames, portal: null};
         // Website entry and explicit selection are never triggered by typing.
         if (suppressed || !query.trim() || !row || !row.children
-                || ((row.optionalArguments || row.clearInput) && [row.text].concat(row.forms || []).some(function(form) {
+                || ((row.optionalArguments || (row.clearInput && !row.tileWorkspace)) && [row.text].concat(row.forms || []).some(function(form) {
                     return subsequence(form, query);
                 }))) return result;
         frames.push({path: currentPath.slice(), text: query, selection: 0, chosenPath: currentPath.concat([row.id])});

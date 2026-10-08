@@ -18313,6 +18313,12 @@
               "8"
             ],
             "description": "One-based connected monitor ordinal, sorted by compositor monitor ID. Tile its active regular workspace; do not gather windows from other workspaces. Omit for current workspace."
+          },
+          "workspace": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999999999,
+            "description": "Tile windows already in this numbered workspace. Omit for current workspace."
           }
         },
         "required": [

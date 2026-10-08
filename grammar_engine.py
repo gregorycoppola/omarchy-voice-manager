@@ -19,6 +19,13 @@ class Intent:
     def canonical_plan(self):
         """Provider-neutral intent instances, validated by the external catalog."""
         from dataset_source import CATALOG
+        if self.type == 'tile_workspace':
+            args = dict(self.arguments)
+            category = args['category']
+            return CATALOG.validate_plan([{'intent': 'window.tile', 'arguments': {
+                'scope': 'open_windows' if category == 'windows' else category,
+                'other_windows': 'preserve' if category == 'windows' else 'hide',
+                **({'workspace': int(args['workspace'])} if args['workspace'] != 'current' else {})}}])
         if self.type == 'picker_tile_pair':
             args = dict(self.arguments)
             return CATALOG.validate_plan([{'intent': 'window.tile_pair', 'arguments': {
