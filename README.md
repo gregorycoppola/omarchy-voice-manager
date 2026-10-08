@@ -10,6 +10,35 @@ This is not an official Omarchy project or a catalog endorsement. You can instal
 it directly from this repository. Tested on Linux aarch64; x86_64 has not yet
 been validated. Requires Omarchy's Lua Hyprland API and Quickshell.
 
+## Install with an AI assistant
+
+If you use an LLM coding assistant with terminal access on your Omarchy machine,
+you can give it this prompt. You can also read the code without installing anything.
+
+```text
+Help me install Skipper from:
+https://github.com/gregorycoppola/omarchy-voice-manager
+
+Read its current README and docs/first-run.md, then check my Omarchy version,
+CPU architecture, system dependencies, and any existing Skipper installation.
+It requires Omarchy Quattro's Lua Hyprland API and Quickshell; aarch64 is the
+tested platform. Tell me if my system is incompatible or untested.
+
+Use the documented Omarchy plugin installation and plugin_setup.py commands.
+Set up local voice input, reusing a compatible model if available. Explain
+the approximately 670 MB model download, shortcut changes, and optional
+autostart before applying them. Preserve my other bindings and existing data;
+do not use --replace-existing without reviewing the conflicting files with me.
+
+Leave OpenAI fallback off unless I request it. If I enable it, let me enter
+my key privately through plugin_setup.py cloud; never ask me to paste it here.
+
+Run plugin_setup.py doctor and check Hyprland for configuration errors.
+Start Skipper, then guide me through a hold-Super+R / release-to-parse test
+and a typed command. Keep the separate debugger off. Report what worked,
+what remains untested, and how to stop or uninstall it.
+```
+
 ## Install
 
 Run these commands in a terminal on Omarchy:
